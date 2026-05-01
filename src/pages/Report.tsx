@@ -1,59 +1,59 @@
 import { Suspense, lazy, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  useAllQuestions,
-  useEvaluationsForHorse,
-  useHorse,
-} from "../db/queries";
-import { endDate, formatHumanDate } from "../utils/dates";
+  getHorse,
+  listAllQuestions,
+  listPhases,
+  listTQAsForHorse,
+} from "../supabase/queries";
+import { useQuery } from "../supabase/useQuery";
+import { formatHumanDate } from "../utils/dates";
 
 const ReportRenderer = lazy(() => import("../features/pdf/ReportRenderer"));
 
 export default function Report() {
   const { id } = useParams();
-  const horse = useHorse(id);
-  const evals = useEvaluationsForHorse(id) ?? [];
-  const allQuestions = useAllQuestions(true) ?? [];
+  const horse = useQuery(
+    () => (id ? getHorse(id) : Promise.resolve(null)),
+    [id],
+  );
+  const tqas = useQuery(
+    () => (id ? listTQAsForHorse(id) : Promise.resolve([])),
+    [id],
+  );
+  const questions = useQuery(() => listAllQuestions(true), []);
+  const phases = useQuery(() => listPhases(), []);
 
   const generatedAt = useMemo(
     () => new Date().toISOString(),
-    [horse?.id, evals.length],
+    [horse.data?.id, tqas.data?.length],
   );
 
-  if (!horse) {
+  if (horse.loading) return <div className="card">Loading…</div>;
+  if (!horse.data) {
     return (
       <div className="card">
-        <p className="text-slate-400">Horse not found.</p>
-        <Link to="/horses" className="underline">
-          Back to horses
-        </Link>
+        Horse not found.{" "}
+        <Link to="/horses" className="underline">Back</Link>
       </div>
     );
   }
-
-  const relevantQuestionIds = new Set<string>();
-  evals.forEach((e) =>
-    Object.keys(e.ratings).forEach((qid) => relevantQuestionIds.add(qid)),
-  );
-  allQuestions
-    .filter((q) => q.active && !q.deletedAt)
-    .forEach((q) => relevantQuestionIds.add(q.id));
-  const questions = allQuestions
-    .filter((q) => relevantQuestionIds.has(q.id))
-    .sort((a, b) => a.order - b.order);
 
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">{horse.name} — Report</h1>
+          <h1 className="text-2xl font-semibold">
+            {horse.data.name} — TQA Report
+          </h1>
           <p className="text-slate-400 text-sm mt-1">
-            {formatHumanDate(horse.startDate)} →{" "}
-            {formatHumanDate(endDate(horse.startDate, horse.durationDays))} ·{" "}
-            {evals.length} evaluations
+            {horse.data.start_date
+              ? `Started ${formatHumanDate(horse.data.start_date)} · `
+              : ""}
+            {(tqas.data ?? []).length} TQAs recorded
           </p>
         </div>
-        <Link to={`/horses/${horse.id}`} className="btn-ghost text-sm">
+        <Link to={`/horses/${horse.data.id}`} className="btn-ghost text-sm">
           ← Back to horse
         </Link>
       </div>
@@ -66,9 +66,10 @@ export default function Report() {
         }
       >
         <ReportRenderer
-          horse={horse}
-          evaluations={evals}
-          questions={questions}
+          horse={horse.data}
+          tqas={tqas.data ?? []}
+          questions={questions.data ?? []}
+          phases={phases.data ?? []}
           generatedAt={generatedAt}
         />
       </Suspense>

@@ -1,5 +1,5 @@
-import { NavLink } from "react-router-dom";
-import { useActiveHorse } from "../db/queries";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthProvider";
 import type { ReactNode } from "react";
 
 interface Props {
@@ -15,7 +15,13 @@ const navItem = ({ isActive }: { isActive: boolean }) =>
   ].join(" ");
 
 export default function AppShell({ children }: Props) {
-  const activeHorse = useActiveHorse();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/sign-in");
+  };
 
   return (
     <div className="min-h-full flex flex-col">
@@ -26,34 +32,41 @@ export default function AppShell({ children }: Props) {
               aria-hidden
               className="inline-block h-8 w-8 rounded-lg bg-brand-600"
             />
-            <span className="font-semibold tracking-tight">
-              Horse Training Tracker
-            </span>
+            <span className="font-semibold tracking-tight">TQA Tracker</span>
           </NavLink>
-          <nav className="flex flex-wrap gap-1">
-            <NavLink to="/" end className={navItem}>
-              Dashboard
-            </NavLink>
-            <NavLink to="/horses" className={navItem}>
-              Horses
-            </NavLink>
-            <NavLink to="/questions" className={navItem}>
-              Questions
-            </NavLink>
-            <NavLink to="/settings" className={navItem}>
-              Settings
-            </NavLink>
-          </nav>
-          <div className="ml-auto text-sm text-slate-400">
-            {activeHorse ? (
-              <span>
-                Active horse:{" "}
-                <span className="text-slate-100 font-medium">
-                  {activeHorse.name}
+          {user && (
+            <nav className="flex flex-wrap gap-1">
+              <NavLink to="/" end className={navItem}>
+                Dashboard
+              </NavLink>
+              <NavLink to="/horses" className={navItem}>
+                Horses
+              </NavLink>
+              <NavLink to="/phases" className={navItem}>
+                Phases
+              </NavLink>
+              <NavLink to="/resources" className={navItem}>
+                Resources
+              </NavLink>
+              <NavLink to="/settings" className={navItem}>
+                Settings
+              </NavLink>
+            </nav>
+          )}
+          <div className="ml-auto flex items-center gap-2 text-sm text-slate-400">
+            {user ? (
+              <>
+                <span className="hidden sm:inline truncate max-w-[12rem]">
+                  {user.email}
                 </span>
-              </span>
+                <button className="btn-ghost text-xs" onClick={handleSignOut}>
+                  Sign out
+                </button>
+              </>
             ) : (
-              <span>No active horse</span>
+              <NavLink to="/sign-in" className="btn-secondary text-xs">
+                Sign in
+              </NavLink>
             )}
           </div>
         </div>
@@ -63,8 +76,8 @@ export default function AppShell({ children }: Props) {
       </main>
       <footer className="border-t border-slate-800 text-xs text-slate-500">
         <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between">
-          <span>Local-first PWA. Your data stays on this device.</span>
-          <span>v0.1.0</span>
+          <span>Training Quality Assessment Tracker</span>
+          <span>v0.2.0</span>
         </div>
       </footer>
     </div>

@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { createHorse } from "../db/queries";
+import { createHorse, listPhases } from "../supabase/queries";
+import { useQuery } from "../supabase/useQuery";
 import { todayLocal } from "../utils/dates";
 
 interface FormValues {
@@ -8,13 +9,14 @@ interface FormValues {
   breed?: string;
   ownerName?: string;
   ownerEmail?: string;
-  startDate: string;
-  durationDays: number;
+  startDate?: string;
   notes?: string;
+  currentPhaseId?: string;
 }
 
 export default function HorseNew() {
   const navigate = useNavigate();
+  const phases = useQuery(() => listPhases(), []);
   const {
     register,
     handleSubmit,
@@ -22,14 +24,18 @@ export default function HorseNew() {
   } = useForm<FormValues>({
     defaultValues: {
       startDate: todayLocal(),
-      durationDays: 20,
     },
   });
 
   const onSubmit = async (values: FormValues) => {
     const horse = await createHorse({
-      ...values,
-      durationDays: Number(values.durationDays) || 20,
+      name: values.name,
+      breed: values.breed,
+      ownerName: values.ownerName,
+      ownerEmail: values.ownerEmail,
+      startDate: values.startDate || undefined,
+      notes: values.notes,
+      currentPhaseId: values.currentPhaseId || undefined,
     });
     navigate(`/horses/${horse.id}`);
   };
@@ -39,9 +45,7 @@ export default function HorseNew() {
       <h1 className="text-2xl font-semibold">Register horse</h1>
       <form className="card space-y-4" onSubmit={handleSubmit(onSubmit)}>
         <div>
-          <label htmlFor="name" className="label">
-            Horse name *
-          </label>
+          <label htmlFor="name" className="label">Horse name *</label>
           <input
             id="name"
             className="input"
@@ -54,66 +58,67 @@ export default function HorseNew() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label htmlFor="breed" className="label">
-              Breed
-            </label>
+            <label htmlFor="breed" className="label">Breed</label>
             <input id="breed" className="input" {...register("breed")} />
           </div>
           <div>
-            <label htmlFor="ownerName" className="label">
-              Owner name
+            <label htmlFor="currentPhaseId" className="label">
+              Starting phase
             </label>
+            <select
+              id="currentPhaseId"
+              className="input"
+              {...register("currentPhaseId")}
+              defaultValue=""
+            >
+              <option value="">
+                {phases.loading
+                  ? "Loading phases…"
+                  : "Default (Foundation)"}
+              </option>
+              {phases.data?.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label htmlFor="ownerName" className="label">Owner name</label>
             <input
               id="ownerName"
               className="input"
               {...register("ownerName")}
             />
           </div>
+          <div>
+            <label htmlFor="ownerEmail" className="label">Owner email</label>
+            <input
+              id="ownerEmail"
+              type="email"
+              className="input"
+              {...register("ownerEmail")}
+            />
+          </div>
         </div>
 
         <div>
-          <label htmlFor="ownerEmail" className="label">
-            Owner email
+          <label htmlFor="startDate" className="label">
+            Training start date
           </label>
           <input
-            id="ownerEmail"
-            type="email"
+            id="startDate"
+            type="date"
             className="input"
-            {...register("ownerEmail")}
+            {...register("startDate")}
           />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label htmlFor="startDate" className="label">
-              Start date *
-            </label>
-            <input
-              id="startDate"
-              type="date"
-              className="input"
-              {...register("startDate", { required: true })}
-            />
-          </div>
-          <div>
-            <label htmlFor="durationDays" className="label">
-              Duration (days)
-            </label>
-            <input
-              id="durationDays"
-              type="number"
-              min={1}
-              max={365}
-              className="input"
-              {...register("durationDays", { valueAsNumber: true, min: 1 })}
-            />
-          </div>
-        </div>
-
         <div>
-          <label htmlFor="notes" className="label">
-            Notes
-          </label>
+          <label htmlFor="notes" className="label">Notes</label>
           <textarea
             id="notes"
             rows={3}

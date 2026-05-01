@@ -1,26 +1,34 @@
 import { PDFDownloadLink, PDFViewer } from "@react-pdf/renderer";
-import type { Evaluation, Horse, Question } from "../../db/schema";
+import type {
+  Horse,
+  Phase,
+  Question,
+  TQAWithRatings,
+} from "../../supabase/types";
 import { HorseReport } from "./Report";
 
 interface Props {
   horse: Horse;
-  evaluations: Evaluation[];
+  tqas: TQAWithRatings[];
   questions: Question[];
+  phases: Phase[];
   generatedAt: string;
 }
 
 export default function ReportRenderer({
   horse,
-  evaluations,
+  tqas,
   questions,
+  phases,
   generatedAt,
 }: Props) {
-  const filename = `${horse.name.replace(/\s+/g, "_")}_training_report.pdf`;
+  const filename = `${horse.name.replace(/\s+/g, "_")}_TQA_report.pdf`;
   const doc = (
     <HorseReport
       horse={horse}
-      evaluations={evaluations}
+      tqas={tqas}
       questions={questions}
+      phases={phases}
       generatedAt={generatedAt}
     />
   );

@@ -3,16 +3,16 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
-import { ensureSeed } from "./db/seed";
-
-ensureSeed();
+import { AuthProvider } from "./auth/AuthProvider";
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter basename={basename}>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

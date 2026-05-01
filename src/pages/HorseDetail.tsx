@@ -2,85 +2,116 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   archiveHorse,
   deleteHorse,
-  setActiveHorse,
+  getHorse,
+  listAllQuestions,
+  listPhases,
+  listTQAsForHorse,
+  setHorsePhase,
   unarchiveHorse,
-  useActiveHorse,
-  useAllQuestions,
-  useEvaluationsForHorse,
-  useHorse,
-} from "../db/queries";
+} from "../supabase/queries";
+import { useQuery } from "../supabase/useQuery";
 import {
-  endDate,
-  formatHumanDate,
-  formatShortDate,
-  isTrainingComplete,
-  todayLocal,
-  trainingDayNumber,
-} from "../utils/dates";
-import {
-  dailyAverages,
   overallTrend,
   questionAverages,
   round1,
+  tqaAverage,
+  tqaAverages,
 } from "../utils/stats";
+import { formatDateTime, formatHumanDate } from "../utils/dates";
 import ProgressChart from "../components/ProgressChart";
 import QuestionTrendChart from "../components/QuestionTrendChart";
 
 export default function HorseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const horse = useHorse(id);
-  const evals = useEvaluationsForHorse(id) ?? [];
-  const questions = useAllQuestions(true) ?? [];
-  const active = useActiveHorse();
 
-  if (!horse) {
+  const horse = useQuery(
+    () => (id ? getHorse(id) : Promise.resolve(null)),
+    [id],
+  );
+  const phases = useQuery(() => listPhases(), []);
+  const tqas = useQuery(
+    () => (id ? listTQAsForHorse(id) : Promise.resolve([])),
+    [id],
+  );
+  const questions = useQuery(() => listAllQuestions(true), []);
+
+  if (!id) return null;
+  if (horse.loading) return <div className="card">Loading…</div>;
+  if (!horse.data) {
     return (
       <div className="card">
-        <p className="text-slate-400">Horse not found.</p>
-        <Link to="/horses" className="underline">
-          Back to horses
-        </Link>
+        Horse not found.{" "}
+        <Link to="/horses" className="underline">Back</Link>
       </div>
     );
   }
 
-  // Build the question list to show: any question referenced by an eval +
-  // currently active questions, sorted by order.
-  const questionIdsInUse = new Set<string>();
-  for (const ev of evals) {
-    Object.keys(ev.ratings).forEach((qid) => questionIdsInUse.add(qid));
-  }
-  questions
-    .filter((q) => q.active && !q.deletedAt)
-    .forEach((q) => questionIdsInUse.add(q.id));
-  const visibleQuestions = questions
-    .filter((q) => questionIdsInUse.has(q.id))
-    .sort((a, b) => a.order - b.order);
+  const orderedPhases = phases.data ?? [];
+  const currentPhase = orderedPhases.find(
+    (p) => p.id === horse.data!.current_phase_id,
+  );
+  const currentIdx = orderedPhases.findIndex(
+    (p) => p.id === horse.data!.current_phase_id,
+  );
+  const nextPhase =
+    currentIdx >= 0 && currentIdx < orderedPhases.length - 1
+      ? orderedPhases[currentIdx + 1]
+      : null;
+  const prevPhase = currentIdx > 0 ? orderedPhases[currentIdx - 1] : null;
 
-  const dailyAvg = dailyAverages(horse.startDate, evals);
-  const trend = overallTrend(dailyAvg);
-  const qAverages = questionAverages(visibleQuestions, evals);
-  const isActiveHorse = active?.id === horse.id;
-  const complete = isTrainingComplete(horse.startDate, horse.durationDays);
-
-  const overallAverage = (() => {
-    const all = evals.flatMap((e) =>
-      Object.values(e.ratings).map((r) => r.score),
-    );
-    if (all.length === 0) return null;
-    return all.reduce((s, n) => s + n, 0) / all.length;
+  const tqaList = tqas.data ?? [];
+  const points = tqaAverages(tqaList);
+  const trend = overallTrend(points);
+  const overallAvg = (() => {
+    const all = tqaList.flatMap((t) => (t.ratings ?? []).map((r) => r.score));
+    return all.length === 0
+      ? null
+      : all.reduce((s, n) => s + n, 0) / all.length;
   })();
+
+  const phaseFor = (phaseId: string) =>
+    orderedPhases.find((p) => p.id === phaseId)?.name ?? "—";
+
+  // Question averages restricted to questions referenced in any TQA.
+  const referencedQuestionIds = new Set<string>();
+  for (const t of tqaList) {
+    for (const r of t.ratings ?? []) referencedQuestionIds.add(r.question_id);
+  }
+  const referencedQuestions = (questions.data ?? [])
+    .filter((q) => referencedQuestionIds.has(q.id))
+    .sort((a, b) => a.position - b.position);
+  const qAverages = questionAverages(referencedQuestions, tqaList);
+
+  const handleAdvance = async () => {
+    if (!nextPhase) return;
+    await setHorsePhase(id, nextPhase.id);
+    horse.refresh();
+  };
+
+  const handleBack = async () => {
+    if (!prevPhase) return;
+    await setHorsePhase(id, prevPhase.id);
+    horse.refresh();
+  };
+
+  const handleArchive = async () => {
+    if (horse.data!.archived_at) {
+      await unarchiveHorse(id);
+    } else {
+      await archiveHorse(id);
+    }
+    horse.refresh();
+  };
 
   const handleDelete = async () => {
     if (
       !confirm(
-        `Permanently delete "${horse.name}" and all evaluations? This cannot be undone.`,
+        `Permanently delete "${horse.data!.name}" and all TQAs? This cannot be undone.`,
       )
-    ) {
+    )
       return;
-    }
-    await deleteHorse(horse.id);
+    await deleteHorse(id);
     navigate("/horses");
   };
 
@@ -89,128 +120,136 @@ export default function HorseDetail() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
-            {horse.name}
-            {isActiveHorse && (
-              <span className="pill bg-brand-600 text-white">Active</span>
-            )}
-            {complete && !horse.archivedAt && (
-              <span className="pill bg-emerald-600 text-white">
-                Training complete
-              </span>
-            )}
-            {horse.archivedAt && (
+            {horse.data.name}
+            {horse.data.archived_at && (
               <span className="pill bg-slate-700 text-slate-300">
                 Archived
               </span>
             )}
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            {horse.breed && <>{horse.breed} · </>}
-            {horse.ownerName && <>Owner: {horse.ownerName} · </>}
-            {formatHumanDate(horse.startDate)} →{" "}
-            {formatHumanDate(endDate(horse.startDate, horse.durationDays))}
+            {horse.data.breed && <>{horse.data.breed} · </>}
+            {horse.data.owner_name && <>Owner: {horse.data.owner_name} · </>}
+            {horse.data.start_date
+              ? `Started ${formatHumanDate(horse.data.start_date)}`
+              : `Added ${formatHumanDate(horse.data.created_at)}`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!isActiveHorse && !horse.archivedAt && (
-            <button
-              className="btn-secondary text-sm"
-              onClick={() => setActiveHorse(horse.id)}
-            >
-              Set active
-            </button>
-          )}
-          <Link to={`/evaluate/${horse.id}`} className="btn-primary text-sm">
-            Evaluate today
+          <Link
+            to={`/horses/${id}/tqa/new`}
+            className="btn-primary text-sm"
+          >
+            + New TQA
           </Link>
           <Link
-            to={`/horses/${horse.id}/report`}
+            to={`/horses/${id}/report`}
             className="btn-secondary text-sm"
           >
             Generate report
           </Link>
-          {horse.archivedAt ? (
-            <button
-              className="btn-ghost text-sm"
-              onClick={() => unarchiveHorse(horse.id)}
-            >
-              Unarchive
-            </button>
-          ) : (
-            <button
-              className="btn-ghost text-sm"
-              onClick={() => archiveHorse(horse.id)}
-            >
-              Archive
-            </button>
-          )}
+          <button className="btn-ghost text-sm" onClick={handleArchive}>
+            {horse.data.archived_at ? "Unarchive" : "Archive"}
+          </button>
           <button className="btn-danger text-sm" onClick={handleDelete}>
             Delete
           </button>
         </div>
       </div>
 
+      <section className="card flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-400">
+            Current phase
+          </div>
+          <div className="text-xl font-semibold mt-1">
+            {currentPhase?.name ?? "—"}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="btn-ghost text-sm"
+            onClick={handleBack}
+            disabled={!prevPhase}
+          >
+            ← {prevPhase?.name ?? "Earlier"}
+          </button>
+          <button
+            className="btn-primary text-sm"
+            onClick={handleAdvance}
+            disabled={!nextPhase}
+          >
+            Advance to {nextPhase?.name ?? "—"} →
+          </button>
+        </div>
+      </section>
+
       <div className="grid gap-3 md:grid-cols-4">
-        <Stat label="Days completed" value={`${evals.length} / ${horse.durationDays}`} />
-        <Stat label="Overall average" value={round1(overallAverage)} />
+        <Stat label="TQAs recorded" value={String(tqaList.length)} />
+        <Stat label="Overall average" value={round1(overallAvg)} />
         <Stat
           label="Trend"
           value={
             trend.direction === "n/a"
               ? "—"
-              : `${trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"} ${
-                  trend.delta === null ? "" : trend.delta.toFixed(2)
-                }`
+              : `${
+                  trend.direction === "up"
+                    ? "↑"
+                    : trend.direction === "down"
+                      ? "↓"
+                      : "→"
+                } ${trend.delta?.toFixed(2) ?? ""}`
           }
         />
         <Stat
-          label="Today"
+          label="Latest"
           value={
-            evals.find((e) => e.date === todayLocal())
-              ? "Logged"
-              : "Not yet"
+            tqaList.length === 0
+              ? "—"
+              : formatHumanDate(
+                  [...tqaList].sort((a, b) =>
+                    b.occurred_at.localeCompare(a.occurred_at),
+                  )[0].occurred_at,
+                )
           }
         />
       </div>
 
-      {horse.notes && (
+      {horse.data.notes && (
         <div className="card">
           <h2 className="font-semibold mb-1">Notes</h2>
           <p className="text-sm text-slate-300 whitespace-pre-wrap">
-            {horse.notes}
+            {horse.data.notes}
           </p>
         </div>
       )}
 
       <div className="card space-y-3">
         <h2 className="font-semibold">Overall progress</h2>
-        <ProgressChart
-          data={dailyAvg}
-          durationDays={horse.durationDays}
-        />
+        {points.length === 0 ? (
+          <p className="text-slate-400 text-sm">
+            No TQAs yet. Record one to see progress charts.
+          </p>
+        ) : (
+          <ProgressChart points={points} />
+        )}
       </div>
 
-      {visibleQuestions.length > 0 && (
+      {referencedQuestions.length > 0 && (
         <div className="card space-y-3">
           <h2 className="font-semibold">Per-question trend</h2>
           <QuestionTrendChart
-            questions={visibleQuestions}
-            evaluations={evals}
-            startDate={horse.startDate}
-            durationDays={horse.durationDays}
+            questions={referencedQuestions}
+            tqas={tqaList}
           />
         </div>
       )}
 
-      <div className="card">
-        <h2 className="font-semibold mb-3">Question averages</h2>
-        <div className="space-y-2">
-          {qAverages.length === 0 ? (
-            <p className="text-slate-400 text-sm">
-              No questions yet. Add some on the Questions page.
-            </p>
-          ) : (
-            qAverages.map((q) => (
+      {qAverages.length > 0 && (
+        <div className="card">
+          <h2 className="font-semibold mb-3">Question averages</h2>
+          <div className="space-y-2">
+            {qAverages.map((q) => (
               <div
                 key={q.questionId}
                 className="flex items-center justify-between gap-3 text-sm"
@@ -223,62 +262,48 @@ export default function HorseDetail() {
                   {round1(q.average)}
                 </span>
               </div>
-            ))
-          )}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="card">
-        <h2 className="font-semibold mb-3">Evaluation history</h2>
-        {evals.length === 0 ? (
+        <h2 className="font-semibold mb-3">TQA history</h2>
+        {tqaList.length === 0 ? (
           <p className="text-slate-400 text-sm">
-            No evaluations yet. Click{" "}
+            No TQAs yet.{" "}
             <Link
-              to={`/evaluate/${horse.id}`}
+              to={`/horses/${id}/tqa/new`}
               className="underline text-brand-500"
             >
-              Evaluate today
-            </Link>{" "}
-            to record the first one.
+              Record the first one
+            </Link>
+            .
           </p>
         ) : (
           <div className="divide-y divide-slate-800">
-            {[...evals]
-              .sort((a, b) => b.date.localeCompare(a.date))
-              .map((ev) => {
-                const scores = Object.values(ev.ratings).map(
-                  (r) => r.score,
-                );
-                const avg =
-                  scores.length === 0
-                    ? null
-                    : scores.reduce((s, n) => s + n, 0) / scores.length;
+            {[...tqaList]
+              .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+              .map((t) => {
+                const avg = tqaAverage(t.ratings);
                 return (
-                  <div
-                    key={ev.id}
-                    className="flex items-center justify-between py-2"
+                  <Link
+                    key={t.id}
+                    to={`/tqa/${t.id}`}
+                    className="flex items-center justify-between py-2 hover:bg-slate-900 -mx-3 px-3 rounded"
                   >
                     <div className="text-sm">
-                      <span className="text-slate-300 mr-2">
-                        Day{" "}
-                        {trainingDayNumber(horse.startDate, ev.date)}
+                      <span className="pill bg-brand-600/20 text-brand-100 mr-2">
+                        {phaseFor(t.phase_id)}
                       </span>
-                      <span className="text-slate-400">
-                        {formatShortDate(ev.date)}
+                      <span className="text-slate-300">
+                        {formatDateTime(t.occurred_at)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-slate-100 font-medium">
-                        {round1(avg)}
-                      </span>
-                      <Link
-                        to={`/evaluate/${horse.id}/${ev.date}`}
-                        className="btn-ghost text-xs"
-                      >
-                        Edit
-                      </Link>
+                    <div className="text-slate-100 font-medium">
+                      {round1(avg)}
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
           </div>

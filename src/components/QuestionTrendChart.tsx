@@ -1,21 +1,18 @@
 import {
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  Legend,
 } from "recharts";
-import type { Evaluation, Question } from "../db/schema";
-import { trainingDayNumber } from "../utils/dates";
+import type { Question, TQAWithRatings } from "../supabase/types";
 
 interface Props {
   questions: Question[];
-  evaluations: Evaluation[];
-  startDate: string;
-  durationDays: number;
+  tqas: TQAWithRatings[];
 }
 
 const PALETTE = [
@@ -31,20 +28,19 @@ const PALETTE = [
   "#fb923c",
 ];
 
-export default function QuestionTrendChart({
-  questions,
-  evaluations,
-  startDate,
-  durationDays,
-}: Props) {
-  const data = Array.from({ length: durationDays }, (_, i) => {
-    const day = i + 1;
-    const row: Record<string, number | null | string> = { day };
+export default function QuestionTrendChart({ questions, tqas }: Props) {
+  const ordered = [...tqas].sort((a, b) =>
+    a.occurred_at.localeCompare(b.occurred_at),
+  );
+
+  const data = ordered.map((t, i) => {
+    const row: Record<string, number | null | string> = {
+      index: i + 1,
+      occurredAt: t.occurred_at,
+    };
     for (const q of questions) {
-      const ev = evaluations.find(
-        (e) => trainingDayNumber(startDate, e.date) === day,
-      );
-      row[q.id] = ev?.ratings[q.id]?.score ?? null;
+      const r = (t.ratings ?? []).find((rr) => rr.question_id === q.id);
+      row[q.id] = r?.score ?? null;
     }
     return row;
   });
@@ -55,15 +51,11 @@ export default function QuestionTrendChart({
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
           <XAxis
-            dataKey="day"
+            dataKey="index"
             stroke="#94a3b8"
-            tickFormatter={(v) => `D${v}`}
+            tickFormatter={(v) => `#${v}`}
           />
-          <YAxis
-            domain={[1, 5]}
-            ticks={[1, 2, 3, 4, 5]}
-            stroke="#94a3b8"
-          />
+          <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} stroke="#94a3b8" />
           <Tooltip
             contentStyle={{
               background: "#0f172a",
@@ -71,11 +63,10 @@ export default function QuestionTrendChart({
               borderRadius: 8,
               fontSize: 12,
             }}
-            labelFormatter={(v) => `Day ${v}`}
+            labelFormatter={(v) => `TQA #${v}`}
             formatter={(v, name) => {
               const q = questions.find((qq) => qq.id === name);
-              const display =
-                v === null || typeof v !== "number" ? "—" : v;
+              const display = v === null || typeof v !== "number" ? "—" : v;
               return [display, q?.text ?? String(name)];
             }}
           />

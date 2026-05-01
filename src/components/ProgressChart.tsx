@@ -7,38 +7,30 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { DailyAverage } from "../utils/stats";
+import type { TQAPoint } from "../utils/stats";
 
 interface Props {
-  data: DailyAverage[];
-  durationDays: number;
+  points: TQAPoint[];
 }
 
-export default function ProgressChart({ data, durationDays }: Props) {
-  const padded = Array.from({ length: durationDays }, (_, i) => {
-    const day = i + 1;
-    const found = data.find((d) => d.day === day);
-    return {
-      day,
-      average: found?.average ?? null,
-    };
-  });
+export default function ProgressChart({ points }: Props) {
+  const data = points.map((p, i) => ({
+    index: i + 1,
+    average: p.average,
+    occurredAt: p.occurredAt,
+  }));
 
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={padded}>
+        <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
           <XAxis
-            dataKey="day"
+            dataKey="index"
             stroke="#94a3b8"
-            tickFormatter={(v) => `D${v}`}
+            tickFormatter={(v) => `#${v}`}
           />
-          <YAxis
-            domain={[1, 5]}
-            ticks={[1, 2, 3, 4, 5]}
-            stroke="#94a3b8"
-          />
+          <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} stroke="#94a3b8" />
           <Tooltip
             contentStyle={{
               background: "#0f172a",
@@ -48,7 +40,7 @@ export default function ProgressChart({ data, durationDays }: Props) {
             formatter={(v) =>
               v === null || typeof v !== "number" ? "—" : v.toFixed(2)
             }
-            labelFormatter={(v) => `Day ${v}`}
+            labelFormatter={(v) => `TQA #${v}`}
           />
           <Line
             type="monotone"

@@ -3,16 +3,17 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { Question, TQAWithRatings } from "../supabase/types";
+import type { Question, SessionWithRatings } from "../supabase/types";
 
 interface Props {
   questions: Question[];
-  tqas: TQAWithRatings[];
+  sessions: SessionWithRatings[];
 }
 
 const PALETTE = [
@@ -28,18 +29,18 @@ const PALETTE = [
   "#fb923c",
 ];
 
-export default function QuestionTrendChart({ questions, tqas }: Props) {
-  const ordered = [...tqas].sort((a, b) =>
+export default function QuestionTrendChart({ questions, sessions }: Props) {
+  const ordered = [...sessions].sort((a, b) =>
     a.occurred_at.localeCompare(b.occurred_at),
   );
 
-  const data = ordered.map((t, i) => {
+  const data = ordered.map((s, i) => {
     const row: Record<string, number | null | string> = {
       index: i + 1,
-      occurredAt: t.occurred_at,
+      occurredAt: s.occurred_at,
     };
     for (const q of questions) {
-      const r = (t.ratings ?? []).find((rr) => rr.question_id === q.id);
+      const r = (s.ratings ?? []).find((rr) => rr.question_id === q.id);
       row[q.id] = r?.score ?? null;
     }
     return row;
@@ -55,7 +56,12 @@ export default function QuestionTrendChart({ questions, tqas }: Props) {
             stroke="#94a3b8"
             tickFormatter={(v) => `#${v}`}
           />
-          <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} stroke="#94a3b8" />
+          <YAxis
+            domain={[-3, 3]}
+            ticks={[-3, -2, -1, 0, 1, 2, 3]}
+            stroke="#94a3b8"
+          />
+          <ReferenceLine y={0} stroke="#475569" strokeDasharray="3 3" />
           <Tooltip
             contentStyle={{
               background: "#0f172a",
@@ -63,7 +69,7 @@ export default function QuestionTrendChart({ questions, tqas }: Props) {
               borderRadius: 8,
               fontSize: 12,
             }}
-            labelFormatter={(v) => `TQA #${v}`}
+            labelFormatter={(v) => `Session #${v}`}
             formatter={(v, name) => {
               const q = questions.find((qq) => qq.id === name);
               const display = v === null || typeof v !== "number" ? "—" : v;

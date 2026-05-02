@@ -16,7 +16,7 @@ export default function Resources() {
   const questionId = params.get("question") ?? undefined;
 
   const phases = useQuery(() => listPhases(), []);
-  const questions = useQuery(() => listAllQuestions(false), []);
+  const questions = useQuery(() => listAllQuestions(), []);
   const resources = useQuery(
     () =>
       questionId
@@ -27,12 +27,17 @@ export default function Resources() {
     [phaseId, questionId],
   );
 
-  const target =
-    questionId
-      ? questions.data?.find((q) => q.id === questionId)
-      : phaseId
-        ? phases.data?.find((p) => p.id === phaseId)
-        : undefined;
+  const phaseTarget = phaseId
+    ? phases.data?.find((p) => p.id === phaseId)
+    : undefined;
+  const questionTarget = questionId
+    ? questions.data?.find((q) => q.id === questionId)
+    : undefined;
+  const targetLabel = questionTarget
+    ? questionTarget.text
+    : phaseTarget
+      ? phaseTarget.name
+      : "Pick a target below";
 
   const setTarget = (kind: "phase" | "question", id: string) => {
     const next = new URLSearchParams();
@@ -40,18 +45,13 @@ export default function Resources() {
     setParams(next);
   };
 
-  const targetLabel = target
-    ? "name" in target
-      ? target.name
-      : target.text
-    : "Pick a target below";
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Resources</h1>
         <p className="text-slate-400 text-sm mt-1">
-          Attach YouTube videos and links to phases and individual questions.
+          Attach YouTube videos and links to phases and individual score-sheet
+          items.
         </p>
       </div>
 
@@ -95,7 +95,7 @@ export default function Resources() {
                 return (
                   <option key={q.id} value={q.id}>
                     {phase ? `[${phase.name}] ` : ""}
-                    {q.text}
+                    [{q.axis}] {q.text}
                   </option>
                 );
               })}
@@ -136,7 +136,7 @@ export default function Resources() {
         <div className="card text-center text-slate-400">
           Pick a phase or a question above to view and add resources, or{" "}
           <Link to="/phases" className="underline text-brand-500">
-            manage phases
+            browse phases
           </Link>
           .
         </div>

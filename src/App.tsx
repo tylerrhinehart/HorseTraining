@@ -5,11 +5,15 @@ import Dashboard from "./pages/Dashboard";
 import HorsesList from "./pages/HorsesList";
 import HorseNew from "./pages/HorseNew";
 import HorseDetail from "./pages/HorseDetail";
-import NewTQA from "./pages/NewTQA";
-import TQADetail from "./pages/TQADetail";
+import EngagementNew from "./pages/EngagementNew";
+import EngagementDetail from "./pages/EngagementDetail";
+import SessionNew from "./pages/SessionNew";
+import SessionDetail from "./pages/SessionDetail";
+import Riders from "./pages/Riders";
 import PhasesList from "./pages/PhasesList";
 import PhaseDetail from "./pages/PhaseDetail";
 import Resources from "./pages/Resources";
+import FoundationDoctrine from "./pages/FoundationDoctrine";
 import Report from "./pages/Report";
 import Settings from "./pages/Settings";
 import SignIn from "./pages/SignIn";
@@ -17,100 +21,40 @@ import SignUp from "./pages/SignUp";
 import NotFound from "./pages/NotFound";
 import UpdatePrompt from "./components/UpdatePrompt";
 
+const guarded = (element: React.ReactNode) => <RequireAuth>{element}</RequireAuth>;
+
 export default function App() {
   return (
     <AppShell>
       <Routes>
         <Route path="/sign-in" element={<SignIn />} />
         <Route path="/sign-up" element={<SignUp />} />
+
+        <Route path="/" element={guarded(<Dashboard />)} />
+        <Route path="/horses" element={guarded(<HorsesList />)} />
+        <Route path="/horses/new" element={guarded(<HorseNew />)} />
+        <Route path="/horses/:id" element={guarded(<HorseDetail />)} />
         <Route
-          path="/"
-          element={
-            <RequireAuth>
-              <Dashboard />
-            </RequireAuth>
-          }
+          path="/horses/:id/engagements/new"
+          element={guarded(<EngagementNew />)}
         />
+
+        <Route path="/engagements/:id" element={guarded(<EngagementDetail />)} />
+        <Route path="/engagements/:id/report" element={guarded(<Report />)} />
         <Route
-          path="/horses"
-          element={
-            <RequireAuth>
-              <HorsesList />
-            </RequireAuth>
-          }
+          path="/engagements/:id/weeks/:weekId/sessions/new"
+          element={guarded(<SessionNew />)}
         />
-        <Route
-          path="/horses/new"
-          element={
-            <RequireAuth>
-              <HorseNew />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/horses/:id"
-          element={
-            <RequireAuth>
-              <HorseDetail />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/horses/:id/report"
-          element={
-            <RequireAuth>
-              <Report />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/horses/:horseId/tqa/new"
-          element={
-            <RequireAuth>
-              <NewTQA />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/tqa/:id"
-          element={
-            <RequireAuth>
-              <TQADetail />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/phases"
-          element={
-            <RequireAuth>
-              <PhasesList />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/phases/:id"
-          element={
-            <RequireAuth>
-              <PhaseDetail />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/resources"
-          element={
-            <RequireAuth>
-              <Resources />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <RequireAuth>
-              <Settings />
-            </RequireAuth>
-          }
-        />
+
+        <Route path="/sessions/:id" element={guarded(<SessionDetail />)} />
+
+        <Route path="/riders" element={guarded(<Riders />)} />
+        <Route path="/phases" element={guarded(<PhasesList />)} />
+        <Route path="/phases/:id" element={guarded(<PhaseDetail />)} />
+        <Route path="/foundation" element={guarded(<FoundationDoctrine />)} />
+        <Route path="/resources" element={guarded(<Resources />)} />
+        <Route path="/settings" element={guarded(<Settings />)} />
+
         <Route path="*" element={<NotFound />} />
       </Routes>
       <UpdatePrompt />

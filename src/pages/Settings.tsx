@@ -3,8 +3,10 @@ import { useAuth } from "../auth/AuthProvider";
 import { supabaseConfigured } from "../supabase/client";
 import {
   listAllQuestions,
+  listEngagements,
   listHorses,
   listPhases,
+  listRiders,
 } from "../supabase/queries";
 
 type InstallEvent = Event & {
@@ -31,10 +33,12 @@ export default function Settings() {
   const exportData = async () => {
     setExportStatus(null);
     try {
-      const [horses, phases, questions] = await Promise.all([
+      const [horses, engagements, phases, questions, riders] = await Promise.all([
         listHorses(true),
+        listEngagements(true),
         listPhases(),
-        listAllQuestions(true),
+        listAllQuestions(),
+        listRiders(true),
       ]);
       const blob = new Blob(
         [
@@ -44,8 +48,10 @@ export default function Settings() {
               exportedAt: new Date().toISOString(),
               userId: user?.id,
               horses,
+              engagements,
               phases,
               questions,
+              riders,
             },
             null,
             2,
@@ -89,9 +95,9 @@ export default function Settings() {
       <section className="card space-y-3">
         <h2 className="font-semibold">Export your data</h2>
         <p className="text-sm text-slate-400">
-          Download a JSON snapshot of your horses, phases, and questions
-          (TQAs are linked from horses but exported separately on demand —
-          this snapshot covers core records).
+          Download a JSON snapshot of your horses, engagements, phases,
+          questions, and riders. Sessions and ratings are linked from
+          engagements but exported separately on demand.
         </p>
         <div>
           <button className="btn-primary" onClick={exportData}>

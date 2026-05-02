@@ -1,41 +1,32 @@
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { createHorse, listPhases } from "../supabase/queries";
-import { useQuery } from "../supabase/useQuery";
-import { todayLocal } from "../utils/dates";
+import { createHorse } from "../supabase/queries";
 
 interface FormValues {
   name: string;
   breed?: string;
-  ownerName?: string;
-  ownerEmail?: string;
-  startDate?: string;
+  dob?: string;
+  sex?: string;
+  color?: string;
   notes?: string;
-  currentPhaseId?: string;
 }
 
 export default function HorseNew() {
   const navigate = useNavigate();
-  const phases = useQuery(() => listPhases(), []);
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    defaultValues: {
-      startDate: todayLocal(),
-    },
-  });
+  } = useForm<FormValues>();
 
   const onSubmit = async (values: FormValues) => {
     const horse = await createHorse({
       name: values.name,
       breed: values.breed,
-      ownerName: values.ownerName,
-      ownerEmail: values.ownerEmail,
-      startDate: values.startDate || undefined,
+      dob: values.dob || undefined,
+      sex: values.sex,
+      color: values.color,
       notes: values.notes,
-      currentPhaseId: values.currentPhaseId || undefined,
     });
     navigate(`/horses/${horse.id}`);
   };
@@ -62,59 +53,37 @@ export default function HorseNew() {
             <input id="breed" className="input" {...register("breed")} />
           </div>
           <div>
-            <label htmlFor="currentPhaseId" className="label">
-              Starting phase
-            </label>
-            <select
-              id="currentPhaseId"
-              className="input"
-              {...register("currentPhaseId")}
-              defaultValue=""
-            >
-              <option value="">
-                {phases.loading
-                  ? "Loading phases…"
-                  : "Default (Foundation)"}
-              </option>
-              {phases.data?.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <label htmlFor="color" className="label">Color</label>
+            <input id="color" className="input" {...register("color")} />
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label htmlFor="ownerName" className="label">Owner name</label>
+            <label htmlFor="dob" className="label">Date of birth</label>
             <input
-              id="ownerName"
+              id="dob"
+              type="date"
               className="input"
-              {...register("ownerName")}
+              {...register("dob")}
             />
           </div>
           <div>
-            <label htmlFor="ownerEmail" className="label">Owner email</label>
-            <input
-              id="ownerEmail"
-              type="email"
+            <label htmlFor="sex" className="label">Sex</label>
+            <select
+              id="sex"
               className="input"
-              {...register("ownerEmail")}
-            />
+              defaultValue=""
+              {...register("sex")}
+            >
+              <option value="">—</option>
+              <option value="mare">Mare</option>
+              <option value="gelding">Gelding</option>
+              <option value="stallion">Stallion</option>
+              <option value="filly">Filly</option>
+              <option value="colt">Colt</option>
+            </select>
           </div>
-        </div>
-
-        <div>
-          <label htmlFor="startDate" className="label">
-            Training start date
-          </label>
-          <input
-            id="startDate"
-            type="date"
-            className="input"
-            {...register("startDate")}
-          />
         </div>
 
         <div>

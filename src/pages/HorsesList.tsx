@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from "react-router-dom";
-import { listHorses, listPhases } from "../supabase/queries";
+import { listHorses } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import { formatHumanDate } from "../utils/dates";
 
@@ -8,10 +8,6 @@ export default function HorsesList() {
   const showArchived = params.get("filter") === "archived";
 
   const horsesQuery = useQuery(() => listHorses(showArchived), [showArchived]);
-  const phasesQuery = useQuery(() => listPhases(), []);
-
-  const phaseName = (id: string | null) =>
-    phasesQuery.data?.find((p) => p.id === id)?.name ?? "—";
 
   const horses =
     horsesQuery.data?.filter((h) =>
@@ -69,34 +65,28 @@ export default function HorsesList() {
                 </Link>
                 <div className="text-xs text-slate-400 mt-1 space-x-2">
                   {h.breed && <span>{h.breed}</span>}
-                  {h.owner_name && <span>· Owner: {h.owner_name}</span>}
+                  {h.sex && <span>· {h.sex}</span>}
+                  {h.color && <span>· {h.color}</span>}
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className="pill bg-brand-600/20 text-brand-100 border border-brand-600/40">
-                  {phaseName(h.current_phase_id)}
+              {h.archived_at && (
+                <span className="pill bg-slate-700 text-slate-300">
+                  Archived
                 </span>
-                {h.archived_at && (
-                  <span className="pill bg-slate-700 text-slate-300">
-                    Archived
-                  </span>
-                )}
-              </div>
+              )}
             </div>
             <div className="text-xs text-slate-400">
-              {h.start_date
-                ? `Started ${formatHumanDate(h.start_date)}`
-                : `Added ${formatHumanDate(h.created_at)}`}
+              Added {formatHumanDate(h.created_at)}
             </div>
             <div className="flex flex-wrap gap-2 pt-2">
               <Link to={`/horses/${h.id}`} className="btn-ghost text-xs">
                 View
               </Link>
               <Link
-                to={`/horses/${h.id}/tqa/new`}
+                to={`/horses/${h.id}/engagements/new`}
                 className="btn-secondary text-xs"
               >
-                Record TQA
+                + Engagement
               </Link>
             </div>
           </div>

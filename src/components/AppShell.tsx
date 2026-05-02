@@ -42,8 +42,14 @@ export default function AppShell({ children }: Props) {
               <NavLink to="/horses" className={navItem}>
                 Horses
               </NavLink>
+              <NavLink to="/riders" className={navItem}>
+                Riders
+              </NavLink>
               <NavLink to="/phases" className={navItem}>
                 Phases
+              </NavLink>
+              <NavLink to="/foundation" className={navItem}>
+                Foundation
               </NavLink>
               <NavLink to="/resources" className={navItem}>
                 Resources

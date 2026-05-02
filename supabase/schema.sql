@@ -251,14 +251,16 @@ create trigger touch_sessions              before update on public.sessions     
 create trigger touch_trifecta_evaluations  before update on public.trifecta_evaluations  for each row execute function public.touch_updated_at();
 
 -- ---------------------------------------------------------------------------
--- Signup trigger: seed profile + 5 phases + 70 questions verbatim.
+-- Canonical template seed: profile + 5 phases + 70 questions verbatim.
 --
 -- This block is the SQL counterpart of src/content/tqa-template.ts. Keep
--- the two in sync if either is edited.
+-- the two in sync if either is edited. The function is idempotent — it
+-- skips users who already have phases — so it can also be used to backfill
+-- existing accounts after a schema reset.
 -- ---------------------------------------------------------------------------
 
-create or replace function public.handle_new_user()
-returns trigger
+create or replace function public.seed_canonical_template(p_user_id uuid)
+returns void
 language plpgsql
 security definer
 set search_path = public
@@ -269,84 +271,90 @@ declare
   p2_id  uuid;
   p3_id  uuid;
   p4_id  uuid;
+  existing_phase_count int;
 begin
-  insert into public.profiles (id) values (new.id) on conflict do nothing;
+  insert into public.profiles (id) values (p_user_id) on conflict do nothing;
+
+  select count(*) into existing_phase_count from public.phases where user_id = p_user_id;
+  if existing_phase_count > 0 then
+    return;
+  end if;
 
   insert into public.phases (user_id, code, position, name) values
-    (new.id, 'groundwork', 0, 'Groundwork'),
-    (new.id, 'phase_1',    1, 'Phase 1'),
-    (new.id, 'phase_2',    2, 'Phase 2'),
-    (new.id, 'phase_3',    3, 'Phase 3'),
-    (new.id, 'phase_4',    4, 'Phase 4');
+    (p_user_id, 'groundwork', 0, 'Groundwork'),
+    (p_user_id, 'phase_1',    1, 'Phase 1'),
+    (p_user_id, 'phase_2',    2, 'Phase 2'),
+    (p_user_id, 'phase_3',    3, 'Phase 3'),
+    (p_user_id, 'phase_4',    4, 'Phase 4');
 
-  select id into gw_id from public.phases where user_id = new.id and code = 'groundwork';
-  select id into p1_id from public.phases where user_id = new.id and code = 'phase_1';
-  select id into p2_id from public.phases where user_id = new.id and code = 'phase_2';
-  select id into p3_id from public.phases where user_id = new.id and code = 'phase_3';
-  select id into p4_id from public.phases where user_id = new.id and code = 'phase_4';
+  select id into gw_id from public.phases where user_id = p_user_id and code = 'groundwork';
+  select id into p1_id from public.phases where user_id = p_user_id and code = 'phase_1';
+  select id into p2_id from public.phases where user_id = p_user_id and code = 'phase_2';
+  select id into p3_id from public.phases where user_id = p_user_id and code = 'phase_3';
+  select id into p4_id from public.phases where user_id = p_user_id and code = 'phase_4';
 
   -- Foundation rows (8 per phase, 40 total).
   insert into public.questions (user_id, phase_id, axis, position, text, low_label, high_label) values
     -- Groundwork
-    (new.id, gw_id, 'foundation', 0, 'Good to catch', 'Did Not Complete', 'Mastered'),
-    (new.id, gw_id, 'foundation', 1, 'Stage 1 w/ Willing Submission (in a crisis, standing & walking)', 'Did Not Complete', 'Mastered'),
-    (new.id, gw_id, 'foundation', 2, 'Horizontal Direction (standing & walking)', 'Did Not Complete', 'Mastered'),
-    (new.id, gw_id, 'foundation', 3, 'Stage 2 w/ Willing Submission', 'Did Not Complete', 'Mastered'),
-    (new.id, gw_id, 'foundation', 4, 'Stage 3 w/ Willing Submission', 'Did Not Complete', 'Mastered'),
-    (new.id, gw_id, 'foundation', 5, 'Stage 4 w/ Willing Submission', 'Did Not Complete', 'Mastered'),
-    (new.id, gw_id, 'foundation', 6, 'Lead w/ Willing Submission and Respect', 'Did Not Complete', 'Mastered'),
-    (new.id, gw_id, 'foundation', 7, 'Pick up feet', 'Did Not Complete', 'Mastered'),
+    (p_user_id, gw_id, 'foundation', 0, 'Good to catch', 'Did Not Complete', 'Mastered'),
+    (p_user_id, gw_id, 'foundation', 1, 'Stage 1 w/ Willing Submission (in a crisis, standing & walking)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, gw_id, 'foundation', 2, 'Horizontal Direction (standing & walking)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, gw_id, 'foundation', 3, 'Stage 2 w/ Willing Submission', 'Did Not Complete', 'Mastered'),
+    (p_user_id, gw_id, 'foundation', 4, 'Stage 3 w/ Willing Submission', 'Did Not Complete', 'Mastered'),
+    (p_user_id, gw_id, 'foundation', 5, 'Stage 4 w/ Willing Submission', 'Did Not Complete', 'Mastered'),
+    (p_user_id, gw_id, 'foundation', 6, 'Lead w/ Willing Submission and Respect', 'Did Not Complete', 'Mastered'),
+    (p_user_id, gw_id, 'foundation', 7, 'Pick up feet', 'Did Not Complete', 'Mastered'),
     -- Phase 1
-    (new.id, p1_id, 'foundation', 0, 'Good to Catch (Review Groundwork)', 'Did Not Complete', 'Mastered'),
-    (new.id, p1_id, 'foundation', 1, 'Stand to Saddle and Accept Bridle', 'Did Not Complete', 'Mastered'),
-    (new.id, p1_id, 'foundation', 2, 'Horizontal Direction & Stage 1 (on the ground, in and away from you)', 'Did Not Complete', 'Mastered'),
-    (new.id, p1_id, 'foundation', 3, 'Horizontal Direction & Stage 1 (on their side and on their back)', 'Did Not Complete', 'Mastered'),
-    (new.id, p1_id, 'foundation', 4, 'Stand to Get On', 'Did Not Complete', 'Mastered'),
-    (new.id, p1_id, 'foundation', 5, 'Doubling Walking, Trotting and Loping (revelation w/in 3 steps from initial cue)', 'Did Not Complete', 'Mastered'),
-    (new.id, p1_id, 'foundation', 6, 'Move Out Soft In a Lope', 'Did Not Complete', 'Mastered'),
-    (new.id, p1_id, 'foundation', 7, 'Stage 2 w/ Willing Submission (standing)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p1_id, 'foundation', 0, 'Good to Catch (Review Groundwork)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p1_id, 'foundation', 1, 'Stand to Saddle and Accept Bridle', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p1_id, 'foundation', 2, 'Horizontal Direction & Stage 1 (on the ground, in and away from you)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p1_id, 'foundation', 3, 'Horizontal Direction & Stage 1 (on their side and on their back)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p1_id, 'foundation', 4, 'Stand to Get On', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p1_id, 'foundation', 5, 'Doubling Walking, Trotting and Loping (revelation w/in 3 steps from initial cue)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p1_id, 'foundation', 6, 'Move Out Soft In a Lope', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p1_id, 'foundation', 7, 'Stage 2 w/ Willing Submission (standing)', 'Did Not Complete', 'Mastered'),
     -- Phase 2
-    (new.id, p2_id, 'foundation', 0, 'Review groundwork, Stand to Saddle, Accept Bridle (Prepare for rope, Stage 1 w/ Snaffle)', 'Did Not Complete', 'Mastered'),
-    (new.id, p2_id, 'foundation', 1, 'Horizontal Direction & Stage 1 (on the ground)', 'Did Not Complete', 'Mastered'),
-    (new.id, p2_id, 'foundation', 2, 'Stand to get on, Horizontal Direction & Stage 1 (on their side and on their back)', 'Did Not Complete', 'Mastered'),
-    (new.id, p2_id, 'foundation', 3, 'Doubling Walking, Trotting and Loping', 'Did Not Complete', 'Mastered'),
-    (new.id, p2_id, 'foundation', 4, 'Stage 2 w/ Willing Submission (standing & walking)', 'Did Not Complete', 'Mastered'),
-    (new.id, p2_id, 'foundation', 5, 'Lope in a straight line outside', 'Did Not Complete', 'Mastered'),
-    (new.id, p2_id, 'foundation', 6, 'Stage 3 w/ Willing Submission (on fence)', 'Did Not Complete', 'Mastered'),
-    (new.id, p2_id, 'foundation', 7, 'Horizontal Direction (walk and slow trot)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p2_id, 'foundation', 0, 'Review groundwork, Stand to Saddle, Accept Bridle (Prepare for rope, Stage 1 w/ Snaffle)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p2_id, 'foundation', 1, 'Horizontal Direction & Stage 1 (on the ground)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p2_id, 'foundation', 2, 'Stand to get on, Horizontal Direction & Stage 1 (on their side and on their back)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p2_id, 'foundation', 3, 'Doubling Walking, Trotting and Loping', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p2_id, 'foundation', 4, 'Stage 2 w/ Willing Submission (standing & walking)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p2_id, 'foundation', 5, 'Lope in a straight line outside', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p2_id, 'foundation', 6, 'Stage 3 w/ Willing Submission (on fence)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p2_id, 'foundation', 7, 'Horizontal Direction (walk and slow trot)', 'Did Not Complete', 'Mastered'),
     -- Phase 3
-    (new.id, p3_id, 'foundation', 0, 'Review Ground Work & Phase 1 — Stage 1 & HD Standing, Double (Walk, Trot, Lope)', 'Did Not Complete', 'Mastered'),
-    (new.id, p3_id, 'foundation', 1, 'Lope in a Straight Line Outside', 'Did Not Complete', 'Mastered'),
-    (new.id, p3_id, 'foundation', 2, 'Horizontal Direction (Slow and Extended Trot)', 'Did Not Complete', 'Mastered'),
-    (new.id, p3_id, 'foundation', 3, 'Stage 2 w/ Willing Submission (standing, walking, trotting)', 'Did Not Complete', 'Mastered'),
-    (new.id, p3_id, 'foundation', 4, 'Stage 3 w/ Willing Submission (open/close gate)', 'Did Not Complete', 'Mastered'),
-    (new.id, p3_id, 'foundation', 5, 'Stage 3 and 4 w/ Willing Submission (on fence)', 'Did Not Complete', 'Mastered'),
-    (new.id, p3_id, 'foundation', 6, 'Vertical Direction (walking and slow trot)', 'Did Not Complete', 'Mastered'),
-    (new.id, p3_id, 'foundation', 7, 'Accept Rope, Drag Log, Track Dummy — track cow if available', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p3_id, 'foundation', 0, 'Review Ground Work & Phase 1 — Stage 1 & HD Standing, Double (Walk, Trot, Lope)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p3_id, 'foundation', 1, 'Lope in a Straight Line Outside', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p3_id, 'foundation', 2, 'Horizontal Direction (Slow and Extended Trot)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p3_id, 'foundation', 3, 'Stage 2 w/ Willing Submission (standing, walking, trotting)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p3_id, 'foundation', 4, 'Stage 3 w/ Willing Submission (open/close gate)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p3_id, 'foundation', 5, 'Stage 3 and 4 w/ Willing Submission (on fence)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p3_id, 'foundation', 6, 'Vertical Direction (walking and slow trot)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p3_id, 'foundation', 7, 'Accept Rope, Drag Log, Track Dummy — track cow if available', 'Did Not Complete', 'Mastered'),
     -- Phase 4
-    (new.id, p4_id, 'foundation', 0, 'Review: Groundwork & Phase 1 — TQA Sale Horse Warm Up, or Ranch Horse Reality', 'Did Not Complete', 'Mastered'),
-    (new.id, p4_id, 'foundation', 1, 'Horizontal Direction (standing, walking, trotting, loping)', 'Did Not Complete', 'Mastered'),
-    (new.id, p4_id, 'foundation', 2, 'Stage 2 w/ Willing Submission (standing, walking, trotting, loping)', 'Did Not Complete', 'Mastered'),
-    (new.id, p4_id, 'foundation', 3, 'Stage 3 w/ Willing Submission (not using fence)', 'Did Not Complete', 'Mastered'),
-    (new.id, p4_id, 'foundation', 4, 'Stage 4 w/ Willing Submission (HD into Stage 4, inside leg/outside leg)', 'Did Not Complete', 'Mastered'),
-    (new.id, p4_id, 'foundation', 5, 'Roll Backs on Fence (whatever speed you can do it correct)', 'Did Not Complete', 'Mastered'),
-    (new.id, p4_id, 'foundation', 6, 'Vertical Direction (walk, slow & extended trot)', 'Did Not Complete', 'Mastered'),
-    (new.id, p4_id, 'foundation', 7, 'Drag & Rope Dummy (show 4 stages w/ WS & VD) — track and rope cow if available', 'Did Not Complete', 'Mastered');
+    (p_user_id, p4_id, 'foundation', 0, 'Review: Groundwork & Phase 1 — TQA Sale Horse Warm Up, or Ranch Horse Reality', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p4_id, 'foundation', 1, 'Horizontal Direction (standing, walking, trotting, loping)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p4_id, 'foundation', 2, 'Stage 2 w/ Willing Submission (standing, walking, trotting, loping)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p4_id, 'foundation', 3, 'Stage 3 w/ Willing Submission (not using fence)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p4_id, 'foundation', 4, 'Stage 4 w/ Willing Submission (HD into Stage 4, inside leg/outside leg)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p4_id, 'foundation', 5, 'Roll Backs on Fence (whatever speed you can do it correct)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p4_id, 'foundation', 6, 'Vertical Direction (walk, slow & extended trot)', 'Did Not Complete', 'Mastered'),
+    (p_user_id, p4_id, 'foundation', 7, 'Drag & Rope Dummy (show 4 stages w/ WS & VD) — track and rope cow if available', 'Did Not Complete', 'Mastered');
 
   -- Temperament rows (6 per phase, 30 total).
   -- Groundwork order: Self-pres, Confidence, Willingness, Reaction-to-social-sep, Energy, Sensitivity.
   insert into public.questions (user_id, phase_id, axis, position, text, low_label, high_label) values
-    (new.id, gw_id, 'temperament', 0, 'Self-preservation (fight or flight)',           'High',      'Low'),
-    (new.id, gw_id, 'temperament', 1, 'Confidence',                                    'Low',       'High'),
-    (new.id, gw_id, 'temperament', 2, 'Willingness (response to request)',             'Resistant', 'Willing'),
-    (new.id, gw_id, 'temperament', 3, 'Reaction to social separation',                 'Calm',      'Nervous'),
-    (new.id, gw_id, 'temperament', 4, 'Energy (motivation and determination)',         'Low',       'High'),
-    (new.id, gw_id, 'temperament', 5, 'Sensitivity (response to light pressure)',      'Dull',      'Very Responsive');
+    (p_user_id, gw_id, 'temperament', 0, 'Self-preservation (fight or flight)',           'High',      'Low'),
+    (p_user_id, gw_id, 'temperament', 1, 'Confidence',                                    'Low',       'High'),
+    (p_user_id, gw_id, 'temperament', 2, 'Willingness (response to request)',             'Resistant', 'Willing'),
+    (p_user_id, gw_id, 'temperament', 3, 'Reaction to social separation',                 'Calm',      'Nervous'),
+    (p_user_id, gw_id, 'temperament', 4, 'Energy (motivation and determination)',         'Low',       'High'),
+    (p_user_id, gw_id, 'temperament', 5, 'Sensitivity (response to light pressure)',      'Dull',      'Very Responsive');
 
   -- Phases 1–4: standard order Self-pres, Confidence, Energy, Sensitivity, Willingness, Reaction-to-social-sep.
   for i in 1..4 loop
     insert into public.questions (user_id, phase_id, axis, position, text, low_label, high_label)
-    select new.id,
+    select p_user_id,
            case i
              when 1 then p1_id when 2 then p2_id when 3 then p3_id when 4 then p4_id
            end,
@@ -360,7 +368,17 @@ begin
       (5, 'Reaction to social separation',                 'Calm',      'Nervous')
     ) as t(pos, txt, lo, hi);
   end loop;
+end;
+$$;
 
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.seed_canonical_template(new.id);
   return new;
 end;
 $$;
@@ -369,3 +387,19 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- ---------------------------------------------------------------------------
+-- Backfill: seed any existing auth.users that lack phases. Safe to re-run.
+-- ---------------------------------------------------------------------------
+
+do $$
+declare
+  u record;
+begin
+  for u in
+    select id from auth.users
+    where not exists (select 1 from public.phases p where p.user_id = auth.users.id)
+  loop
+    perform public.seed_canonical_template(u.id);
+  end loop;
+end $$;

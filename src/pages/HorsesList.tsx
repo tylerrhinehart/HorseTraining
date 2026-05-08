@@ -1,164 +1,182 @@
 import { useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { differenceInCalendarDays } from "date-fns";
-import { listEngagements, listHorses } from "../supabase/queries";
+import { listHorses, listPhases } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import { useActiveHorseId } from "../state/activeHorse";
 import { gradientFor, hashTone, initialsOf } from "../components/HorseAvatar";
 import { formatHumanDate } from "../utils/dates";
-import type { Engagement } from "../supabase/types";
+import type { Horse, Phase } from "../supabase/types";
 
 export default function HorsesList() {
-  const [params, setParams] = useSearchParams();
-  const showArchived = params.get("filter") === "archived";
-
-  const horsesQuery = useQuery(() => listHorses(true), []);
-  const engagementsQuery = useQuery(() => listEngagements(false), []);
+  const horsesQuery = useQuery(
+    () => listHorses({ statuses: ["in_training", "complete", "archived"] }),
+    [],
+  );
+  const phasesQuery = useQuery(() => listPhases(), []);
   const [activeId, setActiveId] = useActiveHorseId();
 
-  const horses = (horsesQuery.data ?? []).filter((h) =>
-    showArchived ? !!h.archived_at : !h.archived_at,
-  );
-
-  const latestByHorse = useMemo(() => {
-    const map = new Map<string, Engagement>();
-    for (const e of engagementsQuery.data ?? []) {
-      const cur = map.get(e.horse_id);
-      const curKey = cur ? cur.arrival_date ?? cur.created_at : "";
-      const newKey = e.arrival_date ?? e.created_at;
-      if (!cur || newKey.localeCompare(curKey) > 0) map.set(e.horse_id, e);
-    }
+  const phasesById = useMemo(() => {
+    const map = new Map<string, Phase>();
+    for (const p of phasesQuery.data ?? []) map.set(p.id, p);
     return map;
-  }, [engagementsQuery.data]);
+  }, [phasesQuery.data]);
+
+  const horses = horsesQuery.data ?? [];
+  const inTraining = horses.filter((h) => h.status === "in_training");
+  const completed = horses.filter((h) => h.status === "complete");
+  const archived = horses.filter((h) => h.status === "archived");
 
   return (
     <div className="view">
-      <div className="eyebrow">
-        Roster · {horses.length} {showArchived ? "archived" : "in training"}
-      </div>
+      <div className="eyebrow">Roster · {horses.length} horses</div>
       <h1 className="h-display">Horses</h1>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 14,
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <p
-          className="muted"
-          style={{ margin: 0, fontSize: 14, maxWidth: 520 }}
-        >
-          Tap a horse to make them the active subject. New sessions save
-          against that horse.
-        </p>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              const next = new URLSearchParams(params);
-              if (showArchived) next.delete("filter");
-              else next.set("filter", "archived");
-              setParams(next);
-            }}
-          >
-            {showArchived ? "Show active" : "Show archived"}
-          </button>
-          <Link to="/horses/new" className="btn btn-leather">
-            + Register
-          </Link>
-        </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+        <Link to="/horses/new" className="btn btn-leather">+ New horse</Link>
       </div>
 
-      {horsesQuery.loading && (
-        <div className="card muted">Loading horses…</div>
-      )}
+      {horsesQuery.loading && <div className="card muted">Loading…</div>}
       {horsesQuery.error && (
         <div className="card" style={{ color: "var(--bad)" }}>
           {horsesQuery.error.message}
         </div>
       )}
       {!horsesQuery.loading && horses.length === 0 && (
-        <div
-          className="card"
-          style={{ textAlign: "center", color: "var(--muted)" }}
-        >
-          {showArchived
-            ? "No archived horses."
-            : "No horses yet. Register your first to get started."}
+        <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>
+          No horses yet. Tap "+ New horse" to start.
         </div>
       )}
 
-      <div className="roster">
-        {horses.map((h) => {
-          const tone = hashTone(h.name);
-          const photoBg = gradientFor(tone);
-          const isActive = h.id === activeId;
-          const eng = latestByHorse.get(h.id) ?? null;
-          const arrival = eng?.arrival_date
-            ? new Date(eng.arrival_date + "T12:00:00")
-            : null;
-          const days = arrival
-            ? differenceInCalendarDays(new Date(), arrival)
-            : null;
-          return (
-            <Link
-              key={h.id}
-              to={`/horses/${h.id}`}
-              className={`horse-card ${isActive ? "is-active" : ""}`}
-              onClick={() => setActiveId(h.id)}
-            >
-              <div className="horse-photo" style={{ background: photoBg }}>
-                <span className="horse-initials">{initialsOf(h.name)}</span>
-                {isActive && !h.archived_at && (
-                  <span className="horse-active-flag">In session</span>
-                )}
-                {h.archived_at && (
-                  <span className="horse-archived-flag">Archived</span>
-                )}
-              </div>
-              <div className="horse-body">
-                <h3 className="horse-name">{h.name}</h3>
-                <span className="horse-sub">
-                  {[h.breed, h.sex].filter(Boolean).join(" · ") || "—"}
-                </span>
-                {eng?.owner_name && (
-                  <span
-                    className="horse-sub"
-                    style={{ color: "var(--leather)" }}
-                  >
-                    Owner: {eng.owner_name}
-                  </span>
-                )}
-                <div className="horse-stats">
-                  <div className="stat">
-                    <span className="k">Days in</span>
-                    <span className="v">{days ?? "—"}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="k">Arrived</span>
-                    <span className="v" style={{ fontSize: 12 }}>
-                      {eng?.arrival_date
-                        ? formatHumanDate(eng.arrival_date).replace(/^\w+, /, "")
-                        : "—"}
-                    </span>
-                  </div>
-                  <div className="stat">
-                    <span className="k">Added</span>
-                    <span className="v" style={{ fontSize: 12 }}>
-                      {formatHumanDate(h.created_at).replace(/^\w+, /, "")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+      <Section
+        title="In training"
+        horses={inTraining}
+        defaultOpen
+        phasesById={phasesById}
+        activeId={activeId}
+        setActiveId={setActiveId}
+      />
+      <Section
+        title="Completed"
+        horses={completed}
+        phasesById={phasesById}
+        activeId={activeId}
+        setActiveId={setActiveId}
+      />
+      <Section
+        title="Archived"
+        horses={archived}
+        phasesById={phasesById}
+        activeId={activeId}
+        setActiveId={setActiveId}
+      />
     </div>
+  );
+}
+
+function Section({
+  title,
+  horses,
+  defaultOpen,
+  phasesById,
+  activeId,
+  setActiveId,
+}: {
+  title: string;
+  horses: Horse[];
+  defaultOpen?: boolean;
+  phasesById: Map<string, Phase>;
+  activeId: string | null;
+  setActiveId: (id: string) => void;
+}) {
+  if (horses.length === 0) return null;
+  return (
+    <details open={defaultOpen} style={{ marginTop: 12 }}>
+      <summary style={{ cursor: "pointer", padding: "8px 0", fontWeight: 600 }}>
+        {title}{" "}
+        <span className="muted" style={{ fontWeight: 400 }}>
+          · {horses.length}
+        </span>
+      </summary>
+      <div className="roster">
+        {horses.map((h) => (
+          <HorseCard
+            key={h.id}
+            horse={h}
+            phasesById={phasesById}
+            isActive={h.id === activeId}
+            onClick={() => setActiveId(h.id)}
+          />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function HorseCard({
+  horse,
+  phasesById,
+  isActive,
+  onClick,
+}: {
+  horse: Horse;
+  phasesById: Map<string, Phase>;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  const tone = hashTone(horse.name);
+  const photoBg = gradientFor(tone);
+  const arrival = horse.arrival_date
+    ? new Date(horse.arrival_date + "T12:00:00")
+    : null;
+  const days = arrival ? differenceInCalendarDays(new Date(), arrival) : null;
+  const phase = horse.current_phase_id
+    ? phasesById.get(horse.current_phase_id)
+    : null;
+
+  return (
+    <Link
+      to={`/horses/${horse.id}`}
+      className={`horse-card ${isActive ? "is-active" : ""}`}
+      onClick={onClick}
+    >
+      <div className="horse-photo" style={{ background: photoBg }}>
+        <span className="horse-initials">{initialsOf(horse.name)}</span>
+        {isActive && horse.status === "in_training" && (
+          <span className="horse-active-flag">In session</span>
+        )}
+      </div>
+      <div className="horse-body">
+        <h3 className="horse-name">{horse.name}</h3>
+        <span className="horse-sub">
+          {horse.owner_name ? `Owner: ${horse.owner_name}` : "—"}
+        </span>
+        {phase && (
+          <span className="horse-sub" style={{ color: "var(--leather)" }}>
+            {phase.name}
+          </span>
+        )}
+        <div className="horse-stats">
+          <div className="stat">
+            <span className="k">Days in</span>
+            <span className="v">{days ?? "—"}</span>
+          </div>
+          <div className="stat">
+            <span className="k">Arrived</span>
+            <span className="v" style={{ fontSize: 12 }}>
+              {horse.arrival_date
+                ? formatHumanDate(horse.arrival_date).replace(/^\w+, /, "")
+                : "—"}
+            </span>
+          </div>
+          <div className="stat">
+            <span className="k">Added</span>
+            <span className="v" style={{ fontSize: 12 }}>
+              {formatHumanDate(horse.created_at).replace(/^\w+, /, "")}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }

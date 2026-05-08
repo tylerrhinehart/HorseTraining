@@ -111,9 +111,9 @@ export default function Settings() {
           <span className="card-meta">JSON snapshot</span>
         </div>
         <p className="muted" style={{ marginTop: 0 }}>
-          Download a JSON snapshot of your horses, engagements, phases,
-          questions, and riders. Sessions and ratings are linked from
-          engagements but exported separately on demand.
+          Download a JSON snapshot of your horses, phases, and questions.
+          Sessions and ratings are linked from horses but exported separately
+          on demand.
         </p>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button className="btn btn-leather" onClick={exportData}>

@@ -159,9 +159,9 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <p className="muted" style={{ fontSize: 14, margin: 0 }}>
-        End-of-engagement evaluation per the TQA Training Trifecta. Initial
-        suggestions come from this engagement's session ratings — adjust as
-        needed before sharing with the owner.
+        Final evaluation per the TQA Training Trifecta. Initial suggestions
+        come from this horse's session ratings — adjust as needed before
+        sharing with the owner.
       </p>
       {(["foundation", "task_completion", "temperament"] as const).map(
         (axis) => (

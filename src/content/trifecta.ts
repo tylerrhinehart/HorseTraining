@@ -1,4 +1,4 @@
-// "Training Trifecta" end-of-engagement evaluation, taken verbatim from the
+// "Training Trifecta" final evaluation, taken verbatim from the
 // public Foundation page on trainingqualityassurance.org. The 15 outcome
 // items are decomposed into Foundation (items 4–11) and Task Completion
 // (items 1–3, 12–15). Temperament uses 5 dimensions on the website (Willingness

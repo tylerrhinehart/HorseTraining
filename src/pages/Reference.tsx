@@ -381,12 +381,12 @@ function DoctrineSection() {
       <div className="card">
         <div className="card-head">
           <h2 className="card-title">Training Trifecta</h2>
-          <span className="card-meta">end of engagement</span>
+          <span className="card-meta">final evaluation</span>
         </div>
         <p className="muted" style={{ margin: 0, marginBottom: 12, fontSize: 14 }}>
-          End-of-engagement evaluation. Foundation and Task Completion split
-          from the website's 15-item checklist; Temperament uses 5 driving
-          factors.
+          Final evaluation at the end of training. Foundation and Task
+          Completion split from the website's 15-item checklist; Temperament
+          uses 5 driving factors.
         </p>
         <div
           style={{
@@ -609,7 +609,7 @@ export default function Reference() {
         Foundation Doctrine
       </h2>
       <p className="muted" style={{ fontSize: 14, marginBottom: 12 }}>
-        The TQA framework, score scale, and end-of-engagement Trifecta.
+        The TQA framework, score scale, and final Trifecta evaluation.
       </p>
 
       <DoctrineSection />

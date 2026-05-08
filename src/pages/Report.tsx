@@ -49,33 +49,47 @@ export default function Report() {
     [engagement.data?.id, sessions.data?.length, trifecta.data?.id],
   );
 
-  if (engagement.loading) return <div className="card">Loading…</div>;
+  if (engagement.loading) {
+    return (
+      <div className="view">
+        <div className="card">Loading…</div>
+      </div>
+    );
+  }
   if (!engagement.data) {
     return (
-      <div className="card">
-        Engagement not found.{" "}
-        <Link to="/horses" className="underline">Back</Link>
+      <div className="view">
+        <div className="card">
+          Engagement not found.{" "}
+          <Link to="/horses" style={{ color: "var(--leather)" }}>
+            Back
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {horse.data?.name ?? "Engagement"} — TQA Report
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {engagement.data.arrival_date
-              ? `Arrived ${formatHumanDate(engagement.data.arrival_date)} · `
-              : ""}
-            {(sessions.data ?? []).length} sessions recorded
-          </p>
-        </div>
+    <div className="view">
+      <div className="eyebrow">TQA Report</div>
+      <h1 className="h-display">{horse.data?.name ?? "Engagement"}</h1>
+      <p className="muted" style={{ margin: "4px 0 14px", fontSize: 14 }}>
+        {engagement.data.arrival_date
+          ? `Arrived ${formatHumanDate(engagement.data.arrival_date)} · `
+          : ""}
+        {(sessions.data ?? []).length} sessions recorded
+      </p>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginBottom: 14,
+        }}
+      >
         <Link
           to={`/engagements/${engagement.data.id}`}
-          className="btn-ghost text-sm"
+          className="btn btn-ghost btn-sm"
         >
           ← Back to engagement
         </Link>
@@ -83,7 +97,10 @@ export default function Report() {
 
       <Suspense
         fallback={
-          <div className="card p-10 text-center text-slate-400">
+          <div
+            className="card muted"
+            style={{ padding: 40, textAlign: "center" }}
+          >
             Loading PDF preview…
           </div>
         }

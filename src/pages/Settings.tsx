@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { supabaseConfigured } from "../supabase/client";
 import {
@@ -74,6 +75,17 @@ export default function Settings() {
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-semibold">Settings</h1>
+
+      <section className="card space-y-3">
+        <h2 className="font-semibold">Manage</h2>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Link to="/horses" className="btn btn-ghost">Horses</Link>
+          <Link to="/riders" className="btn btn-ghost">Riders</Link>
+          <Link to="/phases" className="btn btn-ghost">Phases</Link>
+          <Link to="/resources" className="btn btn-ghost">Resources</Link>
+          <Link to="/foundation" className="btn btn-ghost">Foundation</Link>
+        </div>
+      </section>
 
       <section className="card space-y-2">
         <h2 className="font-semibold">Account</h2>

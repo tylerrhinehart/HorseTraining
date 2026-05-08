@@ -5,7 +5,6 @@ import {
   getPhase,
   getSession,
   listQuestionsForPhase,
-  listRiders,
   updateSession,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
@@ -33,8 +32,6 @@ export default function SessionDetail() {
         : Promise.resolve([]),
     [session.data?.phase_id],
   );
-  const riders = useQuery(() => listRiders(true), []);
-
   const [drafts, setDrafts] = useState<Record<string, DraftRating>>({});
   const [notes, setNotes] = useState("");
   const [editing, setEditing] = useState(false);
@@ -84,11 +81,11 @@ export default function SessionDetail() {
       const ratings = (questions.data ?? [])
         .filter((q) => typeof drafts[q.id]?.score === "number")
         .map((q) => ({
-          questionId: q.id,
+          question_id: q.id,
           axis: q.axis,
-          questionTextSnapshot: q.text,
+          question_text_snapshot: q.text,
           score: drafts[q.id]!.score!,
-          comment: drafts[q.id]?.comment,
+          comment: drafts[q.id]?.comment ?? null,
         }));
       await updateSession(session.data!.id, { notes, ratings });
       setEditing(false);
@@ -101,10 +98,9 @@ export default function SessionDetail() {
   const remove = async () => {
     if (!confirm("Delete this session? This cannot be undone.")) return;
     await deleteSession(session.data!.id);
-    navigate(`/engagements/${session.data!.engagement_id}`);
+    navigate(`/horses/${session.data!.horse_id}`);
   };
 
-  const rider = riders.data?.find((r) => r.id === session.data!.rider_id);
   const fAvg = sessionAverage(session.data.ratings, "foundation");
   const tAvg = sessionAverage(session.data.ratings, "temperament");
 
@@ -114,7 +110,6 @@ export default function SessionDetail() {
       <h1 className="h-display">{phase.data?.name ?? "Session"}</h1>
       <p className="muted" style={{ margin: "4px 0 4px", fontSize: 14 }}>
         {formatDateTime(session.data.occurred_at)}
-        {rider ? ` · ${rider.name}` : ""}
       </p>
       <p className="mono" style={{ margin: "0 0 14px", fontSize: 13 }}>
         Foundation {round1(fAvg)} · Temperament {round1(tAvg)}
@@ -130,10 +125,10 @@ export default function SessionDetail() {
         }}
       >
         <Link
-          to={`/engagements/${session.data.engagement_id}`}
+          to={`/horses/${session.data.horse_id}`}
           className="btn btn-ghost btn-sm"
         >
-          ← Back to engagement
+          ← Back to horse
         </Link>
         {!editing ? (
           <button

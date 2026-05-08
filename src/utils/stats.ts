@@ -9,7 +9,6 @@ export interface SessionPoint {
   sessionId: string;
   occurredAt: string;
   phaseId: string;
-  weekId: string;
   foundationAverage: number | null;
   temperamentAverage: number | null;
   combinedAverage: number | null;
@@ -34,7 +33,6 @@ export function sessionAverages(sessions: SessionWithRatings[]): SessionPoint[] 
         sessionId: s.id,
         occurredAt: s.occurred_at,
         phaseId: s.phase_id,
-        weekId: s.week_id,
         foundationAverage: avg(foundation),
         temperamentAverage: avg(temperament),
         combinedAverage: avg(ratings.map((r) => r.score)),

@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import RatingInput from "./RatingInput";
 import { SCORE_LEGEND } from "../content/tqa-template";
-import type { Question, TqaScore } from "../supabase/types";
+import { listResourcesForQuestion } from "../supabase/queries";
+import type { Question, Resource, TqaScore } from "../supabase/types";
 
 export interface DraftRating {
   score?: TqaScore;
@@ -143,57 +144,181 @@ function Column({
       {questions.map((q, i) => {
         const draft = drafts[q.id] ?? {};
         return (
-          <div key={q.id} className="card space-y-2">
-            <div className="flex justify-between gap-3">
-              <div
-                style={{
-                  flex: 1,
-                  fontSize: 14,
-                  fontWeight: 500,
-                  lineHeight: 1.45,
-                }}
-              >
-                <span
-                  className="mono muted"
-                  style={{ marginRight: 8, fontSize: 12 }}
-                >
-                  {i + 1}.
-                </span>
-                {q.text}
-              </div>
-              <RatingInput
-                name={`q-${q.id}`}
-                value={draft.score ?? null}
-                onChange={(s) => onScore(q.id, s)}
-                label={q.text}
-                lowLabel={q.low_label}
-                highLabel={q.high_label}
-              />
-            </div>
-            {!readOnly && (
-              <textarea
-                rows={2}
-                className="input text-xs"
-                placeholder="Optional comment…"
-                value={draft.comment ?? ""}
-                onChange={(e) => onComment(q.id, e.target.value)}
-              />
-            )}
-            {readOnly && draft.comment && (
-              <p
-                style={{
-                  fontSize: 12,
-                  fontStyle: "italic",
-                  color: "var(--ink-2)",
-                  margin: 0,
-                }}
-              >
-                "{draft.comment}"
-              </p>
-            )}
-          </div>
+          <QuestionRow
+            key={q.id}
+            question={q}
+            index={i}
+            draft={draft}
+            onScore={onScore}
+            onComment={onComment}
+            readOnly={readOnly}
+          />
         );
       })}
+    </div>
+  );
+}
+
+interface QuestionRowProps {
+  question: Question;
+  index: number;
+  draft: DraftRating;
+  onScore: (questionId: string, score: TqaScore) => void;
+  onComment: (questionId: string, comment: string) => void;
+  readOnly: boolean;
+}
+
+function QuestionRow({
+  question: q,
+  index: i,
+  draft,
+  onScore,
+  onComment,
+  readOnly,
+}: QuestionRowProps) {
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [resources, setResources] = useState<Resource[] | null>(null);
+  const [loadingResources, setLoadingResources] = useState(false);
+
+  const toggleHelp = async () => {
+    const next = !helpOpen;
+    setHelpOpen(next);
+    // Lazy-load resources the first time the panel is opened.
+    if (next && resources === null && !loadingResources) {
+      setLoadingResources(true);
+      try {
+        const res = await listResourcesForQuestion(q.id);
+        setResources(res);
+      } catch {
+        setResources([]);
+      } finally {
+        setLoadingResources(false);
+      }
+    }
+  };
+
+  return (
+    <div className="card space-y-2">
+      <div className="flex justify-between gap-3">
+        <div
+          style={{
+            flex: 1,
+            fontSize: 14,
+            fontWeight: 500,
+            lineHeight: 1.45,
+          }}
+        >
+          <span
+            className="mono muted"
+            style={{ marginRight: 8, fontSize: 12 }}
+          >
+            {i + 1}.
+          </span>
+          {q.text}
+          <button
+            type="button"
+            onClick={toggleHelp}
+            aria-label={helpOpen ? "Hide help" : "Show help"}
+            style={{
+              marginLeft: 6,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 18,
+              height: 18,
+              borderRadius: "50%",
+              border: "1px solid var(--ink-3, #ccc)",
+              background: helpOpen ? "var(--leather)" : "transparent",
+              color: helpOpen ? "#fff" : "var(--ink-2)",
+              fontSize: 11,
+              fontWeight: 700,
+              lineHeight: 1,
+              cursor: "pointer",
+              verticalAlign: "middle",
+              flexShrink: 0,
+            }}
+          >
+            i
+          </button>
+        </div>
+        <RatingInput
+          name={`q-${q.id}`}
+          value={draft.score ?? null}
+          onChange={(s) => onScore(q.id, s)}
+          label={q.text}
+          lowLabel={q.low_label}
+          highLabel={q.high_label}
+        />
+      </div>
+
+      {helpOpen && (
+        <div
+          style={{
+            background: "var(--surface-2, #f7f5f2)",
+            borderRadius: 6,
+            padding: "10px 12px",
+            fontSize: 12,
+            color: "var(--ink-2)",
+          }}
+        >
+          <div style={{ display: "flex", gap: 16, marginBottom: 6, flexWrap: "wrap" }}>
+            <span>
+              <span style={{ color: "var(--bad)", fontWeight: 600 }}>Low: </span>
+              {q.low_label}
+            </span>
+            <span>
+              <span style={{ color: "var(--ok)", fontWeight: 600 }}>High: </span>
+              {q.high_label}
+            </span>
+          </div>
+          {loadingResources && (
+            <p style={{ margin: 0, fontStyle: "italic" }}>Loading resources…</p>
+          )}
+          {!loadingResources && resources && resources.length > 0 && (
+            <div>
+              <p style={{ margin: "4px 0 4px", fontWeight: 600, color: "var(--ink-1)" }}>
+                Resources
+              </p>
+              <ul style={{ margin: 0, paddingLeft: 14 }}>
+                {resources.map((r) => (
+                  <li key={r.id} style={{ marginBottom: 2 }}>
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "var(--leather)" }}
+                    >
+                      {r.kind === "youtube" ? `Watch on YouTube: ${r.title}` : r.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!readOnly && (
+        <textarea
+          rows={2}
+          className="input text-xs"
+          placeholder="Optional comment…"
+          value={draft.comment ?? ""}
+          onChange={(e) => onComment(q.id, e.target.value)}
+        />
+      )}
+      {readOnly && draft.comment && (
+        <p
+          style={{
+            fontSize: 12,
+            fontStyle: "italic",
+            color: "var(--ink-2)",
+            margin: 0,
+          }}
+        >
+          "{draft.comment}"
+        </p>
+      )}
     </div>
   );
 }

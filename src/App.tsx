@@ -42,6 +42,10 @@ export default function App() {
         <Route path="/engagements/:id" element={guarded(<EngagementDetail />)} />
         <Route path="/engagements/:id/report" element={guarded(<Report />)} />
         <Route
+          path="/horses/:id/sessions/new"
+          element={guarded(<SessionNew />)}
+        />
+        <Route
           path="/engagements/:id/weeks/:weekId/sessions/new"
           element={guarded(<SessionNew />)}
         />

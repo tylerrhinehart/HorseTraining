@@ -1,7 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import AppShell from "./components/AppShell";
 import RequireAuth from "./auth/RequireAuth";
-import Dashboard from "./pages/Dashboard";
+import Today from "./pages/Today";
 import HorsesList from "./pages/HorsesList";
 import HorseNew from "./pages/HorseNew";
 import HorseDetail from "./pages/HorseDetail";
@@ -30,7 +30,7 @@ export default function App() {
         <Route path="/sign-in" element={<SignIn />} />
         <Route path="/sign-up" element={<SignUp />} />
 
-        <Route path="/" element={guarded(<Dashboard />)} />
+        <Route path="/" element={guarded(<Today />)} />
         <Route path="/horses" element={guarded(<HorsesList />)} />
         <Route path="/horses/new" element={guarded(<HorseNew />)} />
         <Route path="/horses/:id" element={guarded(<HorseDetail />)} />

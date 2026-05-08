@@ -13,15 +13,11 @@ drop table if exists public.trifecta_scores       cascade;
 drop table if exists public.trifecta_evaluations  cascade;
 drop table if exists public.ratings               cascade;
 drop table if exists public.sessions              cascade;
-drop table if exists public.weeks                 cascade;
-drop table if exists public.engagements           cascade;
 drop table if exists public.resources             cascade;
 drop table if exists public.questions             cascade;
-drop table if exists public.phases                cascade;
 drop table if exists public.horses                cascade;
-drop table if exists public.riders                cascade;
+drop table if exists public.phases                cascade;
 drop table if exists public.profiles              cascade;
-drop table if exists public.tqas                  cascade;
 
 -- ---------------------------------------------------------------------------
 -- Tables
@@ -33,54 +29,8 @@ create table public.profiles (
   created_at timestamptz not null default now()
 );
 
-create table public.riders (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users on delete cascade,
-  name text not null,
-  role text,
-  archived_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index riders_user_idx on public.riders(user_id);
-
-create table public.horses (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users on delete cascade,
-  name text not null,
-  breed text,
-  dob date,
-  sex text,
-  color text,
-  notes text,
-  archived_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index horses_user_idx on public.horses(user_id);
-
-create table public.engagements (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users on delete cascade,
-  horse_id uuid not null references public.horses on delete cascade,
-  owner_name text,
-  owner_info text,
-  owner_email text,
-  payment_method text,
-  payment_amount numeric(10, 2),
-  arrival_date date,
-  departure_date date,
-  notes text,
-  archived_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index engagements_horse_idx on public.engagements(horse_id, arrival_date desc);
-create index engagements_user_idx on public.engagements(user_id);
-
+-- phases is defined before horses so that horses.current_phase_id can
+-- reference it without a forward-reference issue.
 create table public.phases (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
@@ -107,37 +57,43 @@ create table public.questions (
 
 create index questions_phase_idx on public.questions(phase_id);
 
-create table public.weeks (
+create table public.horses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
-  engagement_id uuid not null references public.engagements on delete cascade,
-  week_number int not null check (week_number >= 1),
-  comments text,
+  name text not null,
+  breed text,
+  dob date,
+  sex text,
+  color text,
+  notes text,
+  -- fields relocated from engagements:
+  owner_name text,
+  owner_contact text,
+  arrival_date date,
+  status text not null default 'in_training' check (status in ('in_training','complete','archived')),
+  current_phase_id uuid references public.phases on delete set null,
+  -- existing tail:
+  archived_at timestamptz,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (engagement_id, week_number)
+  updated_at timestamptz not null default now()
 );
 
-create index weeks_engagement_idx on public.weeks(engagement_id, week_number);
+create index horses_user_idx on public.horses(user_id);
+create index horses_status_idx on public.horses(user_id, status);
 
 create table public.sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
-  engagement_id uuid not null references public.engagements on delete cascade,
-  week_id uuid not null references public.weeks on delete cascade,
   horse_id uuid not null references public.horses on delete cascade,
   phase_id uuid not null references public.phases on delete restrict,
-  rider_id uuid references public.riders on delete set null,
   occurred_at timestamptz not null default now(),
-  session_number int check (session_number between 1 and 5),
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create index sessions_week_idx on public.sessions(week_id, session_number);
 create index sessions_horse_idx on public.sessions(horse_id, occurred_at desc);
-create index sessions_engagement_idx on public.sessions(engagement_id, occurred_at desc);
+create index sessions_phase_idx on public.sessions(phase_id);
 
 create table public.ratings (
   id uuid primary key default gen_random_uuid(),
@@ -157,12 +113,12 @@ create index ratings_question_idx on public.ratings(question_id);
 create table public.trifecta_evaluations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
-  engagement_id uuid not null references public.engagements on delete cascade,
+  horse_id uuid not null references public.horses on delete cascade,
   evaluated_at timestamptz not null default now(),
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (engagement_id)
+  unique (horse_id)
 );
 
 create table public.trifecta_scores (
@@ -204,12 +160,9 @@ create index resources_question_idx on public.resources(question_id);
 -- ---------------------------------------------------------------------------
 
 alter table public.profiles             enable row level security;
-alter table public.riders                enable row level security;
 alter table public.horses                enable row level security;
-alter table public.engagements           enable row level security;
 alter table public.phases                enable row level security;
 alter table public.questions             enable row level security;
-alter table public.weeks                 enable row level security;
 alter table public.sessions              enable row level security;
 alter table public.ratings               enable row level security;
 alter table public.trifecta_evaluations  enable row level security;
@@ -217,12 +170,9 @@ alter table public.trifecta_scores       enable row level security;
 alter table public.resources             enable row level security;
 
 create policy "own profile"     on public.profiles for all using (id = auth.uid()) with check (id = auth.uid());
-create policy "own riders"      on public.riders for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own horses"      on public.horses for all using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy "own engagements" on public.engagements for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own phases"      on public.phases for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own questions"   on public.questions for all using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy "own weeks"       on public.weeks for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own sessions"    on public.sessions for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own ratings"     on public.ratings for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own trifecta_evaluations" on public.trifecta_evaluations for all using (user_id = auth.uid()) with check (user_id = auth.uid());
@@ -243,10 +193,7 @@ begin
 end;
 $$;
 
-create trigger touch_riders                before update on public.riders                for each row execute function public.touch_updated_at();
 create trigger touch_horses                before update on public.horses                for each row execute function public.touch_updated_at();
-create trigger touch_engagements           before update on public.engagements           for each row execute function public.touch_updated_at();
-create trigger touch_weeks                 before update on public.weeks                 for each row execute function public.touch_updated_at();
 create trigger touch_sessions              before update on public.sessions              for each row execute function public.touch_updated_at();
 create trigger touch_trifecta_evaluations  before update on public.trifecta_evaluations  for each row execute function public.touch_updated_at();
 

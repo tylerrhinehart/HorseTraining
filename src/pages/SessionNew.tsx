@@ -31,7 +31,10 @@ export default function SessionNew() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Set phaseId once horse and phases are loaded.
+  // Set phaseId once horse and phases are loaded. Wait for both queries to
+  // resolve before falling back to phases[0] — otherwise the first render
+  // (with horse.data still undefined) would lock in Groundwork before the
+  // current_phase_id arrives.
   useEffect(() => {
     if (phaseId) return;
     const queryPhase = searchParams.get("phase");
@@ -39,14 +42,15 @@ export default function SessionNew() {
       setPhaseId(queryPhase);
       return;
     }
+    if (horse.loading || !phases.data) return;
     if (horse.data?.current_phase_id) {
       setPhaseId(horse.data.current_phase_id);
       return;
     }
-    if (phases.data && phases.data.length > 0) {
+    if (phases.data.length > 0) {
       setPhaseId(phases.data[0].id);
     }
-  }, [horse.data, phases.data, phaseId, searchParams]);
+  }, [horse.data, horse.loading, phases.data, phaseId, searchParams]);
 
   const questions = useQuery(
     () => (phaseId ? listQuestionsForPhase(phaseId) : Promise.resolve([])),

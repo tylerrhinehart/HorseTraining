@@ -487,9 +487,7 @@ export default function HorseDetail() {
         <div className="card" style={{ marginTop: "var(--gap)" }}>
           <div className="card-head">
             <h2 className="card-title">{currentPhase.name}</h2>
-            <span className="card-meta">
-              Phase {currentPhase.position + 1} · current
-            </span>
+            <span className="card-meta">current phase</span>
           </div>
 
           {/* Phase running average */}

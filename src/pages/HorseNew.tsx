@@ -5,10 +5,9 @@ import { useActiveHorseId } from "../state/activeHorse";
 
 interface FormValues {
   name: string;
-  breed?: string;
-  dob?: string;
-  sex?: string;
-  color?: string;
+  owner_name: string;
+  owner_contact?: string;
+  arrival_date?: string;
   notes?: string;
 }
 
@@ -24,11 +23,10 @@ export default function HorseNew() {
   const onSubmit = async (values: FormValues) => {
     const horse = await createHorse({
       name: values.name,
-      breed: values.breed,
-      dob: values.dob || undefined,
-      sex: values.sex,
-      color: values.color,
-      notes: values.notes,
+      owner_name: values.owner_name,
+      owner_contact: values.owner_contact || null,
+      arrival_date: values.arrival_date || undefined,
+      notes: values.notes || null,
     });
     setActiveId(horse.id);
     navigate(`/horses/${horse.id}`);
@@ -36,8 +34,8 @@ export default function HorseNew() {
 
   return (
     <div className="view" style={{ maxWidth: 720 }}>
-      <div className="eyebrow">New registration</div>
-      <h1 className="h-display">Register a horse</h1>
+      <div className="eyebrow">new horse</div>
+      <h1 className="h-display">Add a horse</h1>
 
       <form className="card" onSubmit={handleSubmit(onSubmit)}>
         <div className="field-row">
@@ -58,58 +56,46 @@ export default function HorseNew() {
             )}
           </div>
           <div className="field">
-            <label htmlFor="breed" className="label">
-              Breed
+            <label htmlFor="owner_name" className="label">
+              Owner name *
             </label>
             <input
-              id="breed"
+              id="owner_name"
               className="input"
-              placeholder="AQHA Quarter Horse"
-              {...register("breed")}
+              placeholder="e.g. Jane Smith"
+              {...register("owner_name", { required: "Owner name is required" })}
+            />
+            {errors.owner_name && (
+              <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+                {errors.owner_name.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="owner_contact" className="label">
+              Owner contact
+            </label>
+            <input
+              id="owner_contact"
+              className="input"
+              placeholder="Phone, email, or address"
+              {...register("owner_contact")}
             />
           </div>
-        </div>
-
-        <div className="field-row">
           <div className="field">
-            <label htmlFor="color" className="label">
-              Color
-            </label>
-            <input id="color" className="input" {...register("color")} />
-          </div>
-          <div className="field">
-            <label htmlFor="sex" className="label">
-              Sex
-            </label>
-            <select
-              id="sex"
-              className="input"
-              defaultValue=""
-              {...register("sex")}
-            >
-              <option value="">—</option>
-              <option value="mare">Mare</option>
-              <option value="gelding">Gelding</option>
-              <option value="stallion">Stallion</option>
-              <option value="filly">Filly</option>
-              <option value="colt">Colt</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="field-row">
-          <div className="field">
-            <label htmlFor="dob" className="label">
-              Date of birth
+            <label htmlFor="arrival_date" className="label">
+              Arrival date
             </label>
             <input
-              id="dob"
+              id="arrival_date"
               type="date"
               className="input"
-              {...register("dob")}
+              {...register("arrival_date")}
             />
           </div>
-          <div className="field" />
         </div>
 
         <div className="field" style={{ marginBottom: 12 }}>

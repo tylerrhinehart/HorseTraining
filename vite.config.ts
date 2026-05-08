@@ -2,12 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
-// GitHub Pages serves at https://<user>.github.io/<repo>/, so we need a
-// non-root base when deploying there. Set BASE_PATH=/repo-name/ at build time.
-const basePath = process.env.BASE_PATH ?? "/";
-
 export default defineConfig({
-  base: basePath,
+  base: "/",
   build: {
     chunkSizeWarningLimit: 1500,
   },
@@ -38,7 +34,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        navigateFallback: `${basePath}index.html`,
+        navigateFallback: "/index.html",
       },
       devOptions: {
         enabled: false,

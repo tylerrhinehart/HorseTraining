@@ -2,7 +2,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { useActiveHorseId } from "../state/activeHorse";
-import { listEngagementsForHorse, listHorses } from "../supabase/queries";
+import { listHorses } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import HorseAvatar, { hashTone } from "./HorseAvatar";
 
@@ -18,7 +18,7 @@ export default function AppShell({ children }: Props) {
   const [activeId, setActiveId] = useActiveHorseId();
 
   const horses = useQuery(
-    () => (user ? listHorses(false) : Promise.resolve([])),
+    () => (user ? listHorses({ statuses: ['in_training'] }) : Promise.resolve([])),
     [user?.id],
   );
 
@@ -33,42 +33,20 @@ export default function AppShell({ children }: Props) {
     [horses.data, activeId],
   );
 
-  const engagements = useQuery(
-    () =>
-      activeHorse ? listEngagementsForHorse(activeHorse.id) : Promise.resolve([]),
-    [activeHorse?.id],
-  );
-
-  // Most recent engagement drives the Report tab — main stores reports per
-  // engagement, not per horse, so we link to the latest one if any.
-  const latestEngagementId = useMemo(() => {
-    if (!engagements.data || engagements.data.length === 0) return null;
-    return [...engagements.data].sort((a, b) => {
-      const ad = a.arrival_date ?? a.created_at;
-      const bd = b.arrival_date ?? b.created_at;
-      return bd.localeCompare(ad);
-    })[0].id;
-  }, [engagements.data]);
-
   const onAuthRoute = AUTH_PATHS.has(location.pathname);
 
   const todayTo = "/";
   const horsesTo = "/horses";
-  const progressTo = activeHorse ? `/horses/${activeHorse.id}` : "/horses";
-  const reportTo = latestEngagementId
-    ? `/engagements/${latestEngagementId}/report`
-    : activeHorse
-      ? `/horses/${activeHorse.id}`
-      : "/horses";
+  const referenceTo = "/phases";
 
   const path = location.pathname;
   const isToday = path === "/";
-  const isHorses =
-    path === "/horses" || path === "/horses/new";
-  const isProgress = activeHorse
-    ? path === `/horses/${activeHorse.id}`
-    : false;
-  const isReport = path.endsWith("/report");
+  const isHorses = path === "/horses" || path === "/horses/new";
+  const isReference =
+    path.startsWith("/phases") ||
+    path.startsWith("/reference") ||
+    path.startsWith("/resources") ||
+    path.startsWith("/foundation");
 
   return (
     <div className="app-root">
@@ -78,7 +56,7 @@ export default function AppShell({ children }: Props) {
             <span className="brand-mark">T</span>
             <div>
               <div className="brand-name">TQA Tracker</div>
-              <div className="brand-sub">Industry standard · 5 phases</div>
+              <div className="brand-sub">Training quality assurance</div>
             </div>
           </NavLink>
           {user && (
@@ -89,7 +67,7 @@ export default function AppShell({ children }: Props) {
                   className="topbar-horse"
                 >
                   <span style={{ display: "flex", flexDirection: "column" }}>
-                    <span className="topbar-horse-eyebrow">Now training</span>
+                    <span className="topbar-horse-eyebrow">Today</span>
                     <strong>{activeHorse.name}</strong>
                   </span>
                   <HorseAvatar
@@ -165,8 +143,8 @@ export default function AppShell({ children }: Props) {
             Horses
           </NavLink>
           <NavLink
-            to={progressTo}
-            className={() => (isProgress ? "is-active" : "")}
+            to={referenceTo}
+            className={() => (isReference ? "is-active" : "")}
           >
             <span className="tab-icon">
               <svg
@@ -177,30 +155,10 @@ export default function AppShell({ children }: Props) {
                 stroke="currentColor"
                 strokeWidth="1.8"
               >
-                <path d="M3 17l5-6 4 4 7-9" />
-                <path d="M14 6h6v6" />
+                <path d="M2 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2zM22 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z" />
               </svg>
             </span>
-            Progress
-          </NavLink>
-          <NavLink
-            to={reportTo}
-            className={() => (isReport ? "is-active" : "")}
-          >
-            <span className="tab-icon">
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              >
-                <path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
-                <path d="M14 3v6h6M9 13h6M9 17h6" />
-              </svg>
-            </span>
-            Report
+            Reference
           </NavLink>
         </nav>
       )}

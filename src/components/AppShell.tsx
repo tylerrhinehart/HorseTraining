@@ -1,91 +1,209 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, type ReactNode } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import type { ReactNode } from "react";
+import { useActiveHorseId } from "../state/activeHorse";
+import { listEngagementsForHorse, listHorses } from "../supabase/queries";
+import { useQuery } from "../supabase/useQuery";
+import HorseAvatar, { hashTone } from "./HorseAvatar";
 
 interface Props {
   children: ReactNode;
 }
 
-const navItem = ({ isActive }: { isActive: boolean }) =>
-  [
-    "px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-    isActive
-      ? "bg-brand-600 text-white"
-      : "text-slate-300 hover:bg-slate-800 hover:text-white",
-  ].join(" ");
+const AUTH_PATHS = new Set(["/sign-in", "/sign-up"]);
 
 export default function AppShell({ children }: Props) {
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
+  const location = useLocation();
+  const [activeId, setActiveId] = useActiveHorseId();
 
-  const handleSignOut = async () => {
-    await signOut();
-    navigate("/sign-in");
-  };
+  const horses = useQuery(
+    () => (user ? listHorses(false) : Promise.resolve([])),
+    [user?.id],
+  );
+
+  useEffect(() => {
+    if (!horses.data) return;
+    if (activeId && horses.data.some((h) => h.id === activeId)) return;
+    if (horses.data.length > 0) setActiveId(horses.data[0].id);
+  }, [horses.data, activeId, setActiveId]);
+
+  const activeHorse = useMemo(
+    () => horses.data?.find((h) => h.id === activeId) ?? null,
+    [horses.data, activeId],
+  );
+
+  const engagements = useQuery(
+    () =>
+      activeHorse ? listEngagementsForHorse(activeHorse.id) : Promise.resolve([]),
+    [activeHorse?.id],
+  );
+
+  // Most recent engagement drives the Report tab — main stores reports per
+  // engagement, not per horse, so we link to the latest one if any.
+  const latestEngagementId = useMemo(() => {
+    if (!engagements.data || engagements.data.length === 0) return null;
+    return [...engagements.data].sort((a, b) => {
+      const ad = a.arrival_date ?? a.created_at;
+      const bd = b.arrival_date ?? b.created_at;
+      return bd.localeCompare(ad);
+    })[0].id;
+  }, [engagements.data]);
+
+  const onAuthRoute = AUTH_PATHS.has(location.pathname);
+
+  const todayTo = "/";
+  const horsesTo = "/horses";
+  const progressTo = activeHorse ? `/horses/${activeHorse.id}` : "/horses";
+  const reportTo = latestEngagementId
+    ? `/engagements/${latestEngagementId}/report`
+    : activeHorse
+      ? `/horses/${activeHorse.id}`
+      : "/horses";
+
+  const path = location.pathname;
+  const isToday = path === "/";
+  const isHorses =
+    path === "/horses" || path === "/horses/new";
+  const isProgress = activeHorse
+    ? path === `/horses/${activeHorse.id}`
+    : false;
+  const isReport = path.endsWith("/report");
 
   return (
-    <div className="min-h-full flex flex-col">
-      <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
-          <NavLink to="/" className="flex items-center gap-2 mr-4">
-            <span
-              aria-hidden
-              className="inline-block h-8 w-8 rounded-lg bg-brand-600"
-            />
-            <span className="font-semibold tracking-tight">TQA Tracker</span>
+    <div className="app-root">
+      {!onAuthRoute && (
+        <header className="topbar">
+          <NavLink to="/" className="brand">
+            <span className="brand-mark">T</span>
+            <div>
+              <div className="brand-name">TQA Tracker</div>
+              <div className="brand-sub">Industry standard · 5 phases</div>
+            </div>
           </NavLink>
           {user && (
-            <nav className="flex flex-wrap gap-1">
-              <NavLink to="/" end className={navItem}>
-                Dashboard
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {activeHorse && (
+                <NavLink
+                  to={`/horses/${activeHorse.id}`}
+                  className="topbar-horse"
+                >
+                  <span style={{ display: "flex", flexDirection: "column" }}>
+                    <span className="topbar-horse-eyebrow">Now training</span>
+                    <strong>{activeHorse.name}</strong>
+                  </span>
+                  <HorseAvatar
+                    name={activeHorse.name}
+                    tone={hashTone(activeHorse.name)}
+                  />
+                </NavLink>
+              )}
+              <NavLink
+                to="/settings"
+                aria-label="Settings"
+                className="btn btn-ghost"
+                style={{ padding: 6 }}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                >
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+                </svg>
               </NavLink>
-              <NavLink to="/horses" className={navItem}>
-                Horses
-              </NavLink>
-              <NavLink to="/riders" className={navItem}>
-                Riders
-              </NavLink>
-              <NavLink to="/phases" className={navItem}>
-                Phases
-              </NavLink>
-              <NavLink to="/foundation" className={navItem}>
-                Foundation
-              </NavLink>
-              <NavLink to="/resources" className={navItem}>
-                Resources
-              </NavLink>
-              <NavLink to="/settings" className={navItem}>
-                Settings
-              </NavLink>
-            </nav>
+            </div>
           )}
-          <div className="ml-auto flex items-center gap-2 text-sm text-slate-400">
-            {user ? (
-              <>
-                <span className="hidden sm:inline truncate max-w-[12rem]">
-                  {user.email}
-                </span>
-                <button className="btn-ghost text-xs" onClick={handleSignOut}>
-                  Sign out
-                </button>
-              </>
-            ) : (
-              <NavLink to="/sign-in" className="btn-secondary text-xs">
-                Sign in
-              </NavLink>
-            )}
-          </div>
-        </div>
-      </header>
-      <main className="flex-1">
-        <div className="max-w-6xl mx-auto px-4 py-6">{children}</div>
-      </main>
-      <footer className="border-t border-slate-800 text-xs text-slate-500">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between">
-          <span>Training Quality Assessment Tracker</span>
-          <span>v0.2.0</span>
-        </div>
-      </footer>
+        </header>
+      )}
+
+      <main className="flex-1">{children}</main>
+
+      {user && !onAuthRoute && (
+        <nav className="tabbar" aria-label="Primary">
+          <NavLink
+            to={todayTo}
+            end
+            className={() => (isToday ? "is-active" : "")}
+          >
+            <span className="tab-icon">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <rect x="3" y="5" width="18" height="16" rx="2" />
+                <path d="M3 9h18M8 3v4M16 3v4" />
+              </svg>
+            </span>
+            Today
+          </NavLink>
+          <NavLink
+            to={horsesTo}
+            className={() => (isHorses ? "is-active" : "")}
+          >
+            <span className="tab-icon">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <circle cx="12" cy="8" r="3.2" />
+                <path d="M5 21c0-3.5 3-6 7-6s7 2.5 7 6" />
+              </svg>
+            </span>
+            Horses
+          </NavLink>
+          <NavLink
+            to={progressTo}
+            className={() => (isProgress ? "is-active" : "")}
+          >
+            <span className="tab-icon">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path d="M3 17l5-6 4 4 7-9" />
+                <path d="M14 6h6v6" />
+              </svg>
+            </span>
+            Progress
+          </NavLink>
+          <NavLink
+            to={reportTo}
+            className={() => (isReport ? "is-active" : "")}
+          >
+            <span className="tab-icon">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+                <path d="M14 3v6h6M9 13h6M9 17h6" />
+              </svg>
+            </span>
+            Report
+          </NavLink>
+        </nav>
+      )}
     </div>
   );
 }

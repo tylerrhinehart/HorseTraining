@@ -72,10 +72,18 @@ export default function SessionNew() {
 
   if (!engagementId || !weekId) return null;
   if (engagement.loading || week.loading || phases.loading) {
-    return <div className="card">Loading…</div>;
+    return (
+      <div className="view">
+        <div className="card">Loading…</div>
+      </div>
+    );
   }
   if (!engagement.data || !week.data) {
-    return <div className="card">Not found.</div>;
+    return (
+      <div className="view">
+        <div className="card">Not found.</div>
+      </div>
+    );
   }
 
   const setScore = (qid: string, score: TqaScore) =>
@@ -124,31 +132,34 @@ export default function SessionNew() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            New session — Week {week.data.week_number}
-            {nextSessionNumber ? ` · #${nextSessionNumber}` : ""}
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Engagement{" "}
-            <Link
-              to={`/engagements/${engagementId}`}
-              className="text-brand-300 hover:underline"
-            >
-              {engagement.data.owner_name ?? "details"}
-            </Link>
-          </p>
-        </div>
-        <Link to={`/engagements/${engagementId}`} className="btn-ghost text-sm">
-          Cancel
-        </Link>
+    <div className="view">
+      <div className="eyebrow">
+        New session · Week {week.data.week_number}
+        {nextSessionNumber ? ` · #${nextSessionNumber}` : ""}
       </div>
+      <h1 className="h-display">Score sheet</h1>
+      <p className="muted" style={{ margin: "4px 0 14px", fontSize: 14 }}>
+        Engagement{" "}
+        <Link
+          to={`/engagements/${engagementId}`}
+          style={{ color: "var(--leather)" }}
+        >
+          {engagement.data.owner_name ?? "details"}
+        </Link>
+      </p>
 
-      <div className="card grid gap-3 md:grid-cols-3">
-        <div>
-          <label className="label" htmlFor="session-phase">Phase</label>
+      <div
+        className="card"
+        style={{
+          display: "grid",
+          gap: 10,
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+        }}
+      >
+        <div className="field">
+          <label className="label" htmlFor="session-phase">
+            Phase
+          </label>
           <select
             id="session-phase"
             className="input"
@@ -162,8 +173,10 @@ export default function SessionNew() {
             ))}
           </select>
         </div>
-        <div>
-          <label className="label" htmlFor="session-rider">Rider</label>
+        <div className="field">
+          <label className="label" htmlFor="session-rider">
+            Rider
+          </label>
           <select
             id="session-rider"
             className="input"
@@ -179,8 +192,10 @@ export default function SessionNew() {
             ))}
           </select>
         </div>
-        <div>
-          <label className="label" htmlFor="session-when">When</label>
+        <div className="field">
+          <label className="label" htmlFor="session-when">
+            When
+          </label>
           <input
             id="session-when"
             type="datetime-local"
@@ -202,8 +217,10 @@ export default function SessionNew() {
         />
       )}
 
-      <div className="card space-y-2">
-        <label className="label" htmlFor="session-notes">Session notes</label>
+      <div className="card">
+        <label className="label" htmlFor="session-notes">
+          Session notes
+        </label>
         <textarea
           id="session-notes"
           rows={3}
@@ -213,13 +230,29 @@ export default function SessionNew() {
         />
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && (
+        <p style={{ color: "var(--bad)", fontSize: 13, margin: 0 }}>{error}</p>
+      )}
 
-      <div className="flex justify-end gap-2">
-        <Link to={`/engagements/${engagementId}`} className="btn-ghost">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+          marginTop: 12,
+        }}
+      >
+        <Link
+          to={`/engagements/${engagementId}`}
+          className="btn btn-ghost"
+        >
           Cancel
         </Link>
-        <button className="btn-primary" disabled={saving} onClick={submit}>
+        <button
+          className="btn btn-leather"
+          disabled={saving}
+          onClick={submit}
+        >
           {saving ? "Saving…" : "Save session"}
         </button>
       </div>

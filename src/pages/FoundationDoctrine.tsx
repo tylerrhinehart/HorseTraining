@@ -14,113 +14,202 @@ import { SCORE_LEGEND } from "../content/tqa-template";
 
 export default function FoundationDoctrine() {
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-semibold">Foundation Doctrine</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          The TQA framework, score scale, and end-of-engagement Trifecta —
-          mirrored from the public Foundation page so trainers can show clients
-          the same standards used in this app.
-        </p>
-      </div>
+    <div className="view" style={{ maxWidth: 820 }}>
+      <div className="eyebrow">Doctrine</div>
+      <h1 className="h-display">Foundation</h1>
+      <p className="muted" style={{ marginBottom: 14, maxWidth: 640 }}>
+        The TQA framework, score scale, and end-of-engagement Trifecta —
+        mirrored from the public Foundation page so trainers can show clients
+        the same standards used in this app.
+      </p>
 
-      <section className="card space-y-3">
-        <h2 className="font-semibold">Score scale: -3 to +3</h2>
-        <ul className="text-sm grid gap-1 sm:grid-cols-2">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Score scale</h2>
+          <span className="card-meta">−3 to +3</span>
+        </div>
+        <ul
+          style={{
+            display: "grid",
+            gap: 6,
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            fontSize: 14,
+          }}
+        >
           {([3, 2, 1, 0, -1, -2, -3] as const).map((s) => (
-            <li key={s} className="flex gap-2">
-              <span className="font-mono w-8 text-right">
+            <li
+              key={s}
+              style={{ display: "flex", gap: 10, alignItems: "baseline" }}
+            >
+              <span
+                className="mono"
+                style={{
+                  width: 32,
+                  textAlign: "right",
+                  color:
+                    s > 0
+                      ? "var(--ok)"
+                      : s < 0
+                        ? "var(--bad)"
+                        : "var(--ink-2)",
+                }}
+              >
                 {s > 0 ? `+${s}` : s}
               </span>
               <span>{SCORE_LEGEND[s]}</span>
             </li>
           ))}
         </ul>
-      </section>
+      </div>
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Four Questions to Ask a Pro Trainer</h2>
-        <div className="space-y-3">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Four questions to ask a pro trainer</h2>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {FRAMEWORK_QUESTIONS.map((q) => (
-            <div key={q.number} className="card">
-              <p className="font-medium">
+            <div key={q.number}>
+              <p style={{ margin: 0, fontWeight: 600 }}>
                 {q.number}. {q.question}
               </p>
-              <p className="text-sm text-slate-300 mt-1">{q.summary}</p>
+              <p className="muted" style={{ fontSize: 14, marginTop: 4 }}>
+                {q.summary}
+              </p>
             </div>
           ))}
         </div>
-      </section>
+      </div>
 
-      <section className="card space-y-2">
-        <h2 className="font-semibold">Recommended ride cadences</h2>
-        <ul className="text-sm space-y-2">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Recommended ride cadences</h2>
+        </div>
+        <ul
+          style={{
+            margin: 0,
+            paddingLeft: 18,
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            fontSize: 14,
+          }}
+        >
           {RIDE_CADENCE_OPTIONS.map((o) => (
             <li key={o.label}>
-              <span className="font-medium">{o.label}:</span> {o.description} ·{" "}
-              <span className="italic text-slate-300">{o.pattern}</span>
+              <span style={{ fontWeight: 600 }}>{o.label}:</span> {o.description}
+              {" · "}
+              <span className="muted" style={{ fontStyle: "italic" }}>
+                {o.pattern}
+              </span>
             </li>
           ))}
         </ul>
-      </section>
+      </div>
 
-      <section className="card space-y-2">
-        <h2 className="font-semibold">
-          Phase timeline ({TOTAL_WEEKS} weeks total)
-        </h2>
-        <ul className="text-sm space-y-1">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Phase timeline</h2>
+          <span className="card-meta">{TOTAL_WEEKS} weeks total</span>
+        </div>
+        <ul
+          style={{
+            margin: 0,
+            paddingLeft: 18,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            fontSize: 14,
+          }}
+        >
           {PHASE_TIMELINE.map((b) => (
             <li key={b.label}>
-              <span className="font-medium">{b.label}:</span> {b.weeks} weeks
+              <span style={{ fontWeight: 600 }}>{b.label}:</span> {b.weeks} weeks
             </li>
           ))}
         </ul>
-      </section>
+      </div>
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Training Trifecta</h2>
-        <p className="text-sm text-slate-400">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Training Trifecta</h2>
+          <span className="card-meta">end of engagement</span>
+        </div>
+        <p className="muted" style={{ margin: 0, marginBottom: 12, fontSize: 14 }}>
           End-of-engagement evaluation. Foundation and Task Completion split
           from the website's 15-item checklist; Temperament uses 5 driving
           factors.
         </p>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          }}
+        >
           <TrifectaCol title="Foundation" items={FOUNDATION_ITEMS} />
           <TrifectaCol title="Task Completion" items={TASK_COMPLETION_ITEMS} />
           <TrifectaCol title="Temperament" items={TEMPERAMENT_ITEMS} />
         </div>
-      </section>
+      </div>
 
-      <section className="card space-y-2">
-        <h2 className="font-semibold">Trainer expectations at end of 2 months</h2>
-        <ol className="list-decimal list-inside text-sm space-y-1">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Trainer expectations at end of 2 months</h2>
+        </div>
+        <ol
+          style={{
+            margin: 0,
+            paddingLeft: 22,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            fontSize: 14,
+          }}
+        >
           {TRAINER_EXPECTATIONS.map((t, i) => (
             <li key={i}>{t}</li>
           ))}
         </ol>
-      </section>
+      </div>
 
       {FFP_SECTIONS.map((s) => (
-        <section key={s.heading} className="card space-y-2">
-          <h2 className="font-semibold">{s.heading}</h2>
+        <div key={s.heading} className="card">
+          <div className="card-head">
+            <h2 className="card-title">{s.heading}</h2>
+          </div>
           {s.body.map((p, i) => (
-            <p key={i} className="text-sm text-slate-300">
+            <p
+              key={i}
+              style={{ fontSize: 14, lineHeight: 1.55, margin: "0 0 8px" }}
+            >
               {p}
             </p>
           ))}
           {s.bullets && (
-            <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: 18,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                fontSize: 14,
+              }}
+            >
               {s.bullets.map((b, i) => (
                 <li key={i}>{b}</li>
               ))}
             </ul>
           )}
-        </section>
+        </div>
       ))}
 
-      <p className="text-xs text-slate-500">
+      <p className="muted mono" style={{ fontSize: 11, marginTop: 8 }}>
         Reference:{" "}
-        <Link to="/phases" className="underline">
+        <Link to="/phases" style={{ color: "var(--leather)" }}>
           per-phase score sheets
         </Link>{" "}
         for the 8 Foundation + 6 Temperament rows used in weekly sessions.
@@ -137,11 +226,36 @@ function TrifectaCol({
   items: { code: string; text: string }[];
 }) {
   return (
-    <div className="card">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-2">
+    <div
+      style={{
+        background: "var(--paper-2)",
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        padding: 12,
+      }}
+    >
+      <h3
+        className="mono"
+        style={{
+          fontSize: 11,
+          letterSpacing: 1.5,
+          textTransform: "uppercase",
+          color: "var(--muted)",
+          margin: "0 0 8px",
+        }}
+      >
         {title}
       </h3>
-      <ol className="list-decimal list-inside text-sm space-y-1">
+      <ol
+        style={{
+          margin: 0,
+          paddingLeft: 18,
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          fontSize: 13,
+        }}
+      >
         {items.map((it) => (
           <li key={it.code}>{it.text}</li>
         ))}

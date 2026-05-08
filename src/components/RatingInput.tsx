@@ -7,17 +7,27 @@ interface Props {
   label?: string;
   lowLabel?: string;
   highLabel?: string;
+  density?: "compact" | "default" | "cozy";
+  /** kept for back-compat with `size` callers */
   size?: "sm" | "md";
 }
 
-const colorFor = (score: TqaScore, selected: boolean): string => {
-  if (!selected) {
-    return "bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500";
-  }
-  if (score < 0) return "bg-red-600 border-red-600 text-white";
-  if (score === 0) return "bg-slate-500 border-slate-500 text-white";
-  return "bg-emerald-600 border-emerald-600 text-white";
-};
+function tone(score: number): "neg" | "neutral" | "pos" {
+  if (score < 0) return "neg";
+  if (score === 0) return "neutral";
+  return "pos";
+}
+
+function magnitude(score: number): 1 | 2 | 3 {
+  const a = Math.abs(score);
+  if (a >= 3) return 3;
+  if (a === 2) return 2;
+  return 1;
+}
+
+function formatScore(score: number): string {
+  return score > 0 ? `+${score}` : String(score);
+}
 
 export default function RatingInput({
   value,
@@ -26,16 +36,24 @@ export default function RatingInput({
   label,
   lowLabel,
   highLabel,
-  size = "md",
+  density,
+  size,
 }: Props) {
-  const cell =
-    size === "sm"
-      ? "h-7 w-7 text-xs"
-      : "h-9 w-9 text-sm";
+  const resolvedDensity =
+    density ?? (size === "sm" ? "compact" : "default");
   return (
-    <div className="inline-flex flex-col gap-1">
+    <div style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
       {(lowLabel || highLabel) && (
-        <div className="flex justify-between text-[10px] uppercase tracking-wide text-slate-400">
+        <div
+          className="mono muted"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 10,
+            letterSpacing: 1.2,
+            textTransform: "uppercase",
+          }}
+        >
           <span>{lowLabel ?? ""}</span>
           <span>{highLabel ?? ""}</span>
         </div>
@@ -43,33 +61,35 @@ export default function RatingInput({
       <div
         role="radiogroup"
         aria-label={label ?? name}
-        className="inline-flex gap-1"
+        className={`rating rating--dots ${resolvedDensity}`}
       >
         {TQA_SCORES.map((score) => {
           const selected = value === score;
+          const t = tone(score);
+          const mag = magnitude(score);
           return (
-            <label
+            <button
               key={score}
+              type="button"
               className={[
-                cell,
-                "rounded-lg border flex items-center justify-center cursor-pointer font-medium transition-colors",
-                colorFor(score, selected),
-              ].join(" ")}
-              title={`Score ${score > 0 ? `+${score}` : score}`}
+                "dot",
+                `dot--${t}`,
+                `mag-${mag}`,
+                selected ? "is-active" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => onChange(score)}
+              aria-pressed={selected}
+              aria-label={`Rate ${formatScore(score)}`}
             >
-              <input
-                type="radio"
-                className="sr-only"
-                name={name}
-                value={score}
-                checked={selected}
-                onChange={() => onChange(score)}
-              />
-              {score > 0 ? `+${score}` : score}
-            </label>
+              {formatScore(score)}
+            </button>
           );
         })}
       </div>
     </div>
   );
 }
+
+export { tone as scoreTone, formatScore };

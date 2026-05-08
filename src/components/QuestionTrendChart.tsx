@@ -17,17 +17,21 @@ interface Props {
 }
 
 const PALETTE = [
-  "#a78bfa",
-  "#34d399",
-  "#f472b6",
-  "#60a5fa",
-  "#fbbf24",
-  "#f87171",
-  "#22d3ee",
-  "#c084fc",
-  "#4ade80",
-  "#fb923c",
+  "#8a4f2b", // leather
+  "#6c7d52", // sage
+  "#b25a3a", // rust
+  "#b88a3a", // gold
+  "#4e6e3c", // ok
+  "#a84132", // bad
+  "#6b3a1d", // leather-2
+  "#7a6a52", // muted
+  "#4a3d2c", // ink-2
+  "#2a2118", // ink
 ];
+
+const GRID = "#c4b698";
+const AXIS = "#7a6a52";
+const REFERENCE = "#b88a3a";
 
 export default function QuestionTrendChart({ questions, sessions }: Props) {
   const ordered = [...sessions].sort((a, b) =>
@@ -47,26 +51,27 @@ export default function QuestionTrendChart({ questions, sessions }: Props) {
   });
 
   return (
-    <div className="h-80">
+    <div style={{ height: 320 }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
           <XAxis
             dataKey="index"
-            stroke="#94a3b8"
+            stroke={AXIS}
             tickFormatter={(v) => `#${v}`}
           />
           <YAxis
             domain={[-3, 3]}
             ticks={[-3, -2, -1, 0, 1, 2, 3]}
-            stroke="#94a3b8"
+            stroke={AXIS}
           />
-          <ReferenceLine y={0} stroke="#475569" strokeDasharray="3 3" />
+          <ReferenceLine y={0} stroke={REFERENCE} strokeDasharray="3 3" />
           <Tooltip
             contentStyle={{
-              background: "#0f172a",
-              border: "1px solid #334155",
+              background: "var(--paper-2)",
+              border: "1px solid var(--line)",
               borderRadius: 8,
+              color: "var(--ink)",
               fontSize: 12,
             }}
             labelFormatter={(v) => `Session #${v}`}
@@ -78,7 +83,7 @@ export default function QuestionTrendChart({ questions, sessions }: Props) {
           />
           <Legend
             verticalAlign="bottom"
-            wrapperStyle={{ fontSize: 12, color: "#cbd5e1" }}
+            wrapperStyle={{ fontSize: 12, color: "var(--ink-2)" }}
             formatter={(value) =>
               questions.find((q) => q.id === value)?.text ?? String(value)
             }

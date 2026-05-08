@@ -33,11 +33,22 @@ export default function SignUp() {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-12 space-y-4">
-      <h1 className="text-2xl font-semibold">Create account</h1>
-      <form className="card space-y-3" onSubmit={onSubmit}>
+    <div className="view" style={{ maxWidth: 420, margin: "60px auto 0" }}>
+      <div className="brand" style={{ justifyContent: "center", marginBottom: 18 }}>
+        <span className="brand-mark">T</span>
         <div>
-          <label htmlFor="email" className="label">Email</label>
+          <div className="brand-name">TQA Tracker</div>
+          <div className="brand-sub">Industry standard · 5 phases</div>
+        </div>
+      </div>
+      <h1 className="h-display" style={{ textAlign: "center" }}>
+        Create account
+      </h1>
+      <form className="card" onSubmit={onSubmit}>
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label htmlFor="email" className="label">
+            Email
+          </label>
           <input
             id="email"
             type="email"
@@ -48,8 +59,10 @@ export default function SignUp() {
             required
           />
         </div>
-        <div>
-          <label htmlFor="password" className="label">Password</label>
+        <div className="field" style={{ marginBottom: 14 }}>
+          <label htmlFor="password" className="label">
+            Password
+          </label>
           <input
             id="password"
             type="password"
@@ -60,19 +73,35 @@ export default function SignUp() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="muted mono" style={{ fontSize: 10, marginTop: 4 }}>
             At least 8 characters.
           </p>
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        {info && <p className="text-sm text-emerald-400">{info}</p>}
-        <button className="btn-primary w-full" type="submit" disabled={busy}>
+        {error && (
+          <p style={{ color: "var(--bad)", fontSize: 13, marginBottom: 8 }}>
+            {error}
+          </p>
+        )}
+        {info && (
+          <p style={{ color: "var(--ok)", fontSize: 13, marginBottom: 8 }}>
+            {info}
+          </p>
+        )}
+        <button
+          className="btn btn-leather"
+          type="submit"
+          disabled={busy}
+          style={{ width: "100%", justifyContent: "center" }}
+        >
           {busy ? "Creating…" : "Create account"}
         </button>
       </form>
-      <p className="text-sm text-slate-400 text-center">
+      <p
+        className="muted"
+        style={{ textAlign: "center", fontSize: 13, marginTop: 14 }}
+      >
         Already have an account?{" "}
-        <Link to="/sign-in" className="underline text-brand-500">
+        <Link to="/sign-in" style={{ color: "var(--leather)" }}>
           Sign in
         </Link>
       </p>

@@ -141,16 +141,25 @@ export default function TrifectaEvaluation({
   };
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-400">
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <p className="muted" style={{ fontSize: 14, margin: 0 }}>
         End-of-engagement evaluation per the TQA Training Trifecta. Initial
         suggestions come from this engagement's session ratings — adjust as
         needed before sharing with the owner.
       </p>
       {(["foundation", "task_completion", "temperament"] as const).map(
         (axis) => (
-          <section key={axis} className="card space-y-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <section key={axis} className="card">
+            <h3
+              className="mono"
+              style={{
+                fontSize: 11,
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+                color: "var(--muted)",
+                margin: "0 0 12px",
+              }}
+            >
               {TRIFECTA_AXIS_LABELS[axis]}
             </h3>
             <div className="space-y-2">
@@ -159,14 +168,46 @@ export default function TrifectaEvaluation({
                 return (
                   <div
                     key={item.code}
-                    className="border border-slate-800 rounded-lg p-3 space-y-2"
+                    style={{
+                      border: "1px solid var(--line)",
+                      borderRadius: 10,
+                      padding: 12,
+                      marginBottom: 10,
+                      background: "var(--paper-2)",
+                    }}
                   >
-                    <div className="flex justify-between gap-3">
-                      <div className="flex-1 text-sm font-medium leading-snug">
-                        <span className="text-slate-500 mr-2">{i + 1}.</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                      }}
+                    >
+                      <div
+                        style={{
+                          flex: 1,
+                          fontSize: 14,
+                          fontWeight: 500,
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        <span
+                          className="mono muted"
+                          style={{ marginRight: 8, fontSize: 12 }}
+                        >
+                          {i + 1}.
+                        </span>
                         {item.text}
                         {item.detail && (
-                          <p className="text-xs italic text-slate-400 mt-1">
+                          <p
+                            className="muted"
+                            style={{
+                              fontSize: 12,
+                              fontStyle: "italic",
+                              marginTop: 4,
+                              marginBottom: 0,
+                            }}
+                          >
                             {item.detail}
                           </p>
                         )}
@@ -187,7 +228,8 @@ export default function TrifectaEvaluation({
                     </div>
                     <textarea
                       rows={1}
-                      className="input text-xs"
+                      className="input"
+                      style={{ fontSize: 12, marginTop: 8 }}
                       placeholder="Optional comment…"
                       value={draft.comment ?? ""}
                       onChange={(e) =>
@@ -207,7 +249,7 @@ export default function TrifectaEvaluation({
           </section>
         ),
       )}
-      <div className="card space-y-2">
+      <div className="card">
         <label className="label" htmlFor="trifecta-notes">
           Evaluation notes
         </label>
@@ -219,9 +261,11 @@ export default function TrifectaEvaluation({
           onChange={(e) => setNotes(e.target.value)}
         />
       </div>
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      <div className="flex justify-end">
-        <button className="btn-primary" disabled={saving} onClick={save}>
+      {error && (
+        <p style={{ color: "var(--bad)", fontSize: 13, margin: 0 }}>{error}</p>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button className="btn btn-leather" disabled={saving} onClick={save}>
           {saving ? "Saving…" : evaluation ? "Update evaluation" : "Save evaluation"}
         </button>
       </div>

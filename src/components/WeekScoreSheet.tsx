@@ -42,50 +42,73 @@ export default function WeekScoreSheet({
     riders.find((r) => r.id === id)?.name ?? "—";
 
   return (
-    <div className="card space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Week {week.week_number}</h3>
+    <div className="card">
+      <div className="card-head">
+        <h3 className="card-title">Week {week.week_number}</h3>
         <Link
           to={`/engagements/${engagementId}/weeks/${week.id}/sessions/new`}
-          className="btn-primary text-xs"
+          className="btn btn-leather btn-sm"
         >
           + New session
         </Link>
       </div>
       {sessions.length === 0 ? (
-        <p className="text-sm text-slate-400">No sessions logged this week.</p>
+        <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+          No sessions logged this week.
+        </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-xs uppercase tracking-wide text-slate-400">
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+            <thead
+              className="mono muted"
+              style={{
+                fontSize: 11,
+                letterSpacing: 1.2,
+                textTransform: "uppercase",
+              }}
+            >
               <tr>
-                <th className="text-left py-2">#</th>
-                <th className="text-left">Date</th>
-                <th className="text-left">Rider</th>
-                <th className="text-left">Phase</th>
-                <th className="text-right">Foundation</th>
-                <th className="text-right">Temperament</th>
+                <th style={{ textAlign: "left", padding: "8px 6px" }}>#</th>
+                <th style={{ textAlign: "left" }}>Date</th>
+                <th style={{ textAlign: "left" }}>Rider</th>
+                <th style={{ textAlign: "left" }}>Phase</th>
+                <th style={{ textAlign: "right" }}>Foundation</th>
+                <th style={{ textAlign: "right" }}>Temperament</th>
                 <th />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody>
               {sessions.map((s, i) => {
                 const f = sessionAverage(s.ratings, "foundation");
                 const t = sessionAverage(s.ratings, "temperament");
                 return (
-                  <tr key={s.id}>
-                    <td className="py-2 text-slate-400">
+                  <tr
+                    key={s.id}
+                    style={{ borderTop: "1px solid var(--line)" }}
+                  >
+                    <td
+                      className="mono muted"
+                      style={{ padding: "8px 6px" }}
+                    >
                       {s.session_number ?? i + 1}
                     </td>
                     <td>{formatHumanDate(s.occurred_at)}</td>
                     <td>{riderFor(s.rider_id)}</td>
                     <td>{phaseFor(s.phase_id)}</td>
-                    <td className="text-right font-medium">{round1(f)}</td>
-                    <td className="text-right font-medium">{round1(t)}</td>
-                    <td className="text-right">
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>
+                      {round1(f)}
+                    </td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>
+                      {round1(t)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
                       <Link
                         to={`/sessions/${s.id}`}
-                        className="text-brand-300 text-xs hover:underline"
+                        style={{
+                          color: "var(--leather)",
+                          fontSize: 12,
+                          textDecoration: "none",
+                        }}
                       >
                         Open
                       </Link>
@@ -97,7 +120,7 @@ export default function WeekScoreSheet({
           </table>
         </div>
       )}
-      <div className="space-y-1">
+      <div style={{ marginTop: 12 }}>
         <label className="label" htmlFor={`week-${week.id}-comments`}>
           Week comments
         </label>
@@ -109,10 +132,10 @@ export default function WeekScoreSheet({
           value={comments}
           onChange={(e) => onCommentsChange(e.target.value)}
         />
-        <div className="flex justify-end">
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
           <button
             type="button"
-            className="btn-secondary text-xs"
+            className="btn btn-sm"
             onClick={onSaveComments}
             disabled={commentsSaving}
           >

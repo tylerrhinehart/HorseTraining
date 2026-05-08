@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { supabaseConfigured } from "../supabase/client";
 import {
@@ -72,54 +73,87 @@ export default function Settings() {
   };
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+    <div className="view" style={{ maxWidth: 720 }}>
+      <div className="eyebrow">Account</div>
+      <h1 className="h-display">Settings</h1>
 
-      <section className="card space-y-2">
-        <h2 className="font-semibold">Account</h2>
-        <p className="text-sm text-slate-300">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Account</h2>
+          <span className="card-meta">
+            {supabaseConfigured ? "supabase ✓" : "not configured"}
+          </span>
+        </div>
+        <p style={{ margin: 0 }}>
           Signed in as{" "}
-          <span className="text-slate-100 font-medium">{user?.email}</span>
+          <strong style={{ fontFamily: "var(--font-display)" }}>
+            {user?.email}
+          </strong>
         </p>
-        <p className="text-xs text-slate-500">
-          Backend:{" "}
-          {supabaseConfigured ? "Supabase (configured)" : "not configured"}
-        </p>
-        <div>
-          <button className="btn-secondary text-sm" onClick={signOut}>
+        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost" onClick={signOut}>
             Sign out
           </button>
         </div>
-      </section>
+      </div>
 
-      <section className="card space-y-3">
-        <h2 className="font-semibold">Export your data</h2>
-        <p className="text-sm text-slate-400">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Manage</h2>
+          <span className="card-meta">curriculum &amp; people</span>
+        </div>
+        <p className="muted" style={{ margin: 0, marginBottom: 12 }}>
+          Edit phases and questions, manage riders, attach resources, and
+          review the Foundation doctrine.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <Link to="/horses" className="btn">Horses</Link>
+          <Link to="/riders" className="btn">Riders</Link>
+          <Link to="/phases" className="btn">Phases</Link>
+          <Link to="/resources" className="btn">Resources</Link>
+          <Link to="/foundation" className="btn">Foundation</Link>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Export your data</h2>
+          <span className="card-meta">JSON snapshot</span>
+        </div>
+        <p className="muted" style={{ marginTop: 0 }}>
           Download a JSON snapshot of your horses, engagements, phases,
           questions, and riders. Sessions and ratings are linked from
           engagements but exported separately on demand.
         </p>
-        <div>
-          <button className="btn-primary" onClick={exportData}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button className="btn btn-leather" onClick={exportData}>
             Export JSON
           </button>
+          {exportStatus && (
+            <span
+              className="mono"
+              style={{ fontSize: 12, color: "var(--ok)" }}
+            >
+              {exportStatus}
+            </span>
+          )}
         </div>
-        {exportStatus && (
-          <p className="text-sm text-emerald-400">{exportStatus}</p>
-        )}
-      </section>
+      </div>
 
-      <section className="card space-y-3">
-        <h2 className="font-semibold">Install as app</h2>
-        <p className="text-sm text-slate-400">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Install as app</h2>
+          <span className="card-meta">PWA</span>
+        </div>
+        <p className="muted" style={{ marginTop: 0 }}>
           Install for a dedicated icon and faster launch. Works offline for
           the app shell; data still requires a connection.
         </p>
         {installed ? (
-          <p className="text-sm text-emerald-400">App installed.</p>
+          <p style={{ color: "var(--ok)", margin: 0 }}>App installed.</p>
         ) : installEvent ? (
           <button
-            className="btn-primary"
+            className="btn btn-leather"
             onClick={async () => {
               await installEvent.prompt();
               const choice = await installEvent.userChoice;
@@ -130,12 +164,12 @@ export default function Settings() {
             Install app
           </button>
         ) : (
-          <p className="text-sm text-slate-400">
+          <p className="muted" style={{ margin: 0 }}>
             Install option will appear when supported by your browser. On iOS,
             use Share → Add to Home Screen.
           </p>
         )}
-      </section>
+      </div>
     </div>
   );
 }

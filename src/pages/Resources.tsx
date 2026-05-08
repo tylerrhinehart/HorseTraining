@@ -46,23 +46,24 @@ export default function Resources() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Resources</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Attach YouTube videos and links to phases and individual score-sheet
-          items.
-        </p>
-      </div>
+    <div className="view">
+      <div className="eyebrow">Library</div>
+      <h1 className="h-display">Resources</h1>
+      <p className="muted" style={{ marginBottom: 14, maxWidth: 640 }}>
+        Attach YouTube videos and links to phases and individual score-sheet
+        items.
+      </p>
 
-      <section className="card space-y-3">
-        <div className="text-sm font-medium text-slate-200">
-          {questionId ? "Question:" : phaseId ? "Phase:" : "Select a target:"}{" "}
-          <span className="text-brand-200">{targetLabel}</span>
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">
+            {questionId ? "Question" : phaseId ? "Phase" : "Target"}
+          </h2>
+          <span className="card-meta">{targetLabel}</span>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <div>
-            <div className="label">By phase</div>
+        <div className="field-row">
+          <div className="field">
+            <label className="label">By phase</label>
             <select
               className="input"
               value={phaseId ?? ""}
@@ -79,8 +80,8 @@ export default function Resources() {
               ))}
             </select>
           </div>
-          <div>
-            <div className="label">By question</div>
+          <div className="field">
+            <label className="label">By question</label>
             <select
               className="input"
               value={questionId ?? ""}
@@ -102,7 +103,7 @@ export default function Resources() {
             </select>
           </div>
         </div>
-      </section>
+      </div>
 
       {(phaseId || questionId) && (
         <ResourceForm
@@ -112,14 +113,12 @@ export default function Resources() {
         />
       )}
 
-      <section className="space-y-2">
-        {resources.loading && (
-          <div className="card text-slate-400">Loading…</div>
-        )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {resources.loading && <div className="card muted">Loading…</div>}
         {!resources.loading &&
           (resources.data ?? []).length === 0 &&
           (phaseId || questionId) && (
-            <div className="card text-center text-slate-400">
+            <div className="card muted" style={{ textAlign: "center" }}>
               No resources yet for this target.
             </div>
           )}
@@ -130,12 +129,12 @@ export default function Resources() {
             onDeleted={resources.refresh}
           />
         ))}
-      </section>
+      </div>
 
       {!phaseId && !questionId && (
-        <div className="card text-center text-slate-400">
+        <div className="card muted" style={{ textAlign: "center" }}>
           Pick a phase or a question above to view and add resources, or{" "}
-          <Link to="/phases" className="underline text-brand-500">
+          <Link to="/phases" style={{ color: "var(--leather)" }}>
             browse phases
           </Link>
           .
@@ -153,31 +152,37 @@ function ResourceRow({
   onDeleted: () => void;
 }) {
   return (
-    <div className="card flex items-start gap-3">
+    <div
+      className="card"
+      style={{ display: "flex", alignItems: "flex-start", gap: 12 }}
+    >
       <span
-        className={
-          resource.kind === "youtube"
-            ? "pill bg-red-600/20 text-red-200"
-            : "pill bg-slate-700 text-slate-300"
-        }
+        className={resource.kind === "youtube" ? "pill pill-leather" : "pill pill-muted"}
       >
         {resource.kind === "youtube" ? "YouTube" : "Link"}
       </span>
-      <div className="flex-1">
+      <div style={{ flex: 1 }}>
         <a
           href={resource.url}
           target="_blank"
           rel="noreferrer"
-          className="text-slate-100 hover:underline font-medium"
+          style={{
+            fontWeight: 600,
+            color: "var(--ink)",
+            textDecoration: "none",
+            fontFamily: "var(--font-display)",
+          }}
         >
           {resource.title}
         </a>
         {resource.notes && (
-          <p className="text-sm text-slate-400 mt-1">{resource.notes}</p>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+            {resource.notes}
+          </p>
         )}
       </div>
       <button
-        className="btn-danger text-xs"
+        className="btn btn-danger btn-sm"
         onClick={async () => {
           if (!confirm(`Delete "${resource.title}"?`)) return;
           await deleteResource(resource.id);

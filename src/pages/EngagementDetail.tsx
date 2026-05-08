@@ -86,8 +86,20 @@ export default function EngagementDetail() {
   }, [sessions.data]);
 
   if (!id) return null;
-  if (engagement.loading) return <div className="card">Loading…</div>;
-  if (!engagement.data) return <div className="card">Engagement not found.</div>;
+  if (engagement.loading) {
+    return (
+      <div className="view">
+        <div className="card">Loading…</div>
+      </div>
+    );
+  }
+  if (!engagement.data) {
+    return (
+      <div className="view">
+        <div className="card">Engagement not found.</div>
+      </div>
+    );
+  }
 
   const points = sessionAverages(sessions.data ?? []);
   const foundationTrend = trend(points, "foundation");
@@ -130,39 +142,42 @@ export default function EngagementDetail() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {horse.data?.name ?? "Engagement"}
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {engagement.data.owner_name && <>Owner: {engagement.data.owner_name} · </>}
-            {engagement.data.arrival_date
-              ? `Arrived ${formatHumanDate(engagement.data.arrival_date)}`
-              : "No arrival date"}
-            {engagement.data.departure_date
-              ? ` · Departs ${formatHumanDate(engagement.data.departure_date)}`
-              : ""}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to={`/engagements/${id}/report`}
-            className="btn-secondary text-sm"
-          >
-            Generate report
-          </Link>
-          <button className="btn-ghost text-sm" onClick={handleArchive}>
-            Archive
-          </button>
-          <button className="btn-danger text-sm" onClick={handleDelete}>
-            Delete
-          </button>
-        </div>
+    <div className="view">
+      <div className="eyebrow">Engagement</div>
+      <h1 className="h-display">{horse.data?.name ?? "Engagement"}</h1>
+      <p className="muted" style={{ margin: "4px 0 14px", fontSize: 14 }}>
+        {engagement.data.owner_name && <>Owner: {engagement.data.owner_name} · </>}
+        {engagement.data.arrival_date
+          ? `Arrived ${formatHumanDate(engagement.data.arrival_date)}`
+          : "No arrival date"}
+        {engagement.data.departure_date
+          ? ` · Departs ${formatHumanDate(engagement.data.departure_date)}`
+          : ""}
+      </p>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          justifyContent: "flex-end",
+          marginBottom: 14,
+        }}
+      >
+        <Link
+          to={`/engagements/${id}/report`}
+          className="btn btn-leather btn-sm"
+        >
+          Generate report
+        </Link>
+        <button className="btn btn-ghost btn-sm" onClick={handleArchive}>
+          Archive
+        </button>
+        <button className="btn btn-danger btn-sm" onClick={handleDelete}>
+          Delete
+        </button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="today-summary">
         <Stat label="Sessions" value={String((sessions.data ?? []).length)} />
         <Stat
           label="Foundation trend"
@@ -196,7 +211,15 @@ export default function EngagementDetail() {
         />
       </div>
 
-      <div className="flex gap-2 border-b border-slate-800 text-sm">
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: "1px solid var(--line)",
+          fontSize: 13,
+          marginTop: "var(--gap)",
+        }}
+      >
         {(
           [
             ["weeks", "Weeks"],
@@ -208,12 +231,22 @@ export default function EngagementDetail() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={[
-              "px-3 py-2 -mb-px border-b-2 transition-colors",
-              tab === key
-                ? "border-brand-500 text-white"
-                : "border-transparent text-slate-400 hover:text-slate-200",
-            ].join(" ")}
+            className="mono"
+            style={{
+              padding: "10px 14px",
+              marginBottom: -1,
+              background: "transparent",
+              border: "none",
+              borderBottom:
+                tab === key
+                  ? "2px solid var(--leather)"
+                  : "2px solid transparent",
+              color: tab === key ? "var(--ink)" : "var(--muted)",
+              cursor: "pointer",
+              letterSpacing: 1.1,
+              textTransform: "uppercase",
+              fontSize: 11,
+            }}
           >
             {label}
           </button>
@@ -221,7 +254,14 @@ export default function EngagementDetail() {
       </div>
 
       {tab === "weeks" && (
-        <div className="space-y-3">
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            marginTop: 14,
+          }}
+        >
           {(weeks.data ?? []).map((w) => (
             <WeekScoreSheet
               key={w.id}
@@ -238,8 +278,8 @@ export default function EngagementDetail() {
               commentsSaving={savingWeekId === w.id}
             />
           ))}
-          <div className="flex justify-end">
-            <button className="btn-secondary text-sm" onClick={handleAddWeek}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button className="btn btn-sm" onClick={handleAddWeek}>
               + Add week
             </button>
           </div>
@@ -247,11 +287,21 @@ export default function EngagementDetail() {
       )}
 
       {tab === "progress" && (
-        <div className="space-y-4">
-          <div className="card space-y-3">
-            <h2 className="font-semibold">Per-axis progress</h2>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+            marginTop: 14,
+          }}
+        >
+          <div className="card">
+            <div className="card-head">
+              <h2 className="card-title">Per-axis progress</h2>
+              <span className="card-meta">foundation vs temperament</span>
+            </div>
             {points.length === 0 ? (
-              <p className="text-sm text-slate-400">
+              <p className="muted" style={{ margin: 0, fontSize: 14 }}>
                 No sessions logged yet.
               </p>
             ) : (
@@ -259,8 +309,10 @@ export default function EngagementDetail() {
             )}
           </div>
           {referencedQuestions.length > 0 && (
-            <div className="card space-y-3">
-              <h2 className="font-semibold">Per-question trend</h2>
+            <div className="card">
+              <div className="card-head">
+                <h2 className="card-title">Per-question trend</h2>
+              </div>
               <QuestionTrendChart
                 questions={referencedQuestions}
                 sessions={sessions.data ?? []}
@@ -269,7 +321,9 @@ export default function EngagementDetail() {
           )}
           {referencedQuestions.length > 0 && (
             <div className="card">
-              <h2 className="font-semibold mb-3">Question averages</h2>
+              <div className="card-head">
+                <h2 className="card-title">Question averages</h2>
+              </div>
               <QuestionAveragesTable
                 questions={referencedQuestions}
                 sessions={sessions.data ?? []}
@@ -280,16 +334,21 @@ export default function EngagementDetail() {
       )}
 
       {tab === "trifecta" && (
-        <TrifectaEvaluation
-          engagementId={id}
-          evaluation={trifecta.data ?? null}
-          sessions={sessions.data ?? []}
-          onSaved={trifecta.refresh}
-        />
+        <div style={{ marginTop: 14 }}>
+          <TrifectaEvaluation
+            engagementId={id}
+            evaluation={trifecta.data ?? null}
+            sessions={sessions.data ?? []}
+            onSaved={trifecta.refresh}
+          />
+        </div>
       )}
 
       {tab === "details" && (
-        <div className="card space-y-2 text-sm">
+        <div
+          className="card"
+          style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14, fontSize: 14 }}
+        >
           {engagement.data.owner_email && (
             <Row label="Email" value={engagement.data.owner_email} />
           )}
@@ -324,18 +383,20 @@ function arrowFor(dir: "up" | "down" | "flat" | "n/a"): string {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="card">
-      <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="text-2xl font-semibold mt-1">{value}</div>
+    <div className="summary-tile">
+      <span className="lab">{label}</span>
+      <span className="val">{value}</span>
     </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex gap-3">
-      <span className="text-slate-400 w-32">{label}</span>
-      <span className="text-slate-100 whitespace-pre-wrap">{value}</span>
+    <div style={{ display: "flex", gap: 12 }}>
+      <span className="muted" style={{ width: 128 }}>
+        {label}
+      </span>
+      <span style={{ whiteSpace: "pre-wrap", flex: 1 }}>{value}</span>
     </div>
   );
 }
@@ -350,18 +411,40 @@ function QuestionAveragesTable({
   const all = questionAverages(questions, sessions);
   if (all.length === 0) return null;
   return (
-    <div className="space-y-1 text-sm">
-      {all.map((q) => (
+    <div style={{ display: "flex", flexDirection: "column", fontSize: 14 }}>
+      {all.map((q, i) => (
         <div
           key={q.questionId}
-          className="flex items-center justify-between gap-3 border-b border-slate-800 py-1"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            borderTop: i === 0 ? "none" : "1px solid var(--line)",
+            padding: "6px 0",
+          }}
         >
-          <span className="text-slate-200 flex-1">{q.text}</span>
-          <span className="text-slate-400 text-xs uppercase w-24">{q.axis}</span>
-          <span className="text-slate-400 w-16 text-right text-xs">
+          <span style={{ flex: 1 }}>{q.text}</span>
+          <span
+            className="mono muted"
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 1.1,
+              width: 96,
+            }}
+          >
+            {q.axis}
+          </span>
+          <span
+            className="mono muted"
+            style={{ width: 56, textAlign: "right", fontSize: 12 }}
+          >
             {q.count}×
           </span>
-          <span className="font-medium w-12 text-right">{round1(q.average)}</span>
+          <span style={{ fontWeight: 600, width: 48, textAlign: "right" }}>
+            {round1(q.average)}
+          </span>
         </div>
       ))}
     </div>

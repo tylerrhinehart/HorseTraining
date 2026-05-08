@@ -79,7 +79,12 @@ export default function HorseDetail() {
 
   if (!id) return null;
 
-  if (horse.loading || phases.loading) {
+  if (
+    horse.loading ||
+    phases.loading ||
+    sessions.loading ||
+    ratings.loading
+  ) {
     return (
       <div className="view">
         <div className="card">Loading…</div>
@@ -166,11 +171,17 @@ export default function HorseDetail() {
     );
   };
 
+  const formatSignedAvg = (n: number | null): string => {
+    if (n == null) return "—";
+    const sign = n >= 0 ? "+" : "";
+    return `${sign}${n.toFixed(1)}`;
+  };
+
   const handleAdvance = async () => {
     if (!currentPhase || !nextP) return;
     if (!isAtOrAboveStandard(rolling7Average)) {
       const ok = window.confirm(
-        `This phase's average is ${rolling7Average?.toFixed(1) ?? "—"}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP.name}?`,
+        `This phase's average is ${formatSignedAvg(rolling7Average)}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP.name}?`,
       );
       if (!ok) return;
     }
@@ -180,7 +191,7 @@ export default function HorseDetail() {
 
   const handleArchive = async () => {
     await archiveHorse(id);
-    horse.refresh();
+    navigate("/horses");
   };
 
   const handleReopen = async () => {
@@ -318,6 +329,17 @@ export default function HorseDetail() {
               >
                 {/* Phase row header */}
                 <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  aria-label={`${phase.name} — ${
+                    isCompleted ? "completed" : isCurrent ? "current" : "upcoming"
+                  }${
+                    isCompleted || isUpcoming
+                      ? isExpanded
+                        ? ", expanded"
+                        : ", collapsed"
+                      : ""
+                  }`}
                   style={{
                     background: "none",
                     border: "none",

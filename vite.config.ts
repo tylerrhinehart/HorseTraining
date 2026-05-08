@@ -17,12 +17,12 @@ export default defineConfig({
       registerType: "prompt",
       includeAssets: ["favicon.svg", "icons/icon.svg"],
       manifest: {
-        name: "Horse Training Tracker",
-        short_name: "HorseTrain",
+        name: "TQA Horse Training Tracker",
+        short_name: "TQA Tracker",
         description:
           "Daily evaluation tracker for horse training programs with progress charts and PDF reports.",
-        theme_color: "#0f172a",
-        background_color: "#0f172a",
+        theme_color: "#f3ece0",
+        background_color: "#f3ece0",
         display: "standalone",
         start_url: ".",
         scope: ".",

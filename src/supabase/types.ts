@@ -20,15 +20,7 @@ export interface Profile {
   created_at: string;
 }
 
-export interface Rider {
-  id: ID;
-  user_id: ID;
-  name: string;
-  role: string | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export type HorseStatus = 'in_training' | 'complete' | 'archived';
 
 export interface Horse {
   id: ID;
@@ -39,23 +31,13 @@ export interface Horse {
   sex: string | null;
   color: string | null;
   notes: string | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Engagement {
-  id: ID;
-  user_id: ID;
-  horse_id: ID;
+  // new fields:
   owner_name: string | null;
-  owner_info: string | null;
-  owner_email: string | null;
-  payment_method: string | null;
-  payment_amount: number | null;
+  owner_contact: string | null;
   arrival_date: string | null;
-  departure_date: string | null;
-  notes: string | null;
+  status: HorseStatus;
+  current_phase_id: ID | null;
+  // existing:
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -82,26 +64,12 @@ export interface Question {
   created_at: string;
 }
 
-export interface Week {
-  id: ID;
-  user_id: ID;
-  engagement_id: ID;
-  week_number: number;
-  comments: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface Session {
   id: ID;
   user_id: ID;
-  engagement_id: ID;
-  week_id: ID;
   horse_id: ID;
   phase_id: ID;
-  rider_id: ID | null;
   occurred_at: string;
-  session_number: number | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -125,7 +93,7 @@ export interface SessionWithRatings extends Session {
 export interface TrifectaEvaluation {
   id: ID;
   user_id: ID;
-  engagement_id: ID;
+  horse_id: ID;
   evaluated_at: string;
   notes: string | null;
   created_at: string;

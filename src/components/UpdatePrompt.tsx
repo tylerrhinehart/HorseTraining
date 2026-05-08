@@ -8,7 +8,6 @@ export default function UpdatePrompt() {
   } = useRegisterSW({
     onRegisteredSW(_swUrl, registration) {
       if (registration) {
-        // Periodic update check (hourly).
         setInterval(() => registration.update(), 60 * 60 * 1000);
       }
     },
@@ -22,13 +21,30 @@ export default function UpdatePrompt() {
   if (!needRefresh || dismissed) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl border border-brand-600/40 bg-slate-900 p-4 shadow-lg">
-      <p className="text-sm text-slate-200">
-        A new version of Horse Training Tracker is ready.
+    <div
+      className="card"
+      style={{
+        position: "fixed",
+        bottom: 84,
+        right: 16,
+        zIndex: 50,
+        maxWidth: 360,
+        boxShadow: "0 18px 40px rgba(40, 25, 10, 0.18)",
+      }}
+    >
+      <p style={{ margin: 0, fontSize: 14 }}>
+        A new version of TQA Horse Training Tracker is ready.
       </p>
-      <div className="mt-3 flex gap-2 justify-end">
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          justifyContent: "flex-end",
+          marginTop: 12,
+        }}
+      >
         <button
-          className="btn-ghost text-sm"
+          className="btn btn-ghost btn-sm"
           onClick={() => {
             setDismissed(true);
             setNeedRefresh(false);
@@ -37,7 +53,7 @@ export default function UpdatePrompt() {
           Later
         </button>
         <button
-          className="btn-primary text-sm"
+          className="btn btn-leather btn-sm"
           onClick={() => updateServiceWorker(true)}
         >
           Reload

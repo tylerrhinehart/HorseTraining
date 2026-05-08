@@ -45,7 +45,15 @@ export default function ResourceForm({ phaseId, questionId, onCreated }: Props) 
   };
 
   return (
-    <form onSubmit={submit} className="card grid gap-2 md:grid-cols-[1fr_2fr_auto]">
+    <form
+      onSubmit={submit}
+      className="card"
+      style={{
+        display: "grid",
+        gap: 8,
+        gridTemplateColumns: "1fr 2fr auto",
+      }}
+    >
       <input
         className="input"
         placeholder="Title"
@@ -58,11 +66,20 @@ export default function ResourceForm({ phaseId, questionId, onCreated }: Props) 
         value={url}
         onChange={(e) => setUrl(e.target.value)}
       />
-      <button className="btn-primary" type="submit" disabled={busy}>
+      <button className="btn btn-leather" type="submit" disabled={busy}>
         {busy ? "Adding…" : "Add"}
       </button>
       {error && (
-        <p className="text-sm text-red-400 md:col-span-3">{error}</p>
+        <p
+          style={{
+            color: "var(--bad)",
+            fontSize: 13,
+            gridColumn: "1 / -1",
+            margin: 0,
+          }}
+        >
+          {error}
+        </p>
       )}
     </form>
   );

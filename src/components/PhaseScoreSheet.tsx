@@ -64,12 +64,41 @@ export default function PhaseScoreSheet({
 
 function ScoreLegend() {
   return (
-    <details className="card text-xs text-slate-300">
-      <summary className="cursor-pointer text-brand-300">Score legend</summary>
-      <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+    <details className="card" style={{ fontSize: 12 }}>
+      <summary
+        style={{
+          cursor: "pointer",
+          color: "var(--leather)",
+          fontFamily: "var(--font-display)",
+        }}
+      >
+        Score legend
+      </summary>
+      <ul
+        style={{
+          marginTop: 8,
+          display: "grid",
+          gap: 4,
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          listStyle: "none",
+          padding: 0,
+        }}
+      >
         {([3, 2, 1, 0, -1, -2, -3] as const).map((s) => (
-          <li key={s} className="flex gap-2">
-            <span className="font-mono w-8 text-right">
+          <li key={s} style={{ display: "flex", gap: 8 }}>
+            <span
+              className="mono"
+              style={{
+                width: 32,
+                textAlign: "right",
+                color:
+                  s > 0
+                    ? "var(--ok)"
+                    : s < 0
+                      ? "var(--bad)"
+                      : "var(--ink-2)",
+              }}
+            >
               {s > 0 ? `+${s}` : s}
             </span>
             <span>{SCORE_LEGEND[s]}</span>
@@ -99,7 +128,16 @@ function Column({
 }: ColumnProps) {
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <h3
+        className="mono"
+        style={{
+          fontSize: 11,
+          letterSpacing: 1.5,
+          textTransform: "uppercase",
+          color: "var(--muted)",
+          margin: "0 0 8px",
+        }}
+      >
         {title}
       </h3>
       {questions.map((q, i) => {
@@ -107,8 +145,20 @@ function Column({
         return (
           <div key={q.id} className="card space-y-2">
             <div className="flex justify-between gap-3">
-              <div className="flex-1 text-sm font-medium leading-snug">
-                <span className="text-slate-500 mr-2">{i + 1}.</span>
+              <div
+                style={{
+                  flex: 1,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  lineHeight: 1.45,
+                }}
+              >
+                <span
+                  className="mono muted"
+                  style={{ marginRight: 8, fontSize: 12 }}
+                >
+                  {i + 1}.
+                </span>
                 {q.text}
               </div>
               <RatingInput
@@ -130,7 +180,16 @@ function Column({
               />
             )}
             {readOnly && draft.comment && (
-              <p className="text-xs italic text-slate-300">"{draft.comment}"</p>
+              <p
+                style={{
+                  fontSize: 12,
+                  fontStyle: "italic",
+                  color: "var(--ink-2)",
+                  margin: 0,
+                }}
+              >
+                "{draft.comment}"
+              </p>
             )}
           </div>
         );

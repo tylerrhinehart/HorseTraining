@@ -14,6 +14,7 @@ import PhasesList from "./pages/PhasesList";
 import PhaseDetail from "./pages/PhaseDetail";
 import Resources from "./pages/Resources";
 import FoundationDoctrine from "./pages/FoundationDoctrine";
+import Reference from "./pages/Reference";
 import Report from "./pages/Report";
 import Settings from "./pages/Settings";
 import SignIn from "./pages/SignIn";
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/phases/:id" element={guarded(<PhaseDetail />)} />
         <Route path="/foundation" element={guarded(<FoundationDoctrine />)} />
         <Route path="/resources" element={guarded(<Resources />)} />
+        <Route path="/reference" element={guarded(<Reference />)} />
         <Route path="/settings" element={guarded(<Settings />)} />
 
         <Route path="*" element={<NotFound />} />

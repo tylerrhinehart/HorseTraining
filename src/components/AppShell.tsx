@@ -37,7 +37,7 @@ export default function AppShell({ children }: Props) {
 
   const todayTo = "/";
   const horsesTo = "/horses";
-  const referenceTo = "/phases";
+  const referenceTo = "/reference";
 
   const path = location.pathname;
   const isToday = path === "/";

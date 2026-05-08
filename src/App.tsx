@@ -19,6 +19,8 @@ import Settings from "./pages/Settings";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import NotFound from "./pages/NotFound";
+import HorseFinish from "./pages/HorseFinish";
+import HorseReport from "./pages/HorseReport";
 import UpdatePrompt from "./components/UpdatePrompt";
 
 const guarded = (element: React.ReactNode) => <RequireAuth>{element}</RequireAuth>;
@@ -34,6 +36,8 @@ export default function App() {
         <Route path="/horses" element={guarded(<HorsesList />)} />
         <Route path="/horses/new" element={guarded(<HorseNew />)} />
         <Route path="/horses/:id" element={guarded(<HorseDetail />)} />
+        <Route path="/horses/:id/finish" element={guarded(<HorseFinish />)} />
+        <Route path="/horses/:id/report" element={guarded(<HorseReport />)} />
         <Route
           path="/horses/:id/engagements/new"
           element={guarded(<EngagementNew />)}

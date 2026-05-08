@@ -37,7 +37,7 @@ export default function SignIn() {
         <span className="brand-mark">T</span>
         <div>
           <div className="brand-name">TQA Tracker</div>
-          <div className="brand-sub">Industry standard · 5 phases</div>
+          <div className="brand-sub">Training quality assurance</div>
         </div>
       </div>
       <h1 className="h-display" style={{ textAlign: "center" }}>

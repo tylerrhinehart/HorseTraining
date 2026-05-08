@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { createHorse } from "../supabase/queries";
+import { useActiveHorseId } from "../state/activeHorse";
 
 interface FormValues {
   name: string;
@@ -13,6 +14,7 @@ interface FormValues {
 
 export default function HorseNew() {
   const navigate = useNavigate();
+  const [, setActiveId] = useActiveHorseId();
   const {
     register,
     handleSubmit,
@@ -28,48 +30,57 @@ export default function HorseNew() {
       color: values.color,
       notes: values.notes,
     });
+    setActiveId(horse.id);
     navigate(`/horses/${horse.id}`);
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <h1 className="text-2xl font-semibold">Register horse</h1>
-      <form className="card space-y-4" onSubmit={handleSubmit(onSubmit)}>
-        <div>
-          <label htmlFor="name" className="label">Horse name *</label>
-          <input
-            id="name"
-            className="input"
-            {...register("name", { required: "Name is required" })}
-          />
-          {errors.name && (
-            <p className="text-red-400 text-sm mt-1">{errors.name.message}</p>
-          )}
-        </div>
+    <div className="view" style={{ maxWidth: 720 }}>
+      <div className="eyebrow">New registration</div>
+      <h1 className="h-display">Register a horse</h1>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label htmlFor="breed" className="label">Breed</label>
-            <input id="breed" className="input" {...register("breed")} />
-          </div>
-          <div>
-            <label htmlFor="color" className="label">Color</label>
-            <input id="color" className="input" {...register("color")} />
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label htmlFor="dob" className="label">Date of birth</label>
+      <form className="card" onSubmit={handleSubmit(onSubmit)}>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="name" className="label">
+              Horse name *
+            </label>
             <input
-              id="dob"
-              type="date"
+              id="name"
               className="input"
-              {...register("dob")}
+              placeholder="e.g. Whiskey Pete"
+              {...register("name", { required: "Name is required" })}
+            />
+            {errors.name && (
+              <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+                {errors.name.message}
+              </p>
+            )}
+          </div>
+          <div className="field">
+            <label htmlFor="breed" className="label">
+              Breed
+            </label>
+            <input
+              id="breed"
+              className="input"
+              placeholder="AQHA Quarter Horse"
+              {...register("breed")}
             />
           </div>
-          <div>
-            <label htmlFor="sex" className="label">Sex</label>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="color" className="label">
+              Color
+            </label>
+            <input id="color" className="input" {...register("color")} />
+          </div>
+          <div className="field">
+            <label htmlFor="sex" className="label">
+              Sex
+            </label>
             <select
               id="sex"
               className="input"
@@ -86,8 +97,25 @@ export default function HorseNew() {
           </div>
         </div>
 
-        <div>
-          <label htmlFor="notes" className="label">Notes</label>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="dob" className="label">
+              Date of birth
+            </label>
+            <input
+              id="dob"
+              type="date"
+              className="input"
+              {...register("dob")}
+            />
+          </div>
+          <div className="field" />
+        </div>
+
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label htmlFor="notes" className="label">
+            Notes
+          </label>
           <textarea
             id="notes"
             rows={3}
@@ -96,20 +124,27 @@ export default function HorseNew() {
           />
         </div>
 
-        <div className="flex gap-2 justify-end">
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+            marginTop: 4,
+          }}
+        >
           <button
             type="button"
-            className="btn-ghost"
+            className="btn btn-ghost"
             onClick={() => navigate(-1)}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="btn-primary"
+            className="btn btn-leather"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Saving…" : "Register"}
+            {isSubmitting ? "Saving…" : "Add horse"}
           </button>
         </div>
       </form>

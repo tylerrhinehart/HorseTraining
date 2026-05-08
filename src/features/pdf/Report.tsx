@@ -11,14 +11,11 @@ import {
   G,
 } from "@react-pdf/renderer";
 import type {
-  Engagement,
   Horse,
   Phase,
   Question,
-  Rider,
   SessionWithRatings,
   TrifectaEvaluationWithScores,
-  Week,
 } from "../../supabase/types";
 import { formatDateTime, formatHumanDate } from "../../utils/dates";
 import {
@@ -139,32 +136,26 @@ const styles = StyleSheet.create({
 });
 
 // =============================================================================
-// Engagement Summary PDF — main report.
+// Horse Report PDF — main report.
 // =============================================================================
 
-interface EngagementReportProps {
-  engagement: Engagement;
-  horse: Horse | null;
+interface HorseReportProps {
+  horse: Horse;
   sessions: SessionWithRatings[];
-  weeks: Week[];
   phases: Phase[];
-  riders: Rider[];
   questions: Question[];
   trifecta: TrifectaEvaluationWithScores | null;
   generatedAt: string;
 }
 
-export function EngagementReport({
-  engagement,
+export function HorseReport({
   horse,
   sessions,
-  weeks,
   phases,
-  riders,
   questions,
   trifecta,
   generatedAt,
-}: EngagementReportProps) {
+}: HorseReportProps) {
   const sorted = [...sessions].sort((a, b) =>
     a.occurred_at.localeCompare(b.occurred_at),
   );
@@ -175,8 +166,6 @@ export function EngagementReport({
   const certified = latest && meetsCertificationThreshold(latest);
 
   const phaseFor = (id: string) => phases.find((p) => p.id === id)?.name ?? "—";
-  const riderFor = (id: string | null) =>
-    riders.find((r) => r.id === id)?.name ?? "—";
 
   const referencedQuestionIds = new Set<string>();
   for (const s of sorted) {
@@ -187,25 +176,22 @@ export function EngagementReport({
     .sort((a, b) => a.position - b.position);
 
   return (
-    <Document title={`${horse?.name ?? "Engagement"} — TQA Report`} author="TQA Tracker">
-      {/* ----- Page 1: Engagement summary ----- */}
+    <Document title={`${horse.name} — TQA Report`} author="TQA Tracker">
+      {/* ----- Page 1: Horse summary ----- */}
       <Page size="LETTER" style={styles.page}>
-        <Text style={styles.h1}>{horse?.name ?? "Engagement"}</Text>
+        <Text style={styles.h1}>{horse.name}</Text>
         <Text style={styles.muted}>
-          Training Quality Assurance — Engagement Report
-          {horse?.breed ? ` · ${horse.breed}` : ""}
+          Training Quality Assurance Report — {horse.name}
+          {horse.breed ? ` · ${horse.breed}` : ""}
         </Text>
         <Text style={styles.muted}>
-          {engagement.owner_name ? `Owner: ${engagement.owner_name}` : ""}
-          {engagement.owner_email ? ` (${engagement.owner_email})` : ""}
+          {horse.owner_name ? `Owner: ${horse.owner_name}` : ""}
+          {horse.owner_contact ? ` (${horse.owner_contact})` : ""}
         </Text>
         <Text style={styles.muted}>
-          {engagement.arrival_date
-            ? `Arrived ${formatHumanDate(engagement.arrival_date)}`
+          {horse.arrival_date
+            ? `Arrived ${formatHumanDate(horse.arrival_date)}`
             : "No arrival date"}
-          {engagement.departure_date
-            ? ` · Departs ${formatHumanDate(engagement.departure_date)}`
-            : ""}
         </Text>
 
         <ScoreLegendBlock />
@@ -266,77 +252,62 @@ export function EngagementReport({
         <Footer generatedAt={generatedAt} />
       </Page>
 
-      {/* ----- Page 2: Training log (Colt Starting Training Log replica) ----- */}
+      {/* ----- Page 2: Training log (grouped by phase) ----- */}
       <Page size="LETTER" style={styles.page} wrap>
         <Text style={styles.h1}>Training Log</Text>
         <Text style={styles.muted}>
-          {horse?.name ?? "—"}
-          {engagement.owner_name ? ` · Owner: ${engagement.owner_name}` : ""}
-          {engagement.payment_amount !== null
-            ? ` · Payment $${engagement.payment_amount.toFixed(2)}`
-            : ""}
-          {engagement.payment_method
-            ? ` (${engagement.payment_method})`
-            : ""}
+          {horse.name}
+          {horse.owner_name ? ` · Owner: ${horse.owner_name}` : ""}
         </Text>
-        {weeks.length === 0 ? (
-          <Text style={styles.muted}>No weeks defined.</Text>
+        {phases.length === 0 ? (
+          <Text style={styles.muted}>No phases defined.</Text>
         ) : (
-          weeks.map((w) => {
-            const weekSessions = sorted
-              .filter((s) => s.week_id === w.id)
-              .sort((a, b) =>
-                (a.session_number ?? 0) - (b.session_number ?? 0),
-              );
-            return (
-              <View key={w.id} style={styles.weekBlock} wrap={false}>
-                <Text style={styles.h3}>Week {w.week_number}</Text>
-                <View style={styles.logHeader}>
-                  <Text style={{ width: 18 }}>#</Text>
-                  <Text style={{ width: 70 }}>Date</Text>
-                  <Text style={{ width: 90 }}>Rider</Text>
-                  <Text style={{ width: 70 }}>Phase</Text>
-                  <Text style={{ width: 60, textAlign: "right" }}>Foundation</Text>
-                  <Text style={{ width: 70, textAlign: "right" }}>
-                    Temperament
-                  </Text>
+          [...phases]
+            .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+            .map((phase) => {
+              const phaseSessions = sorted
+                .filter((s) => s.phase_id === phase.id)
+                .sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
+              return (
+                <View key={phase.id} style={styles.weekBlock} wrap={false}>
+                  <Text style={styles.h3}>{phase.name}</Text>
+                  <View style={styles.logHeader}>
+                    <Text style={{ width: 18 }}>#</Text>
+                    <Text style={{ width: 70 }}>Date</Text>
+                    <Text style={{ width: 160 }}>Phase</Text>
+                    <Text style={{ width: 60, textAlign: "right" }}>Foundation</Text>
+                    <Text style={{ width: 70, textAlign: "right" }}>
+                      Temperament
+                    </Text>
+                  </View>
+                  {phaseSessions.length === 0 ? (
+                    <Text style={[styles.muted, { padding: 4 }]}>
+                      (no sessions)
+                    </Text>
+                  ) : (
+                    phaseSessions.map((s, i) => {
+                      const f = sessionAverage(s.ratings, "foundation");
+                      const t = sessionAverage(s.ratings, "temperament");
+                      return (
+                        <View key={s.id} style={styles.logRow}>
+                          <Text style={{ width: 18 }}>{i + 1}</Text>
+                          <Text style={{ width: 70 }}>
+                            {formatHumanDate(s.occurred_at)}
+                          </Text>
+                          <Text style={{ width: 160 }}>{phaseFor(s.phase_id)}</Text>
+                          <Text style={{ width: 60, textAlign: "right" }}>
+                            {round1(f)}
+                          </Text>
+                          <Text style={{ width: 70, textAlign: "right" }}>
+                            {round1(t)}
+                          </Text>
+                        </View>
+                      );
+                    })
+                  )}
                 </View>
-                {weekSessions.length === 0 ? (
-                  <Text style={[styles.muted, { padding: 4 }]}>
-                    (no sessions)
-                  </Text>
-                ) : (
-                  weekSessions.map((s, i) => {
-                    const f = sessionAverage(s.ratings, "foundation");
-                    const t = sessionAverage(s.ratings, "temperament");
-                    return (
-                      <View key={s.id} style={styles.logRow}>
-                        <Text style={{ width: 18 }}>
-                          {s.session_number ?? i + 1}
-                        </Text>
-                        <Text style={{ width: 70 }}>
-                          {formatHumanDate(s.occurred_at)}
-                        </Text>
-                        <Text style={{ width: 90 }}>{riderFor(s.rider_id)}</Text>
-                        <Text style={{ width: 70 }}>{phaseFor(s.phase_id)}</Text>
-                        <Text style={{ width: 60, textAlign: "right" }}>
-                          {round1(f)}
-                        </Text>
-                        <Text style={{ width: 70, textAlign: "right" }}>
-                          {round1(t)}
-                        </Text>
-                      </View>
-                    );
-                  })
-                )}
-                {w.comments && (
-                  <Text style={{ marginTop: 4, fontSize: 9, color: "#334155" }}>
-                    Comments: {w.comments}
-                  </Text>
-                )}
-              </View>
-            );
-          })
+              );
+            })
         )}
         <Footer generatedAt={generatedAt} />
       </Page>
@@ -353,7 +324,6 @@ export function EngagementReport({
               session={s}
               questions={questions}
               phaseFor={phaseFor}
-              riderFor={riderFor}
             />
           ))
         )}
@@ -365,7 +335,7 @@ export function EngagementReport({
         <Page size="LETTER" style={styles.page} wrap>
           <Text style={styles.h1}>Training Trifecta Evaluation</Text>
           <Text style={styles.muted}>
-            End-of-engagement evaluation per the TQA framework.
+            Trifecta evaluation — final evaluation per the TQA Training Trifecta.
             {" "}
             Evaluated {formatDateTime(trifecta.evaluated_at)}
           </Text>
@@ -465,14 +435,12 @@ interface SessionScoreSheetBlockProps {
   session: SessionWithRatings;
   questions: Question[];
   phaseFor: (id: string) => string;
-  riderFor: (id: string | null) => string;
 }
 
 function SessionScoreSheetBlock({
   session,
   questions,
   phaseFor,
-  riderFor,
 }: SessionScoreSheetBlockProps) {
   const phaseQuestions = questions
     .filter((q) => q.phase_id === session.phase_id)
@@ -487,8 +455,7 @@ function SessionScoreSheetBlock({
   return (
     <View wrap={false} style={{ marginBottom: 12 }}>
       <Text style={styles.h3}>
-        {phaseFor(session.phase_id)} · {formatDateTime(session.occurred_at)} ·{" "}
-        {riderFor(session.rider_id)}
+        {phaseFor(session.phase_id)} · {formatDateTime(session.occurred_at)}
       </Text>
       <Text style={styles.muted}>
         Foundation {round1(fAvg)} · Temperament {round1(tAvg)}

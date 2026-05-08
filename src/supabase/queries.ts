@@ -1,20 +1,17 @@
 import { requireSupabase } from "./client";
 import type {
-  Axis,
-  Engagement,
   Horse,
+  HorseStatus,
   ID,
   Phase,
   Question,
   Resource,
-  Rider,
   Session,
   SessionWithRatings,
   TqaScore,
   TrifectaAxisDb,
   TrifectaEvaluation,
-  TrifectaEvaluationWithScores,
-  Week,
+  TrifectaScore,
 } from "./types";
 
 const sb = () => requireSupabase();
@@ -73,65 +70,37 @@ export async function getCanonicalPhasesAndQuestions(): Promise<{
   return { phases, questions };
 }
 
-// ---------- Riders ----------
-
-export async function listRiders(includeArchived = false): Promise<Rider[]> {
-  let q = sb().from("riders").select("*");
-  if (!includeArchived) q = q.is("archived_at", null);
-  const res = await q.order("created_at", { ascending: true });
-  return throwIfError(res) ?? [];
-}
-
-export async function createRider(input: {
-  name: string;
-  role?: string;
-}): Promise<Rider> {
-  const userId = await currentUserId();
-  const res = await sb()
-    .from("riders")
-    .insert({
-      user_id: userId,
-      name: input.name.trim(),
-      role: input.role?.trim() || null,
-    })
-    .select()
-    .single();
-  return throwIfError(res);
-}
-
-export async function updateRider(
-  id: ID,
-  patch: Partial<Pick<Rider, "name" | "role">>,
-): Promise<void> {
-  const res = await sb().from("riders").update(patch).eq("id", id);
-  if (res.error) throw new Error(res.error.message);
-}
-
-export async function archiveRider(id: ID): Promise<void> {
-  const res = await sb()
-    .from("riders")
-    .update({ archived_at: new Date().toISOString() })
-    .eq("id", id);
-  if (res.error) throw new Error(res.error.message);
-}
-
-export async function unarchiveRider(id: ID): Promise<void> {
-  const res = await sb().from("riders").update({ archived_at: null }).eq("id", id);
-  if (res.error) throw new Error(res.error.message);
-}
-
-export async function deleteRider(id: ID): Promise<void> {
-  const res = await sb().from("riders").delete().eq("id", id);
-  if (res.error) throw new Error(res.error.message);
-}
-
 // ---------- Horses ----------
 
-export async function listHorses(includeArchived = false): Promise<Horse[]> {
+export interface HorseInput {
+  name: string;
+  owner_name?: string | null;
+  owner_contact?: string | null;
+  arrival_date?: string | null; // YYYY-MM-DD
+  notes?: string | null;
+  breed?: string | null;
+  dob?: string | null;
+  sex?: string | null;
+  color?: string | null;
+}
+
+export async function listHorses(opts?: { statuses?: HorseStatus[] }): Promise<Horse[]> {
   let q = sb().from("horses").select("*");
-  if (!includeArchived) q = q.is("archived_at", null);
-  const res = await q.order("created_at", { ascending: false });
-  return throwIfError(res) ?? [];
+  if (opts?.statuses) q = q.in("status", opts.statuses);
+  q = q.order("created_at", { ascending: false });
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Horse[];
+}
+
+export async function listInTrainingHorses(): Promise<Horse[]> {
+  const { data, error } = await sb()
+    .from("horses")
+    .select("*")
+    .eq("status", "in_training")
+    .order("arrival_date", { ascending: true, nullsFirst: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Horse[];
 }
 
 export async function getHorse(id: ID): Promise<Horse | null> {
@@ -139,52 +108,79 @@ export async function getHorse(id: ID): Promise<Horse | null> {
   return throwIfError(res);
 }
 
-export async function createHorse(input: {
-  name: string;
-  breed?: string;
-  dob?: string;
-  sex?: string;
-  color?: string;
-  notes?: string;
-}): Promise<Horse> {
+export async function createHorse(input: HorseInput): Promise<Horse> {
   const userId = await currentUserId();
-  const res = await sb()
+  const today = new Date().toISOString().slice(0, 10);
+  const phases = await listPhases();
+  const groundwork = phases.find((p) => p.code === "groundwork");
+
+  const { data, error } = await sb()
     .from("horses")
     .insert({
       user_id: userId,
-      name: input.name.trim(),
-      breed: input.breed?.trim() || null,
-      dob: input.dob || null,
-      sex: input.sex?.trim() || null,
-      color: input.color?.trim() || null,
-      notes: input.notes?.trim() || null,
+      name: input.name,
+      owner_name: input.owner_name ?? null,
+      owner_contact: input.owner_contact ?? null,
+      arrival_date: input.arrival_date ?? today,
+      notes: input.notes ?? null,
+      breed: input.breed ?? null,
+      dob: input.dob ?? null,
+      sex: input.sex ?? null,
+      color: input.color ?? null,
+      status: "in_training",
+      current_phase_id: groundwork?.id ?? null,
     })
     .select()
     .single();
-  return throwIfError(res);
+  if (error) throw new Error(error.message);
+  return data as Horse;
 }
 
 export async function updateHorse(
   id: ID,
   patch: Partial<
-    Pick<Horse, "name" | "breed" | "dob" | "sex" | "color" | "notes">
+    Pick<
+      Horse,
+      | "name"
+      | "breed"
+      | "dob"
+      | "sex"
+      | "color"
+      | "notes"
+      | "owner_name"
+      | "owner_contact"
+      | "arrival_date"
+      | "status"
+      | "current_phase_id"
+    >
   >,
 ): Promise<void> {
   const res = await sb().from("horses").update(patch).eq("id", id);
   if (res.error) throw new Error(res.error.message);
 }
 
-export async function archiveHorse(id: ID): Promise<void> {
-  const res = await sb()
+export async function setHorseStatus(id: ID, status: HorseStatus): Promise<void> {
+  const { error } = await sb()
     .from("horses")
-    .update({ archived_at: new Date().toISOString() })
+    .update({ status })
     .eq("id", id);
-  if (res.error) throw new Error(res.error.message);
+  if (error) throw new Error(error.message);
+}
+
+export async function setHorseCurrentPhase(id: ID, phaseId: ID): Promise<void> {
+  const { error } = await sb()
+    .from("horses")
+    .update({ current_phase_id: phaseId })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function archiveHorse(id: ID): Promise<void> {
+  await setHorseStatus(id, "archived");
 }
 
 export async function unarchiveHorse(id: ID): Promise<void> {
-  const res = await sb().from("horses").update({ archived_at: null }).eq("id", id);
-  if (res.error) throw new Error(res.error.message);
+  await setHorseStatus(id, "in_training");
 }
 
 export async function deleteHorse(id: ID): Promise<void> {
@@ -192,198 +188,22 @@ export async function deleteHorse(id: ID): Promise<void> {
   if (res.error) throw new Error(res.error.message);
 }
 
-// ---------- Engagements ----------
-
-export async function listEngagementsForHorse(horseId: ID): Promise<Engagement[]> {
-  const res = await sb()
-    .from("engagements")
-    .select("*")
-    .eq("horse_id", horseId)
-    .order("arrival_date", { ascending: false, nullsFirst: false });
-  return throwIfError(res) ?? [];
-}
-
-export async function listEngagements(includeArchived = false): Promise<Engagement[]> {
-  let q = sb().from("engagements").select("*");
-  if (!includeArchived) q = q.is("archived_at", null);
-  const res = await q.order("arrival_date", { ascending: false, nullsFirst: false });
-  return throwIfError(res) ?? [];
-}
-
-export async function getEngagement(id: ID): Promise<Engagement | null> {
-  const res = await sb()
-    .from("engagements")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  return throwIfError(res);
-}
-
-export interface EngagementInput {
-  horseId: ID;
-  ownerName?: string;
-  ownerInfo?: string;
-  ownerEmail?: string;
-  paymentMethod?: string;
-  paymentAmount?: number | null;
-  arrivalDate?: string;
-  departureDate?: string;
-  notes?: string;
-  initialWeeks?: number; // create N empty weeks alongside the engagement
-}
-
-export async function createEngagement(input: EngagementInput): Promise<Engagement> {
-  const userId = await currentUserId();
-  const res = await sb()
-    .from("engagements")
-    .insert({
-      user_id: userId,
-      horse_id: input.horseId,
-      owner_name: input.ownerName?.trim() || null,
-      owner_info: input.ownerInfo?.trim() || null,
-      owner_email: input.ownerEmail?.trim() || null,
-      payment_method: input.paymentMethod?.trim() || null,
-      payment_amount: input.paymentAmount ?? null,
-      arrival_date: input.arrivalDate || null,
-      departure_date: input.departureDate || null,
-      notes: input.notes?.trim() || null,
-    })
-    .select()
-    .single();
-  const engagement = throwIfError(res);
-  if (input.initialWeeks && input.initialWeeks > 0) {
-    const rows = Array.from({ length: input.initialWeeks }, (_, i) => ({
-      user_id: userId,
-      engagement_id: engagement.id,
-      week_number: i + 1,
-      comments: null,
-    }));
-    const wRes = await sb().from("weeks").insert(rows);
-    if (wRes.error) throw new Error(wRes.error.message);
-  }
-  return engagement;
-}
-
-export async function updateEngagement(
-  id: ID,
-  patch: Partial<{
-    ownerName: string | null;
-    ownerInfo: string | null;
-    ownerEmail: string | null;
-    paymentMethod: string | null;
-    paymentAmount: number | null;
-    arrivalDate: string | null;
-    departureDate: string | null;
-    notes: string | null;
-  }>,
-): Promise<void> {
-  const dbPatch: Record<string, unknown> = {};
-  if (patch.ownerName !== undefined) dbPatch.owner_name = patch.ownerName;
-  if (patch.ownerInfo !== undefined) dbPatch.owner_info = patch.ownerInfo;
-  if (patch.ownerEmail !== undefined) dbPatch.owner_email = patch.ownerEmail;
-  if (patch.paymentMethod !== undefined) dbPatch.payment_method = patch.paymentMethod;
-  if (patch.paymentAmount !== undefined) dbPatch.payment_amount = patch.paymentAmount;
-  if (patch.arrivalDate !== undefined) dbPatch.arrival_date = patch.arrivalDate;
-  if (patch.departureDate !== undefined) dbPatch.departure_date = patch.departureDate;
-  if (patch.notes !== undefined) dbPatch.notes = patch.notes;
-  if (Object.keys(dbPatch).length === 0) return;
-  const res = await sb().from("engagements").update(dbPatch).eq("id", id);
-  if (res.error) throw new Error(res.error.message);
-}
-
-export async function archiveEngagement(id: ID): Promise<void> {
-  const res = await sb()
-    .from("engagements")
-    .update({ archived_at: new Date().toISOString() })
-    .eq("id", id);
-  if (res.error) throw new Error(res.error.message);
-}
-
-export async function deleteEngagement(id: ID): Promise<void> {
-  const res = await sb().from("engagements").delete().eq("id", id);
-  if (res.error) throw new Error(res.error.message);
-}
-
-// ---------- Weeks ----------
-
-export async function listWeeksForEngagement(engagementId: ID): Promise<Week[]> {
-  const res = await sb()
-    .from("weeks")
-    .select("*")
-    .eq("engagement_id", engagementId)
-    .order("week_number", { ascending: true });
-  return throwIfError(res) ?? [];
-}
-
-export async function getWeek(id: ID): Promise<Week | null> {
-  const res = await sb().from("weeks").select("*").eq("id", id).maybeSingle();
-  return throwIfError(res);
-}
-
-export async function createWeek(input: {
-  engagementId: ID;
-  weekNumber: number;
-  comments?: string;
-}): Promise<Week> {
-  const userId = await currentUserId();
-  const res = await sb()
-    .from("weeks")
-    .insert({
-      user_id: userId,
-      engagement_id: input.engagementId,
-      week_number: input.weekNumber,
-      comments: input.comments?.trim() || null,
-    })
-    .select()
-    .single();
-  return throwIfError(res);
-}
-
-export async function appendWeek(engagementId: ID): Promise<Week> {
-  const existing = await listWeeksForEngagement(engagementId);
-  const next = existing.reduce((m, w) => Math.max(m, w.week_number), 0) + 1;
-  return createWeek({ engagementId, weekNumber: next });
-}
-
-export async function updateWeekComments(
-  id: ID,
-  comments: string | null,
-): Promise<void> {
-  const res = await sb()
-    .from("weeks")
-    .update({ comments: comments?.trim() ? comments.trim() : null })
-    .eq("id", id);
-  if (res.error) throw new Error(res.error.message);
-}
-
-export async function deleteWeek(id: ID): Promise<void> {
-  const res = await sb().from("weeks").delete().eq("id", id);
-  if (res.error) throw new Error(res.error.message);
+export async function listRatingsForHorse(
+  horseId: ID,
+): Promise<{ session_id: ID; phase_id: ID; score: number }[]> {
+  const { data, error } = await sb()
+    .from("ratings")
+    .select("session_id, score, sessions!inner(phase_id, horse_id)")
+    .eq("sessions.horse_id", horseId);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r: any) => ({
+    session_id: r.session_id,
+    phase_id: r.sessions.phase_id,
+    score: r.score,
+  }));
 }
 
 // ---------- Sessions ----------
-
-export async function listSessionsForEngagement(
-  engagementId: ID,
-): Promise<SessionWithRatings[]> {
-  const res = await sb()
-    .from("sessions")
-    .select("*, ratings(*)")
-    .eq("engagement_id", engagementId)
-    .order("occurred_at", { ascending: true });
-  return throwIfError(res) ?? [];
-}
-
-export async function listSessionsForWeek(
-  weekId: ID,
-): Promise<SessionWithRatings[]> {
-  const res = await sb()
-    .from("sessions")
-    .select("*, ratings(*)")
-    .eq("week_id", weekId)
-    .order("session_number", { ascending: true, nullsFirst: false });
-  return throwIfError(res) ?? [];
-}
 
 export async function listSessionsForHorse(
   horseId: ID,
@@ -406,76 +226,71 @@ export async function getSession(id: ID): Promise<SessionWithRatings | null> {
 }
 
 export interface SessionRatingInput {
-  questionId: ID;
-  axis: Axis;
-  questionTextSnapshot: string;
-  score: TqaScore;
-  comment?: string;
+  question_id: ID;
+  axis: "foundation" | "temperament";
+  question_text_snapshot: string;
+  score: number;
+  comment?: string | null;
 }
 
 export interface SessionInput {
-  engagementId: ID;
-  weekId: ID;
-  horseId: ID;
-  phaseId: ID;
-  riderId?: ID | null;
-  occurredAt?: string;
-  sessionNumber?: number;
-  notes?: string;
+  horse_id: ID;
+  phase_id: ID;
+  occurred_at: string; // ISO date or timestamp
+  notes?: string | null;
   ratings: SessionRatingInput[];
 }
 
 export async function createSession(input: SessionInput): Promise<Session> {
   const userId = await currentUserId();
-  const sessionRes = await sb()
+  const { data: session, error } = await sb()
     .from("sessions")
     .insert({
       user_id: userId,
-      engagement_id: input.engagementId,
-      week_id: input.weekId,
-      horse_id: input.horseId,
-      phase_id: input.phaseId,
-      rider_id: input.riderId ?? null,
-      occurred_at: input.occurredAt ?? new Date().toISOString(),
-      session_number: input.sessionNumber ?? null,
-      notes: input.notes?.trim() || null,
+      horse_id: input.horse_id,
+      phase_id: input.phase_id,
+      occurred_at: input.occurred_at,
+      notes: input.notes ?? null,
     })
     .select()
     .single();
-  const session = throwIfError(sessionRes);
+  if (error) throw new Error(error.message);
+
   if (input.ratings.length > 0) {
-    const ratingRows = input.ratings.map((r) => ({
-      user_id: userId,
-      session_id: session.id,
-      question_id: r.questionId,
-      axis_snapshot: r.axis,
-      question_text_snapshot: r.questionTextSnapshot,
-      score: r.score,
-      comment: r.comment?.trim() || null,
-    }));
-    const ratingRes = await sb().from("ratings").insert(ratingRows);
-    if (ratingRes.error) throw new Error(ratingRes.error.message);
+    const { error: rerr } = await sb()
+      .from("ratings")
+      .insert(
+        input.ratings.map((r) => ({
+          user_id: userId,
+          session_id: session.id,
+          question_id: r.question_id,
+          axis_snapshot: r.axis,
+          question_text_snapshot: r.question_text_snapshot,
+          score: r.score,
+          comment: r.comment ?? null,
+        })),
+      );
+    if (rerr) throw new Error(rerr.message);
   }
-  return session;
+
+  return session as Session;
 }
 
 export async function updateSession(
   id: ID,
   input: {
-    phaseId?: ID;
-    riderId?: ID | null;
-    occurredAt?: string;
-    sessionNumber?: number | null;
+    horse_id?: ID;
+    phase_id?: ID;
+    occurred_at?: string;
     notes?: string | null;
     ratings?: SessionRatingInput[];
   },
 ): Promise<void> {
   const userId = await currentUserId();
   const patch: Record<string, unknown> = {};
-  if (input.phaseId !== undefined) patch.phase_id = input.phaseId;
-  if (input.riderId !== undefined) patch.rider_id = input.riderId;
-  if (input.occurredAt !== undefined) patch.occurred_at = input.occurredAt;
-  if (input.sessionNumber !== undefined) patch.session_number = input.sessionNumber;
+  if (input.horse_id !== undefined) patch.horse_id = input.horse_id;
+  if (input.phase_id !== undefined) patch.phase_id = input.phase_id;
+  if (input.occurred_at !== undefined) patch.occurred_at = input.occurred_at;
   if (input.notes !== undefined)
     patch.notes = input.notes?.trim() ? input.notes.trim() : null;
   if (Object.keys(patch).length > 0) {
@@ -489,11 +304,11 @@ export async function updateSession(
       const ratingRows = input.ratings.map((r) => ({
         user_id: userId,
         session_id: id,
-        question_id: r.questionId,
+        question_id: r.question_id,
         axis_snapshot: r.axis,
-        question_text_snapshot: r.questionTextSnapshot,
+        question_text_snapshot: r.question_text_snapshot,
         score: r.score,
-        comment: r.comment?.trim() || null,
+        comment: r.comment ?? null,
       }));
       const ratingRes = await sb().from("ratings").insert(ratingRows);
       if (ratingRes.error) throw new Error(ratingRes.error.message);
@@ -508,15 +323,23 @@ export async function deleteSession(id: ID): Promise<void> {
 
 // ---------- Trifecta evaluations ----------
 
-export async function getTrifectaForEngagement(
-  engagementId: ID,
-): Promise<TrifectaEvaluationWithScores | null> {
-  const res = await sb()
+export async function getTrifectaForHorse(
+  horseId: ID,
+): Promise<{ evaluation: TrifectaEvaluation; scores: TrifectaScore[] } | null> {
+  const { data: evaluation } = await sb()
     .from("trifecta_evaluations")
-    .select("*, scores:trifecta_scores(*)")
-    .eq("engagement_id", engagementId)
+    .select("*")
+    .eq("horse_id", horseId)
     .maybeSingle();
-  return throwIfError(res);
+  if (!evaluation) return null;
+  const { data: scores } = await sb()
+    .from("trifecta_scores")
+    .select("*")
+    .eq("evaluation_id", evaluation.id);
+  return {
+    evaluation: evaluation as TrifectaEvaluation,
+    scores: (scores ?? []) as TrifectaScore[],
+  };
 }
 
 export interface TrifectaScoreInput {
@@ -528,57 +351,44 @@ export interface TrifectaScoreInput {
 }
 
 export async function upsertTrifectaEvaluation(input: {
-  engagementId: ID;
-  evaluatedAt?: string;
+  horse_id: ID;
   notes?: string | null;
   scores: TrifectaScoreInput[];
 }): Promise<TrifectaEvaluation> {
   const userId = await currentUserId();
-  const existing = await getTrifectaForEngagement(input.engagementId);
-  let evaluation: TrifectaEvaluation;
-  if (existing) {
-    const upd = await sb()
-      .from("trifecta_evaluations")
-      .update({
-        evaluated_at: input.evaluatedAt ?? existing.evaluated_at,
-        notes: input.notes ?? null,
-      })
-      .eq("id", existing.id)
-      .select()
-      .single();
-    evaluation = throwIfError(upd);
-  } else {
-    const ins = await sb()
-      .from("trifecta_evaluations")
-      .insert({
+  const { data: evaluation, error } = await sb()
+    .from("trifecta_evaluations")
+    .upsert(
+      {
         user_id: userId,
-        engagement_id: input.engagementId,
-        evaluated_at: input.evaluatedAt ?? new Date().toISOString(),
+        horse_id: input.horse_id,
         notes: input.notes ?? null,
-      })
-      .select()
-      .single();
-    evaluation = throwIfError(ins);
-  }
-  const del = await sb()
-    .from("trifecta_scores")
-    .delete()
-    .eq("evaluation_id", evaluation.id);
-  if (del.error) throw new Error(del.error.message);
+        evaluated_at: new Date().toISOString(),
+      },
+      { onConflict: "horse_id" },
+    )
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  await sb().from("trifecta_scores").delete().eq("evaluation_id", evaluation.id);
   if (input.scores.length > 0) {
-    const rows = input.scores.map((s) => ({
-      user_id: userId,
-      evaluation_id: evaluation.id,
-      axis: s.axis,
-      item_code: s.itemCode,
-      item_text_snapshot: s.itemTextSnapshot,
-      score: s.score,
-      comment: s.comment?.trim() || null,
-    }));
-    const ins = await sb().from("trifecta_scores").insert(rows);
-    if (ins.error) throw new Error(ins.error.message);
+    const { error: serr } = await sb()
+      .from("trifecta_scores")
+      .insert(
+        input.scores.map((s) => ({
+          user_id: userId,
+          evaluation_id: evaluation.id,
+          axis: s.axis,
+          item_code: s.itemCode,
+          item_text_snapshot: s.itemTextSnapshot,
+          score: s.score,
+          comment: s.comment?.trim() || null,
+        })),
+      );
+    if (serr) throw new Error(serr.message);
   }
-  return evaluation;
+  return evaluation as TrifectaEvaluation;
 }
 
 export async function deleteTrifectaEvaluation(id: ID): Promise<void> {

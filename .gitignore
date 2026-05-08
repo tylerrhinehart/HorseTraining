@@ -10,3 +10,6 @@ coverage
 .env.*.local
 *.log
 *.tsbuildinfo
+
+# Supabase CLI temp dir
+supabase/.temp/

@@ -4,10 +4,8 @@ import { useAuth } from "../auth/AuthProvider";
 import { supabaseConfigured } from "../supabase/client";
 import {
   listAllQuestions,
-  listEngagements,
   listHorses,
   listPhases,
-  listRiders,
 } from "../supabase/queries";
 
 type InstallEvent = Event & {
@@ -34,12 +32,10 @@ export default function Settings() {
   const exportData = async () => {
     setExportStatus(null);
     try {
-      const [horses, engagements, phases, questions, riders] = await Promise.all([
-        listHorses(true),
-        listEngagements(true),
+      const [horses, phases, questions] = await Promise.all([
+        listHorses({ statuses: ["in_training", "complete", "archived"] }),
         listPhases(),
         listAllQuestions(),
-        listRiders(true),
       ]);
       const blob = new Blob(
         [
@@ -49,10 +45,8 @@ export default function Settings() {
               exportedAt: new Date().toISOString(),
               userId: user?.id,
               horses,
-              engagements,
               phases,
               questions,
-              riders,
             },
             null,
             2,
@@ -103,15 +97,11 @@ export default function Settings() {
           <span className="card-meta">curriculum &amp; people</span>
         </div>
         <p className="muted" style={{ margin: 0, marginBottom: 12 }}>
-          Edit phases and questions, manage riders, attach resources, and
-          review the Foundation doctrine.
+          Browse horses and reference material.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <Link to="/horses" className="btn">Horses</Link>
-          <Link to="/riders" className="btn">Riders</Link>
-          <Link to="/phases" className="btn">Phases</Link>
-          <Link to="/resources" className="btn">Resources</Link>
-          <Link to="/foundation" className="btn">Foundation</Link>
+          <Link to="/reference" className="btn">Reference</Link>
         </div>
       </div>
 
@@ -121,9 +111,9 @@ export default function Settings() {
           <span className="card-meta">JSON snapshot</span>
         </div>
         <p className="muted" style={{ marginTop: 0 }}>
-          Download a JSON snapshot of your horses, engagements, phases,
-          questions, and riders. Sessions and ratings are linked from
-          engagements but exported separately on demand.
+          Download a JSON snapshot of your horses, phases, and questions.
+          Sessions and ratings are linked from horses but exported separately
+          on demand.
         </p>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button className="btn btn-leather" onClick={exportData}>

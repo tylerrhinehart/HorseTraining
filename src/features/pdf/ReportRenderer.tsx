@@ -1,32 +1,25 @@
 import { PDFDownloadLink, PDFViewer } from "@react-pdf/renderer";
 import type {
-  Engagement,
   Horse,
   Phase,
   Question,
-  Rider,
   SessionWithRatings,
   TrifectaEvaluationWithScores,
-  Week,
 } from "../../supabase/types";
-import { EngagementReport } from "./Report";
+import { HorseReport } from "./Report";
 
 interface Props {
-  engagement: Engagement;
-  horse: Horse | null;
+  horse: Horse;
   sessions: SessionWithRatings[];
-  weeks: Week[];
   phases: Phase[];
-  riders: Rider[];
   questions: Question[];
   trifecta: TrifectaEvaluationWithScores | null;
   generatedAt: string;
 }
 
 export default function ReportRenderer(props: Props) {
-  const baseName = props.horse?.name ?? "engagement";
-  const filename = `${baseName.replace(/\s+/g, "_")}_TQA_report.pdf`;
-  const doc = <EngagementReport {...props} />;
+  const filename = `${props.horse.name.replace(/\s+/g, "_")}_TQA_report.pdf`;
+  const doc = <HorseReport {...props} />;
 
   return (
     <div className="space-y-3">

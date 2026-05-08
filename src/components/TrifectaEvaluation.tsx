@@ -6,9 +6,12 @@ import {
   type TrifectaItem,
 } from "../content/trifecta";
 import {
+  getTrifectaForHorse,
+  listSessionsForHorse,
   upsertTrifectaEvaluation,
   type TrifectaScoreInput,
 } from "../supabase/queries";
+import { useQuery } from "../supabase/useQuery";
 import type {
   SessionWithRatings,
   TqaScore,
@@ -16,10 +19,8 @@ import type {
 } from "../supabase/types";
 
 interface Props {
-  engagementId: string;
-  evaluation: TrifectaEvaluationWithScores | null;
-  sessions: SessionWithRatings[];
-  onSaved: () => void;
+  horseId: string;
+  onSaved?: () => void;
 }
 
 interface DraftScore {
@@ -69,19 +70,23 @@ function suggestionFromSessions(
   return out;
 }
 
-export default function TrifectaEvaluation({
-  engagementId,
-  evaluation,
-  sessions,
-  onSaved,
-}: Props) {
-  const suggestion = useMemo(() => suggestionFromSessions(sessions), [sessions]);
+export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
+  const trifecta = useQuery(() => getTrifectaForHorse(horseId), [horseId]);
+  const sessions = useQuery(() => listSessionsForHorse(horseId), [horseId]);
+
+  const evaluation: TrifectaEvaluationWithScores | null = useMemo(() => {
+    if (!trifecta.data) return null;
+    return { ...trifecta.data.evaluation, scores: trifecta.data.scores };
+  }, [trifecta.data]);
+
   const [drafts, setDrafts] = useState<Record<string, DraftScore>>({});
-  const [notes, setNotes] = useState(evaluation?.notes ?? "");
+  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const sessionList = sessions.data ?? [];
+    const suggestion = suggestionFromSessions(sessionList);
     const next: Record<string, DraftScore> = {};
     for (const item of TRIFECTA_ITEMS) {
       const stored = evaluation?.scores.find(
@@ -93,7 +98,7 @@ export default function TrifectaEvaluation({
     }
     setDrafts(next);
     setNotes(evaluation?.notes ?? "");
-  }, [evaluation?.id, suggestion]);
+  }, [trifecta.data, sessions.data]);
 
   const grouped = useMemo(() => {
     const map: Record<string, TrifectaItem[]> = {
@@ -128,11 +133,12 @@ export default function TrifectaEvaluation({
     setSaving(true);
     try {
       await upsertTrifectaEvaluation({
-        engagementId,
+        horse_id: horseId,
         notes,
         scores,
       });
-      onSaved();
+      trifecta.refresh();
+      onSaved?.();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -140,12 +146,22 @@ export default function TrifectaEvaluation({
     }
   };
 
+  if (trifecta.loading || sessions.loading) {
+    return (
+      <div className="card">
+        <p className="muted" style={{ fontSize: 14, margin: 0 }}>
+          Loading…
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <p className="muted" style={{ fontSize: 14, margin: 0 }}>
-        End-of-engagement evaluation per the TQA Training Trifecta. Initial
-        suggestions come from this engagement's session ratings — adjust as
-        needed before sharing with the owner.
+        Final evaluation per the TQA Training Trifecta. Initial suggestions
+        come from this horse's session ratings — adjust as needed before
+        sharing with the owner.
       </p>
       {(["foundation", "task_completion", "temperament"] as const).map(
         (axis) => (

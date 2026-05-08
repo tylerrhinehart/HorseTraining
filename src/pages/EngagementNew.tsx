@@ -37,8 +37,20 @@ export default function EngagementNew() {
   });
 
   if (!horseId) return null;
-  if (horse.loading) return <div className="card">Loading…</div>;
-  if (!horse.data) return <div className="card">Horse not found.</div>;
+  if (horse.loading) {
+    return (
+      <div className="view">
+        <div className="card">Loading…</div>
+      </div>
+    );
+  }
+  if (!horse.data) {
+    return (
+      <div className="view">
+        <div className="card">Horse not found.</div>
+      </div>
+    );
+  }
 
   const onSubmit = async (values: FormValues) => {
     const engagement = await createEngagement({
@@ -59,22 +71,26 @@ export default function EngagementNew() {
   };
 
   return (
-    <div className="space-y-4 max-w-2xl">
-      <h1 className="text-2xl font-semibold">
-        New engagement — {horse.data.name}
-      </h1>
-      <p className="text-slate-400 text-sm">
+    <div className="view" style={{ maxWidth: 720 }}>
+      <div className="eyebrow">New engagement</div>
+      <h1 className="h-display">{horse.data.name}</h1>
+      <p className="muted" style={{ marginBottom: 14, fontSize: 14, maxWidth: 540 }}>
         TQA's published timeline is {TOTAL_WEEKS} weeks (Groundwork + Phase 1
         through Phase 4, two weeks each).
       </p>
-      <form className="card space-y-4" onSubmit={handleSubmit(onSubmit)}>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label htmlFor="ownerName" className="label">Owner name</label>
+
+      <form className="card" onSubmit={handleSubmit(onSubmit)}>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="ownerName" className="label">
+              Owner name
+            </label>
             <input id="ownerName" className="input" {...register("ownerName")} />
           </div>
-          <div>
-            <label htmlFor="ownerEmail" className="label">Owner email</label>
+          <div className="field">
+            <label htmlFor="ownerEmail" className="label">
+              Owner email
+            </label>
             <input
               id="ownerEmail"
               type="email"
@@ -83,8 +99,11 @@ export default function EngagementNew() {
             />
           </div>
         </div>
-        <div>
-          <label htmlFor="ownerInfo" className="label">Owner info / address</label>
+
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label htmlFor="ownerInfo" className="label">
+            Owner info / address
+          </label>
           <textarea
             id="ownerInfo"
             rows={2}
@@ -93,9 +112,11 @@ export default function EngagementNew() {
           />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label htmlFor="arrivalDate" className="label">Arrival date</label>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="arrivalDate" className="label">
+              Arrival date
+            </label>
             <input
               id="arrivalDate"
               type="date"
@@ -103,8 +124,10 @@ export default function EngagementNew() {
               {...register("arrivalDate")}
             />
           </div>
-          <div>
-            <label htmlFor="departureDate" className="label">Expected departure</label>
+          <div className="field">
+            <label htmlFor="departureDate" className="label">
+              Expected departure
+            </label>
             <input
               id="departureDate"
               type="date"
@@ -114,9 +137,11 @@ export default function EngagementNew() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label htmlFor="paymentAmount" className="label">Payment amount ($)</label>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="paymentAmount" className="label">
+              Payment amount ($)
+            </label>
             <input
               id="paymentAmount"
               type="number"
@@ -125,8 +150,10 @@ export default function EngagementNew() {
               {...register("paymentAmount")}
             />
           </div>
-          <div>
-            <label htmlFor="paymentMethod" className="label">Payment method</label>
+          <div className="field">
+            <label htmlFor="paymentMethod" className="label">
+              Payment method
+            </label>
             <input
               id="paymentMethod"
               className="input"
@@ -135,28 +162,35 @@ export default function EngagementNew() {
           </div>
         </div>
 
-        <div>
-          <label htmlFor="initialWeeks" className="label">Initial week count</label>
-          <input
-            id="initialWeeks"
-            type="number"
-            min={0}
-            max={26}
-            className="input"
-            {...register("initialWeeks", {
-              valueAsNumber: true,
-              min: { value: 0, message: "Must be 0 or greater" },
-            })}
-          />
-          {errors.initialWeeks && (
-            <p className="text-red-400 text-sm mt-1">
-              {errors.initialWeeks.message}
-            </p>
-          )}
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="initialWeeks" className="label">
+              Initial week count
+            </label>
+            <input
+              id="initialWeeks"
+              type="number"
+              min={0}
+              max={26}
+              className="input"
+              {...register("initialWeeks", {
+                valueAsNumber: true,
+                min: { value: 0, message: "Must be 0 or greater" },
+              })}
+            />
+            {errors.initialWeeks && (
+              <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+                {errors.initialWeeks.message}
+              </p>
+            )}
+          </div>
+          <div className="field" />
         </div>
 
-        <div>
-          <label htmlFor="notes" className="label">Notes</label>
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label htmlFor="notes" className="label">
+            Notes
+          </label>
           <textarea
             id="notes"
             rows={2}
@@ -165,17 +199,24 @@ export default function EngagementNew() {
           />
         </div>
 
-        <div className="flex gap-2 justify-end">
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+            marginTop: 4,
+          }}
+        >
           <button
             type="button"
-            className="btn-ghost"
+            className="btn btn-ghost"
             onClick={() => navigate(-1)}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="btn-primary"
+            className="btn btn-leather"
             disabled={isSubmitting}
           >
             {isSubmitting ? "Saving…" : "Start engagement"}

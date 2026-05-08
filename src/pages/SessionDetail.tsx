@@ -53,12 +53,22 @@ export default function SessionDetail() {
     setNotes(session.data.notes ?? "");
   }, [session.data?.id]);
 
-  if (session.loading) return <div className="card">Loading…</div>;
+  if (session.loading) {
+    return (
+      <div className="view">
+        <div className="card">Loading…</div>
+      </div>
+    );
+  }
   if (!session.data) {
     return (
-      <div className="card">
-        Session not found.{" "}
-        <Link to="/horses" className="underline">Back</Link>
+      <div className="view">
+        <div className="card">
+          Session not found.{" "}
+          <Link to="/horses" style={{ color: "var(--leather)" }}>
+            Back
+          </Link>
+        </div>
       </div>
     );
   }
@@ -99,48 +109,53 @@ export default function SessionDetail() {
   const tAvg = sessionAverage(session.data.ratings, "temperament");
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Session</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {phase.data?.name ?? "—"} ·{" "}
-            {formatDateTime(session.data.occurred_at)}
-            {rider ? ` · ${rider.name}` : ""}
-          </p>
-          <p className="text-sm text-slate-300 mt-1">
-            Foundation {round1(fAvg)} · Temperament {round1(tAvg)}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            to={`/engagements/${session.data.engagement_id}`}
-            className="btn-ghost text-sm"
+    <div className="view">
+      <div className="eyebrow">Session</div>
+      <h1 className="h-display">{phase.data?.name ?? "Session"}</h1>
+      <p className="muted" style={{ margin: "4px 0 4px", fontSize: 14 }}>
+        {formatDateTime(session.data.occurred_at)}
+        {rider ? ` · ${rider.name}` : ""}
+      </p>
+      <p className="mono" style={{ margin: "0 0 14px", fontSize: 13 }}>
+        Foundation {round1(fAvg)} · Temperament {round1(tAvg)}
+      </p>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          justifyContent: "flex-end",
+          marginBottom: 14,
+        }}
+      >
+        <Link
+          to={`/engagements/${session.data.engagement_id}`}
+          className="btn btn-ghost btn-sm"
+        >
+          ← Back to engagement
+        </Link>
+        {!editing ? (
+          <button
+            className="btn btn-sm"
+            onClick={() => setEditing(true)}
           >
-            ← Back to engagement
-          </Link>
-          {!editing ? (
-            <button
-              className="btn-secondary text-sm"
-              onClick={() => setEditing(true)}
-            >
-              Edit
-            </button>
-          ) : (
-            <button
-              className="btn-ghost text-sm"
-              onClick={() => {
-                setEditing(false);
-                session.refresh();
-              }}
-            >
-              Cancel edit
-            </button>
-          )}
-          <button className="btn-danger text-sm" onClick={remove}>
-            Delete
+            Edit
           </button>
-        </div>
+        ) : (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setEditing(false);
+              session.refresh();
+            }}
+          >
+            Cancel edit
+          </button>
+        )}
+        <button className="btn btn-danger btn-sm" onClick={remove}>
+          Delete
+        </button>
       </div>
 
       <PhaseScoreSheet
@@ -151,7 +166,7 @@ export default function SessionDetail() {
         readOnly={!editing}
       />
 
-      <div className="card space-y-2">
+      <div className="card">
         <div className="label">Session notes</div>
         {editing ? (
           <textarea
@@ -161,18 +176,27 @@ export default function SessionDetail() {
             onChange={(e) => setNotes(e.target.value)}
           />
         ) : session.data.notes ? (
-          <p className="text-sm text-slate-300 whitespace-pre-wrap">
+          <p style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 14 }}>
             {session.data.notes}
           </p>
         ) : (
-          <p className="text-sm text-slate-500">No notes.</p>
+          <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+            No notes.
+          </p>
         )}
       </div>
 
       {editing && (
-        <div className="flex justify-end gap-2">
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+            marginTop: 12,
+          }}
+        >
           <button
-            className="btn-ghost"
+            className="btn btn-ghost"
             onClick={() => {
               setEditing(false);
               session.refresh();
@@ -180,7 +204,11 @@ export default function SessionDetail() {
           >
             Cancel
           </button>
-          <button className="btn-primary" disabled={saving} onClick={save}>
+          <button
+            className="btn btn-leather"
+            disabled={saving}
+            onClick={save}
+          >
             {saving ? "Saving…" : "Save changes"}
           </button>
         </div>

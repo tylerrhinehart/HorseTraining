@@ -22,12 +22,16 @@ export default function PhaseDetail() {
   );
 
   if (!id) return null;
-  if (phase.loading) return <div className="card">Loading…</div>;
+  if (phase.loading) return <div className="view"><div className="card">Loading…</div></div>;
   if (!phase.data) {
     return (
-      <div className="card">
-        Phase not found.{" "}
-        <Link to="/phases" className="underline">Back</Link>
+      <div className="view">
+        <div className="card">
+          Phase not found.{" "}
+          <Link to="/phases" style={{ color: "var(--leather)" }}>
+            Back
+          </Link>
+        </div>
       </div>
     );
   }
@@ -36,36 +40,52 @@ export default function PhaseDetail() {
   const temperament = (questions.data ?? []).filter((q) => q.axis === "temperament");
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">{phase.data.name}</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Canonical TQA score-sheet items (read-only). Attach training videos
-            or links below.
-          </p>
-        </div>
-        <Link to="/phases" className="btn-ghost text-sm">
+    <div className="view">
+      <div className="eyebrow">Phase detail</div>
+      <h1 className="h-display">{phase.data.name}</h1>
+      <p className="muted" style={{ marginBottom: 14, maxWidth: 640 }}>
+        Canonical TQA score-sheet items (read-only). Attach training videos
+        or links below.
+      </p>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginBottom: 12,
+        }}
+      >
+        <Link to="/phases" className="btn btn-ghost btn-sm">
           ← All phases
         </Link>
       </div>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section
+        style={{
+          display: "grid",
+          gap: 14,
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          marginBottom: 14,
+        }}
+      >
         <ItemColumn title="Foundation / Task Completion" questions={foundation} />
         <ItemColumn title="Temperament / Driving Factors" questions={temperament} />
       </section>
 
-      <section className="space-y-3">
-        <h2 className="font-semibold">Phase resources</h2>
-        <p className="text-xs text-slate-400">
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">Phase resources</h2>
+          <span className="card-meta">videos &amp; links</span>
+        </div>
+        <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
           Videos and links that apply to this phase.
         </p>
-        <ResourceForm phaseId={id} onCreated={resources.refresh} />
-        <ResourceListView
-          resources={resources.data ?? []}
-          onDeleted={resources.refresh}
-        />
-      </section>
+      </div>
+      <ResourceForm phaseId={id} onCreated={resources.refresh} />
+      <ResourceListView
+        resources={resources.data ?? []}
+        onDeleted={resources.refresh}
+      />
     </div>
   );
 }
@@ -78,21 +98,56 @@ function ItemColumn({
   questions: Question[];
 }) {
   return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+    <div>
+      <h3
+        className="mono"
+        style={{
+          fontSize: 11,
+          letterSpacing: 1.5,
+          textTransform: "uppercase",
+          color: "var(--muted)",
+          margin: "0 0 8px",
+        }}
+      >
         {title}
       </h3>
-      <ol className="card space-y-2">
-        {questions.map((q) => (
+      <ol
+        className="card"
+        style={{
+          margin: 0,
+          listStyle: "none",
+          padding: 14,
+        }}
+      >
+        {questions.map((q, i) => (
           <li
             key={q.id}
-            className="flex justify-between gap-3 text-sm border-b border-slate-800 pb-2 last:border-b-0 last:pb-0"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              fontSize: 13,
+              paddingTop: i === 0 ? 0 : 8,
+              paddingBottom: i === questions.length - 1 ? 0 : 8,
+              borderBottom:
+                i === questions.length - 1
+                  ? "none"
+                  : "1px solid var(--line)",
+            }}
           >
             <span>
-              <span className="text-slate-500 mr-2">{q.position + 1}.</span>
+              <span
+                className="mono muted"
+                style={{ marginRight: 8, fontSize: 11 }}
+              >
+                {q.position + 1}.
+              </span>
               {q.text}
             </span>
-            <span className="text-xs text-slate-500 whitespace-nowrap">
+            <span
+              className="mono muted"
+              style={{ fontSize: 11, whiteSpace: "nowrap" }}
+            >
               {q.low_label} / {q.high_label}
             </span>
           </li>
@@ -111,21 +166,21 @@ function ResourceListView({
 }) {
   if (resources.length === 0) {
     return (
-      <div className="card text-center text-slate-400">
+      <div className="card muted" style={{ textAlign: "center" }}>
         No resources yet.
       </div>
     );
   }
   return (
-    <div className="space-y-2">
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {resources.map((r) => (
-        <div key={r.id} className="card flex items-center gap-3">
+        <div
+          key={r.id}
+          className="card"
+          style={{ display: "flex", alignItems: "center", gap: 12 }}
+        >
           <span
-            className={
-              r.kind === "youtube"
-                ? "pill bg-red-600/20 text-red-200"
-                : "pill bg-slate-700 text-slate-300"
-            }
+            className={r.kind === "youtube" ? "pill pill-leather" : "pill pill-muted"}
           >
             {r.kind === "youtube" ? "YouTube" : "Link"}
           </span>
@@ -133,12 +188,17 @@ function ResourceListView({
             href={r.url}
             target="_blank"
             rel="noreferrer"
-            className="flex-1 text-slate-100 hover:underline"
+            style={{
+              flex: 1,
+              color: "var(--ink)",
+              textDecoration: "none",
+              fontWeight: 600,
+            }}
           >
             {r.title}
           </a>
           <button
-            className="btn-danger text-xs"
+            className="btn btn-danger btn-sm"
             onClick={async () => {
               if (!confirm(`Delete "${r.title}"?`)) return;
               await deleteResource(r.id);

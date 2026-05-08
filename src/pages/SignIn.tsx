@@ -12,7 +12,8 @@ export default function SignIn() {
   const [busy, setBusy] = useState(false);
 
   if (user) {
-    const dest = (location.state as { from?: Location } | null)?.from?.pathname ?? "/";
+    const dest =
+      (location.state as { from?: Location } | null)?.from?.pathname ?? "/";
     return <Navigate to={dest} replace />;
   }
 
@@ -31,16 +32,35 @@ export default function SignIn() {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-12 space-y-4">
-      <h1 className="text-2xl font-semibold">Sign in</h1>
+    <div className="view" style={{ maxWidth: 420, margin: "60px auto 0" }}>
+      <div className="brand" style={{ justifyContent: "center", marginBottom: 18 }}>
+        <span className="brand-mark">T</span>
+        <div>
+          <div className="brand-name">TQA Tracker</div>
+          <div className="brand-sub">Industry standard · 5 phases</div>
+        </div>
+      </div>
+      <h1 className="h-display" style={{ textAlign: "center" }}>
+        Sign in
+      </h1>
       {!configured && (
-        <p className="text-sm text-amber-300">
-          Supabase isn't configured yet. Sign-in won't work until env vars are set.
+        <p
+          className="card mono"
+          style={{
+            color: "var(--rust)",
+            fontSize: 12,
+            marginBottom: 12,
+          }}
+        >
+          Supabase isn't configured yet. Sign-in won't work until env vars are
+          set.
         </p>
       )}
-      <form className="card space-y-3" onSubmit={onSubmit}>
-        <div>
-          <label htmlFor="email" className="label">Email</label>
+      <form className="card" onSubmit={onSubmit}>
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label htmlFor="email" className="label">
+            Email
+          </label>
           <input
             id="email"
             type="email"
@@ -51,8 +71,10 @@ export default function SignIn() {
             required
           />
         </div>
-        <div>
-          <label htmlFor="password" className="label">Password</label>
+        <div className="field" style={{ marginBottom: 14 }}>
+          <label htmlFor="password" className="label">
+            Password
+          </label>
           <input
             id="password"
             type="password"
@@ -63,14 +85,32 @@ export default function SignIn() {
             required
           />
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <button className="btn-primary w-full" type="submit" disabled={busy}>
+        {error && (
+          <p
+            style={{
+              color: "var(--bad)",
+              fontSize: 13,
+              marginBottom: 8,
+            }}
+          >
+            {error}
+          </p>
+        )}
+        <button
+          className="btn btn-leather"
+          type="submit"
+          disabled={busy}
+          style={{ width: "100%", justifyContent: "center" }}
+        >
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
-      <p className="text-sm text-slate-400 text-center">
+      <p
+        className="muted"
+        style={{ textAlign: "center", fontSize: 13, marginTop: 14 }}
+      >
         No account?{" "}
-        <Link to="/sign-up" className="underline text-brand-500">
+        <Link to="/sign-up" style={{ color: "var(--leather)" }}>
           Sign up
         </Link>
       </p>

@@ -977,6 +977,30 @@
     font-size: 22px;
   }
 
+  /* Alert blocks — destructive treatment for auth + form-level errors. */
+  .alert-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: color-mix(in oklab, var(--bad) 10%, var(--paper));
+    border: 1px solid color-mix(in oklab, var(--bad) 35%, var(--paper));
+    border-left: 3px solid var(--bad);
+    color: var(--bad);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .alert-error-icon {
+    flex-shrink: 0;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .alert-error-body {
+    flex: 1;
+    min-width: 0;
+  }
+
   /* Reference page anchor pills — sticky under topbar with scroll-spy state */
   .ref-anchor-nav {
     position: sticky;

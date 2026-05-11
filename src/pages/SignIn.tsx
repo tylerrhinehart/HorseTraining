@@ -122,15 +122,16 @@ export default function SignIn() {
           )}
         </div>
         {submitError && (
-          <p
-            style={{
-              color: "var(--bad)",
-              fontSize: 13,
-              marginBottom: 8,
-            }}
+          <div
+            role="alert"
+            className="alert-error"
+            style={{ marginBottom: 12 }}
           >
-            {submitError}
-          </p>
+            <span aria-hidden="true" className="alert-error-icon">
+              ⚠
+            </span>
+            <div className="alert-error-body">{submitError}</div>
+          </div>
         )}
         <button
           className="btn btn-leather"

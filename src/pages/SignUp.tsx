@@ -104,9 +104,16 @@ export default function SignUp() {
           )}
         </div>
         {submitError && (
-          <p style={{ color: "var(--bad)", fontSize: 13, marginBottom: 8 }}>
-            {submitError}
-          </p>
+          <div
+            role="alert"
+            className="alert-error"
+            style={{ marginBottom: 12 }}
+          >
+            <span aria-hidden="true" className="alert-error-icon">
+              ⚠
+            </span>
+            <div className="alert-error-body">{submitError}</div>
+          </div>
         )}
         {info && (
           <p style={{ color: "var(--ok)", fontSize: 13, marginBottom: 8 }}>

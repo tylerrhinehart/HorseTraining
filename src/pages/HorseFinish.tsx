@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { getHorse, setHorseStatus } from "../supabase/queries";
+import { getHorse, getTrifectaForHorse, setHorseStatus } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import TrifectaEvaluation from "../components/TrifectaEvaluation";
 
@@ -26,6 +26,21 @@ export default function HorseFinish() {
     () => (id ? getHorse(id) : Promise.resolve(null)),
     [id],
   );
+
+  const trifectaQ = useQuery(
+    () => (id ? getTrifectaForHorse(id) : Promise.resolve(null)),
+    [id],
+  );
+
+  const autoRedirectedRef = useRef(false);
+  useEffect(() => {
+    if (autoRedirectedRef.current) return;
+    if (trifectaQ.loading) return;
+    if (!trifectaQ.data) return;
+    if (searchParams.get("step") !== null) return;
+    autoRedirectedRef.current = true;
+    setSearchParams({ step: "2" }, { replace: true });
+  }, [trifectaQ.loading, trifectaQ.data, searchParams, setSearchParams]);
 
   if (!id) return null;
 

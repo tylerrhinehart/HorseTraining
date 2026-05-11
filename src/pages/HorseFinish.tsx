@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getHorse, getTrifectaForHorse, setHorseStatus } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import TrifectaEvaluation from "../components/TrifectaEvaluation";
@@ -62,6 +62,13 @@ export default function HorseFinish() {
         </div>
       </div>
     );
+  }
+
+  // Guard: step 3 (the "Training complete" screen) is only valid once the
+  // horse has actually been marked complete. Direct navigation otherwise
+  // bounces back to step 2 so the trainer must explicitly mark complete.
+  if (step === 3 && horse.data.status !== "complete") {
+    return <Navigate replace to={`/horses/${id}/finish?step=2`} />;
   }
 
   if (step === 1) {

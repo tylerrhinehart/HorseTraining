@@ -75,7 +75,7 @@ export default function Settings() {
         <div className="card-head">
           <h2 className="card-title">Account</h2>
           <span className="card-meta">
-            {supabaseConfigured ? "supabase ✓" : "not configured"}
+            {supabaseConfigured ? "synced ✓" : "not configured"}
           </span>
         </div>
         <p style={{ margin: 0 }}>

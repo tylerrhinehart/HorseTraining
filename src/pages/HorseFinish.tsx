@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getHorse, setHorseStatus } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import TrifectaEvaluation from "../components/TrifectaEvaluation";
@@ -7,7 +7,19 @@ import TrifectaEvaluation from "../components/TrifectaEvaluation";
 export default function HorseFinish() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stepParam = Number(searchParams.get("step") || "1");
+  const step: 1 | 2 | 3 = stepParam === 2 ? 2 : stepParam === 3 ? 3 : 1;
+  const setStep = (n: 1 | 2 | 3) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("step", String(n));
+        return next;
+      },
+      { replace: false },
+    );
+  };
   const [marking, setMarking] = useState(false);
 
   const horse = useQuery(

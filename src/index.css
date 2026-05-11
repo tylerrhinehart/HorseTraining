@@ -964,4 +964,35 @@
     margin: 0 0 12px;
     font-size: 22px;
   }
+
+  /* Reference page anchor pills — sticky under topbar with scroll-spy state */
+  .ref-anchor-nav {
+    position: sticky;
+    top: 60px;
+    z-index: 20;
+    display: flex;
+    gap: 8px;
+    margin: 0 -20px 24px;
+    padding: 10px 20px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  @media (min-width: 720px) {
+    .ref-anchor-nav {
+      margin-left: -32px;
+      margin-right: -32px;
+      padding-left: 32px;
+      padding-right: 32px;
+    }
+  }
+  .ref-pill.is-active {
+    background: var(--leather);
+    color: var(--paper);
+    border-color: var(--leather);
+  }
+  .ref-pill.is-active:hover {
+    background: var(--leather-2);
+    border-color: var(--leather-2);
+  }
 }

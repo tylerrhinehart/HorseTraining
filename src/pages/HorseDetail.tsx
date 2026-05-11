@@ -38,6 +38,8 @@ export default function HorseDetail() {
   const navigate = useNavigate();
   const [, setActiveId] = useActiveHorseId();
   const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
+  const [advanceDialogOpen, setAdvanceDialogOpen] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
 
   const horse = useQuery(
     () => (id ? getHorse(id) : Promise.resolve(null)),
@@ -177,17 +179,32 @@ export default function HorseDetail() {
     return `${sign}${n.toFixed(1)}`;
   };
 
-  const handleAdvance = async () => {
+  const handleAdvance = () => {
     if (!currentPhase || !nextP) return;
-    if (!isAtOrAboveStandard(rolling7Average)) {
-      const ok = window.confirm(
-        `This phase's average is ${formatSignedAvg(rolling7Average)}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP.name}?`,
-      );
-      if (!ok) return;
+    if (isAtOrAboveStandard(rolling7Average)) {
+      // Recommended — advance immediately without confirm
+      void performAdvance();
+      return;
     }
-    await setHorseCurrentPhase(horse.data!.id, nextP.id);
-    horse.refresh();
+    setAdvanceDialogOpen(true);
   };
+
+  const performAdvance = async () => {
+    if (!currentPhase || !nextP) return;
+    setAdvancing(true);
+    try {
+      await setHorseCurrentPhase(horse.data!.id, nextP.id);
+      horse.refresh();
+    } finally {
+      setAdvancing(false);
+      setAdvanceDialogOpen(false);
+    }
+  };
+
+  const advanceDialogCopy =
+    rolling7Average == null
+      ? `No sessions logged in this phase yet. Advance to ${nextP?.name ?? "the next phase"} anyway?`
+      : `This phase's average is ${formatSignedAvg(rolling7Average)}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP?.name ?? "the next phase"}?`;
 
   const handleArchive = async () => {
     await archiveHorse(id);
@@ -755,6 +772,53 @@ export default function HorseDetail() {
           </button>
         </div>
       </details>
+
+      {/* ── Advance confirmation dialog ── */}
+      {advanceDialogOpen && nextP && (
+        <div
+          className="scrim"
+          onClick={() => {
+            if (!advancing) setAdvanceDialogOpen(false);
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="advance-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="advance-dialog-title">Advance to {nextP.name}?</h3>
+            <p style={{ margin: "0 0 16px", color: "var(--ink-2)", fontSize: 14 }}>
+              {advanceDialogCopy}
+            </p>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setAdvanceDialogOpen(false)}
+                disabled={advancing}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-leather btn-sm"
+                onClick={performAdvance}
+                disabled={advancing}
+              >
+                {advancing ? "Advancing…" : `Advance to ${nextP.name}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

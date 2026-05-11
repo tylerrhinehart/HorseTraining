@@ -86,6 +86,13 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (savedAt === null) return;
+    const t = setTimeout(() => setSavedAt(null), 3000);
+    return () => clearTimeout(t);
+  }, [savedAt]);
 
   useEffect(() => {
     const sessionList = sessions.data ?? [];
@@ -141,6 +148,7 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
         scores,
       });
       trifecta.refresh();
+      setSavedAt(Date.now());
       onSaved?.();
     } catch (e) {
       setError((e as Error).message);
@@ -285,7 +293,23 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
       {error && (
         <p style={{ color: "var(--bad)", fontSize: 13, margin: 0 }}>{error}</p>
       )}
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        {savedAt && (
+          <span
+            role="status"
+            aria-live="polite"
+            style={{ color: "var(--ok)", fontSize: 13 }}
+          >
+            Saved ✓
+          </span>
+        )}
         <button className="btn btn-leather" disabled={saving} onClick={save}>
           {saving ? "Saving…" : evaluation ? "Update evaluation" : "Save evaluation"}
         </button>

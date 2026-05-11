@@ -40,6 +40,13 @@ export default function HorseDetail() {
   const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
   const [advanceDialogOpen, setAdvanceDialogOpen] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  const [editSavedAt, setEditSavedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (editSavedAt === null) return;
+    const t = setTimeout(() => setEditSavedAt(null), 3000);
+    return () => clearTimeout(t);
+  }, [editSavedAt]);
 
   const horse = useQuery(
     () => (id ? getHorse(id) : Promise.resolve(null)),
@@ -236,6 +243,7 @@ export default function HorseDetail() {
       notes: values.notes || null,
     });
     horse.refresh();
+    setEditSavedAt(Date.now());
   };
 
   const avgColor = (avg: number | null): string => {
@@ -717,8 +725,22 @@ export default function HorseDetail() {
             />
           </div>
           <div
-            style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: 12,
+            }}
           >
+            {editSavedAt && (
+              <span
+                role="status"
+                aria-live="polite"
+                style={{ color: "var(--ok)", fontSize: 13 }}
+              >
+                Saved ✓
+              </span>
+            )}
             <button
               type="submit"
               className="btn btn-leather btn-sm"

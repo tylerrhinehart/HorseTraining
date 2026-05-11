@@ -640,8 +640,12 @@ export default function HorseDetail() {
       <div style={{ marginTop: "var(--gap)" }}>
         <Link
           to={`/horses/${id}/finish`}
-          className="btn btn-primary"
-          style={{ width: "100%", justifyContent: "center" }}
+          className="btn"
+          style={{
+            width: "100%",
+            justifyContent: "center",
+            background: "transparent",
+          }}
         >
           Finish training
         </Link>

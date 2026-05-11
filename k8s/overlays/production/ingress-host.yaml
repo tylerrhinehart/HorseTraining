@@ -1,0 +1,16 @@
+# Placeholder patch. The base configmap already targets tqa.tylerrhinehart.com.
+# If a future overlay (staging, etc.) needs a different hostname, replace
+# the contents here with:
+#
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: cloudflared-config
+# data:
+#   config.yaml: |
+#     ...override...
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+data: {}

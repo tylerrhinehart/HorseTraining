@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: horsetraining
+resources:
+  - ../../base
+patches:
+  - path: ingress-host.yaml
+    target:
+      kind: ConfigMap
+      name: cloudflared-config
+images:
+  - name: k3s01.local.tylerrhinehart.com:5000/horsetraining/web
+    newTag: latest

@@ -85,7 +85,13 @@ export default function Settings() {
           </strong>
         </p>
         <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-          <button className="btn btn-ghost" onClick={signOut}>
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              if (!window.confirm("Sign out?")) return;
+              signOut();
+            }}
+          >
             Sign out
           </button>
         </div>

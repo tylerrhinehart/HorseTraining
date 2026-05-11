@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import RatingInput from "./RatingInput";
 import {
   TRIFECTA_AXIS_LABELS,
@@ -87,12 +87,25 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Holds the pending onSaved callback so the "Saved ✓" badge stays visible
+  // for ~1.2s before the parent advances to the next step.
+  const onSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (savedAt === null) return;
     const t = setTimeout(() => setSavedAt(null), 3000);
     return () => clearTimeout(t);
   }, [savedAt]);
+
+  // Clean up any pending onSaved timer if the component unmounts mid-delay.
+  useEffect(() => {
+    return () => {
+      if (onSavedTimerRef.current !== null) {
+        clearTimeout(onSavedTimerRef.current);
+        onSavedTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const sessionList = sessions.data ?? [];
@@ -149,7 +162,17 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
       });
       trifecta.refresh();
       setSavedAt(Date.now());
-      onSaved?.();
+      // Delay onSaved so the "Saved ✓" badge is visible to the user before
+      // the parent advances steps / unmounts this component.
+      if (onSaved) {
+        if (onSavedTimerRef.current !== null) {
+          clearTimeout(onSavedTimerRef.current);
+        }
+        onSavedTimerRef.current = setTimeout(() => {
+          onSavedTimerRef.current = null;
+          onSaved();
+        }, 1200);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {

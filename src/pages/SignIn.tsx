@@ -1,15 +1,25 @@
-import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
+
+interface FormValues {
+  email: string;
+  password: string;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignIn() {
   const { signIn, user, configured } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>({ mode: "onSubmit" });
 
   if (user) {
     const dest =
@@ -17,17 +27,13 @@ export default function SignIn() {
     return <Navigate to={dest} replace />;
   }
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
+  const onSubmit = async (values: FormValues) => {
+    setSubmitError(null);
     try {
-      await signIn(email, password);
+      await signIn(values.email, values.password);
       navigate("/");
     } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
+      setSubmitError((err as Error).message);
     }
   };
 
@@ -56,7 +62,7 @@ export default function SignIn() {
           set.
         </p>
       )}
-      <form className="card" onSubmit={onSubmit}>
+      <form className="card" noValidate onSubmit={handleSubmit(onSubmit)}>
         <div className="field" style={{ marginBottom: 12 }}>
           <label htmlFor="email" className="label">
             Email
@@ -66,10 +72,20 @@ export default function SignIn() {
             type="email"
             autoComplete="email"
             className="input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+            aria-invalid={errors.email ? true : undefined}
+            {...register("email", {
+              required: "Email is required",
+              pattern: {
+                value: EMAIL_RE,
+                message: "Enter a valid email address",
+              },
+            })}
           />
+          {errors.email && (
+            <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+              {errors.email.message}
+            </p>
+          )}
         </div>
         <div className="field" style={{ marginBottom: 14 }}>
           <label htmlFor="password" className="label">
@@ -80,12 +96,16 @@ export default function SignIn() {
             type="password"
             autoComplete="current-password"
             className="input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+            aria-invalid={errors.password ? true : undefined}
+            {...register("password", { required: "Password is required" })}
           />
+          {errors.password && (
+            <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+              {errors.password.message}
+            </p>
+          )}
         </div>
-        {error && (
+        {submitError && (
           <p
             style={{
               color: "var(--bad)",
@@ -93,16 +113,16 @@ export default function SignIn() {
               marginBottom: 8,
             }}
           >
-            {error}
+            {submitError}
           </p>
         )}
         <button
           className="btn btn-leather"
           type="submit"
-          disabled={busy}
+          disabled={isSubmitting}
           style={{ width: "100%", justifyContent: "center" }}
         >
-          {busy ? "Signing in…" : "Sign in"}
+          {isSubmitting ? "Signing in…" : "Sign in"}
         </button>
       </form>
       <p

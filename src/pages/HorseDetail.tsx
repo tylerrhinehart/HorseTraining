@@ -56,8 +56,8 @@ export default function HorseDetail() {
   );
 
   useEffect(() => {
-    if (id && horse.data && horse.data.status !== "archived") setActiveId(id);
-  }, [id, horse.data, setActiveId]);
+    if (id) setActiveId(id);
+  }, [id, setActiveId]);
 
   const {
     register,

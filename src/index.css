@@ -355,6 +355,18 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+  /* Consistent focus ring matching .input:focus — brown, not browser-default blue. */
+  .btn:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--leather);
+    outline-offset: 2px;
+    border-radius: inherit;
+  }
+  /* Rating dots have their own visual treatment; keep their existing ring tight. */
+  .dot:focus-visible {
+    outline: 2px solid var(--leather);
+    outline-offset: 1px;
+  }
   .btn-primary {
     background: var(--ink);
     color: var(--paper);

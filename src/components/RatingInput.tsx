@@ -59,8 +59,8 @@ export default function RatingInput({
         </div>
       )}
       <div
-        role="radiogroup"
-        aria-label={label ?? name}
+        role="group"
+        aria-label={label ?? name ?? "Rate -3 to +3"}
         className={`rating rating--dots ${resolvedDensity}`}
       >
         {TQA_SCORES.map((score) => {

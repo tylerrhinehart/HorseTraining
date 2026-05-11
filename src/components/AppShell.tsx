@@ -67,7 +67,7 @@ export default function AppShell({ children }: Props) {
                   className="topbar-horse"
                 >
                   <span style={{ display: "flex", flexDirection: "column" }}>
-                    <span className="topbar-horse-eyebrow">Today</span>
+                    <span className="topbar-horse-eyebrow">Active</span>
                     <strong>{activeHorse.name}</strong>
                   </span>
                   <HorseAvatar

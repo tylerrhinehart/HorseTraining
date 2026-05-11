@@ -1,6 +1,6 @@
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 
 interface FormValues {
@@ -15,25 +15,41 @@ export default function SignIn() {
   const location = useLocation();
   const navigate = useNavigate();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // True while a user-initiated submit is in flight; lets the explicit
+  // post-submit navigate own the destination instead of the render-time guard.
+  const submittingRef = useRef(false);
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ mode: "onSubmit" });
 
-  if (user) {
-    const dest =
-      (location.state as { from?: Location } | null)?.from?.pathname ?? "/";
-    return <Navigate to={dest} replace />;
+  // Only restore state.from when RequireAuth set it AND the user wasn't sent
+  // here by their own sign-out (we can't perfectly detect that, so default to
+  // "/" when no protected-route hint exists).
+  const fromPathname =
+    (location.state as { from?: { pathname?: string } } | null)?.from
+      ?.pathname ?? null;
+  const safeFrom =
+    fromPathname && fromPathname !== "/sign-in" && fromPathname !== "/sign-up"
+      ? fromPathname
+      : null;
+
+  if (user && !submittingRef.current) {
+    // Already authenticated landing on /sign-in (e.g. back-button) — go home.
+    return <Navigate to="/" replace />;
   }
 
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null);
+    submittingRef.current = true;
     try {
       await signIn(values.email, values.password);
-      navigate("/");
+      navigate(safeFrom ?? "/", { replace: true });
     } catch (err) {
       setSubmitError((err as Error).message);
+    } finally {
+      submittingRef.current = false;
     }
   };
 

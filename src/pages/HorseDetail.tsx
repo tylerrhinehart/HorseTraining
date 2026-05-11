@@ -508,25 +508,31 @@ export default function HorseDetail() {
           </div>
 
           {/* Phase running average */}
-          <div style={{ marginBottom: 12 }}>
-            <span
-              style={{
-                fontFamily: "var(--font-display)",
-                fontSize: 32,
-                fontWeight: 600,
-                color: avgColor(currentPhaseAvg),
-                letterSpacing: "0.2px",
-              }}
-            >
-              {round1(currentPhaseAvg)}
-            </span>
-            <span
-              className="mono muted"
-              style={{ fontSize: 11, marginLeft: 8 }}
-            >
-              phase average
-            </span>
-          </div>
+          {currentPhaseSessions.length > 0 ? (
+            <div style={{ marginBottom: 12 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: 32,
+                  fontWeight: 600,
+                  color: avgColor(currentPhaseAvg),
+                  letterSpacing: "0.2px",
+                }}
+              >
+                {round1(currentPhaseAvg)}
+              </span>
+              <span
+                className="mono muted"
+                style={{ fontSize: 11, marginLeft: 8 }}
+              >
+                phase average
+              </span>
+            </div>
+          ) : (
+            <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>
+              No sessions yet
+            </p>
+          )}
 
           {/* Session count + last date */}
           <p className="muted" style={{ fontSize: 13, margin: "0 0 16px" }}>

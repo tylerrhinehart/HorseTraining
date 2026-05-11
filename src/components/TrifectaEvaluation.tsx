@@ -32,6 +32,9 @@ interface DraftScore {
 function suggestionFromSessions(
   sessions: SessionWithRatings[],
 ): Record<string, TqaScore | undefined> {
+  // No sessions → no suggestions; items render unscored so the trainer
+  // explicitly scores each one rather than confirming a misleading default.
+  if (sessions.length === 0) return {};
   const ratings = sessions.flatMap((s) => s.ratings ?? []);
   const tempByText = new Map<string, number[]>();
   const foundationScores: number[] = [];
@@ -146,6 +149,8 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
     }
   };
 
+  const sessionCount = (sessions.data ?? []).length;
+
   if (trifecta.loading || sessions.loading) {
     return (
       <div className="card">
@@ -159,9 +164,9 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <p className="muted" style={{ fontSize: 14, margin: 0 }}>
-        Final evaluation per the TQA Training Trifecta. Initial suggestions
-        come from this horse's session ratings — adjust as needed before
-        sharing with the owner.
+        {sessionCount === 0
+          ? "No session data yet — score each item manually per the TQA Training Trifecta."
+          : "Final evaluation per the TQA Training Trifecta. Initial suggestions come from this horse's session ratings — adjust as needed before sharing with the owner."}
       </p>
       {(["foundation", "task_completion", "temperament"] as const).map(
         (axis) => (

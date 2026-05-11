@@ -70,7 +70,8 @@ export default function HorseFinish() {
         <div className="eyebrow">Finish training · Step 1 of 3</div>
         <h1 className="h-display">Final evaluation</h1>
         <p className="muted" style={{ margin: "4px 0 14px", fontSize: 14 }}>
-          {horse.data.name} · pre-filled from session data — review and adjust each item.
+          {horse.data.name} · review and score each item before sharing with
+          the owner.
         </p>
         <TrifectaEvaluation horseId={id} onSaved={() => setStep(2)} />
         <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 14 }}>

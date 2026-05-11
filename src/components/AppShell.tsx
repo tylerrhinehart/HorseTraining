@@ -77,9 +77,11 @@ export default function AppShell({ children }: Props) {
                   to={`/horses/${activeHorse.id}`}
                   className="topbar-horse"
                 >
-                  <span style={{ display: "flex", flexDirection: "column" }}>
+                  <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                     <span className="topbar-horse-eyebrow">Active</span>
-                    <strong>{activeHorse.name}</strong>
+                    <strong className="topbar-horse-name" title={activeHorse.name}>
+                      {activeHorse.name}
+                    </strong>
                   </span>
                   <HorseAvatar
                     name={activeHorse.name}

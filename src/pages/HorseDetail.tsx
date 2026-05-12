@@ -439,14 +439,9 @@ export default function HorseDetail() {
                       color: "var(--muted)",
                     }}
                   >
-                    Locked — finish{" "}
-                    {prevP ? prevP.name : "the previous phase"} first.{" "}
-                    <Link
-                      to={`/horses/${id}/sessions/new`}
-                      style={{ color: "var(--leather)" }}
-                    >
-                      Start this phase early
-                    </Link>
+                    Not started yet — finish{" "}
+                    {prevP ? prevP.name : "the previous phase"} and advance to
+                    reach this one.
                   </div>
                 )}
 

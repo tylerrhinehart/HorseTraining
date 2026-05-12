@@ -231,13 +231,12 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
                     <div
                       style={{
                         display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
+                        flexDirection: "column",
+                        gap: 10,
                       }}
                     >
                       <div
                         style={{
-                          flex: 1,
                           fontSize: 14,
                           fontWeight: 500,
                           lineHeight: 1.45,

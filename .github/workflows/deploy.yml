@@ -1,9 +1,9 @@
 name: Deploy to GitHub Pages
 
-# Disabled — production deploy now goes to the homelab k3s cluster via
-# scripts/deploy.sh (see README "Homelab deploy"). Left here as
-# workflow_dispatch-only so it can still be triggered manually if needed.
 on:
+  push:
+    branches:
+      - stage
   workflow_dispatch:
 
 permissions:

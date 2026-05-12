@@ -16,6 +16,3 @@ supabase/.temp/
 
 # Autonomous UAT artifacts (findings, screenshots, fix plans)
 .uat/
-
-# Real cluster secrets (cloudflared tunnel credentials)
-deploy/secrets.yaml

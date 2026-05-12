@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   listAllQuestions,
   listPhases,
@@ -490,6 +490,60 @@ export default function Reference() {
   // Aggregate all phase resources for the Videos & Resources section
   const allResources = Object.values(allPhaseResources).flat();
 
+  // Scroll-spy: highlight the anchor pill matching the most-visible section.
+  const [activeSection, setActiveSection] = useState<string>("phases");
+  const phasesRef = useRef<HTMLHeadingElement | null>(null);
+  const resourcesRef = useRef<HTMLHeadingElement | null>(null);
+  const doctrineRef = useRef<HTMLHeadingElement | null>(null);
+
+  useEffect(() => {
+    const targets: Array<{ id: string; el: HTMLElement | null }> = [
+      { id: "phases", el: phasesRef.current },
+      { id: "resources", el: resourcesRef.current },
+      { id: "doctrine", el: doctrineRef.current },
+    ];
+    const observed = targets.filter(
+      (t): t is { id: string; el: HTMLElement } => t.el !== null,
+    );
+    if (observed.length === 0) return;
+
+    // Track each section's most recent intersection ratio so we can pick the
+    // largest visible one as "active". Top-of-viewport bias via rootMargin
+    // keeps the pill in sync with what the trainer is actually reading.
+    const visibility = new Map<string, number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).id;
+          visibility.set(id, entry.isIntersecting ? entry.intersectionRatio : 0);
+        }
+        let bestId = activeSection;
+        let bestRatio = -1;
+        for (const { id } of observed) {
+          const r = visibility.get(id) ?? 0;
+          if (r > bestRatio) {
+            bestRatio = r;
+            bestId = id;
+          }
+        }
+        if (bestRatio > 0) setActiveSection(bestId);
+      },
+      {
+        // Trigger when the heading area is within the upper portion of the
+        // viewport, just under the sticky topbar + pill row.
+        rootMargin: "-120px 0px -55% 0px",
+        threshold: [0, 0.25, 0.5, 0.75, 1],
+      },
+    );
+    for (const { el } of observed) observer.observe(el);
+    return () => observer.disconnect();
+    // activeSection intentionally excluded — using it inside is for fallback only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phases.data]);
+
+  const pillCls = (id: string) =>
+    `btn btn-ghost btn-sm ref-pill${activeSection === id ? " is-active" : ""}`;
+
   return (
     <div className="view" style={{ maxWidth: 860 }}>
       <div className="eyebrow">TQA Reference</div>
@@ -499,22 +553,27 @@ export default function Reference() {
         framework doctrine in one place.
       </p>
 
-      {/* Anchor nav */}
-      <nav
-        style={{
-          display: "flex",
-          gap: 12,
-          marginBottom: 24,
-          flexWrap: "wrap",
-        }}
-      >
-        <a href="#phases" className="btn btn-ghost btn-sm">
+      {/* Anchor nav — sticky scroll-spy */}
+      <nav className="ref-anchor-nav" aria-label="Reference sections">
+        <a
+          href="#phases"
+          className={pillCls("phases")}
+          aria-current={activeSection === "phases" ? "true" : undefined}
+        >
           Phases &amp; Questions
         </a>
-        <a href="#resources" className="btn btn-ghost btn-sm">
+        <a
+          href="#resources"
+          className={pillCls("resources")}
+          aria-current={activeSection === "resources" ? "true" : undefined}
+        >
           Videos &amp; Resources
         </a>
-        <a href="#doctrine" className="btn btn-ghost btn-sm">
+        <a
+          href="#doctrine"
+          className={pillCls("doctrine")}
+          aria-current={activeSection === "doctrine" ? "true" : undefined}
+        >
           Foundation Doctrine
         </a>
       </nav>
@@ -522,11 +581,12 @@ export default function Reference() {
       {/* ── Section 1: Phases & Questions ── */}
       <h2
         id="phases"
+        ref={phasesRef}
         style={{
           fontFamily: "var(--font-display)",
           fontSize: 20,
           margin: "0 0 12px",
-          scrollMarginTop: 72,
+          scrollMarginTop: 120,
         }}
       >
         Phases &amp; Questions
@@ -557,11 +617,12 @@ export default function Reference() {
       {/* ── Section 2: Videos & Resources ── */}
       <h2
         id="resources"
+        ref={resourcesRef}
         style={{
           fontFamily: "var(--font-display)",
           fontSize: 20,
           margin: "0 0 12px",
-          scrollMarginTop: 72,
+          scrollMarginTop: 120,
         }}
       >
         Videos &amp; Resources
@@ -599,11 +660,12 @@ export default function Reference() {
       {/* ── Section 3: Foundation Doctrine ── */}
       <h2
         id="doctrine"
+        ref={doctrineRef}
         style={{
           fontFamily: "var(--font-display)",
           fontSize: 20,
           margin: "0 0 12px",
-          scrollMarginTop: 72,
+          scrollMarginTop: 120,
         }}
       >
         Foundation Doctrine

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   createSession,
   getHorse,
@@ -12,7 +12,6 @@ import type { TqaScore } from "../supabase/types";
 
 export default function SessionNew() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const horse = useQuery(
@@ -22,7 +21,6 @@ export default function SessionNew() {
   const phases = useQuery(() => listPhases(), []);
 
   const [phaseId, setPhaseId] = useState<string>("");
-  const [showPhasePicker, setShowPhasePicker] = useState(false);
   const [occurredAt, setOccurredAt] = useState<string>(
     new Date().toISOString().slice(0, 16),
   );
@@ -31,17 +29,10 @@ export default function SessionNew() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Set phaseId once horse and phases are loaded. Wait for both queries to
-  // resolve before falling back to phases[0] — otherwise the first render
-  // (with horse.data still undefined) would lock in Groundwork before the
-  // current_phase_id arrives.
+  // Sessions are always logged against the horse's current phase. Advancing
+  // through phases happens via the workspace's "Advance to <next>" gate.
   useEffect(() => {
     if (phaseId) return;
-    const queryPhase = searchParams.get("phase");
-    if (queryPhase) {
-      setPhaseId(queryPhase);
-      return;
-    }
     if (horse.loading || !phases.data) return;
     if (horse.data?.current_phase_id) {
       setPhaseId(horse.data.current_phase_id);
@@ -50,7 +41,7 @@ export default function SessionNew() {
     if (phases.data.length > 0) {
       setPhaseId(phases.data[0].id);
     }
-  }, [horse.data, horse.loading, phases.data, phaseId, searchParams]);
+  }, [horse.data, horse.loading, phases.data, phaseId]);
 
   const questions = useQuery(
     () => (phaseId ? listQuestionsForPhase(phaseId) : Promise.resolve([])),
@@ -140,35 +131,9 @@ export default function SessionNew() {
       >
         <div className="field">
           <label className="label">Phase</label>
-          <p className="muted" style={{ margin: "4px 0 2px", fontSize: 13 }}>
+          <p style={{ margin: "4px 0 0", fontSize: 14, fontWeight: 500 }}>
             {currentPhaseName}
           </p>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowPhasePicker((v) => !v)}
-            style={{ padding: "2px 0", fontSize: 12 }}
-          >
-            {showPhasePicker ? "Hide phase picker" : "Use a different phase"}
-          </button>
-          {showPhasePicker && (
-            <select
-              id="session-phase"
-              className="input"
-              style={{ marginTop: 6 }}
-              value={phaseId}
-              onChange={(e) => {
-                setPhaseId(e.target.value);
-                setDrafts({});
-              }}
-            >
-              {phases.data?.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
         </div>
         <div className="field">
           <label className="label" htmlFor="session-when">

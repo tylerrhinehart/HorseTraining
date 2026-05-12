@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import RatingInput from "./RatingInput";
 import {
   TRIFECTA_AXIS_LABELS,
@@ -32,6 +32,9 @@ interface DraftScore {
 function suggestionFromSessions(
   sessions: SessionWithRatings[],
 ): Record<string, TqaScore | undefined> {
+  // No sessions → no suggestions; items render unscored so the trainer
+  // explicitly scores each one rather than confirming a misleading default.
+  if (sessions.length === 0) return {};
   const ratings = sessions.flatMap((s) => s.ratings ?? []);
   const tempByText = new Map<string, number[]>();
   const foundationScores: number[] = [];
@@ -83,6 +86,26 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Holds the pending onSaved callback so the "Saved ✓" badge stays visible
+  // for ~1.2s before the parent advances to the next step.
+  const onSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (savedAt === null) return;
+    const t = setTimeout(() => setSavedAt(null), 3000);
+    return () => clearTimeout(t);
+  }, [savedAt]);
+
+  // Clean up any pending onSaved timer if the component unmounts mid-delay.
+  useEffect(() => {
+    return () => {
+      if (onSavedTimerRef.current !== null) {
+        clearTimeout(onSavedTimerRef.current);
+        onSavedTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const sessionList = sessions.data ?? [];
@@ -138,13 +161,26 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
         scores,
       });
       trifecta.refresh();
-      onSaved?.();
+      setSavedAt(Date.now());
+      // Delay onSaved so the "Saved ✓" badge is visible to the user before
+      // the parent advances steps / unmounts this component.
+      if (onSaved) {
+        if (onSavedTimerRef.current !== null) {
+          clearTimeout(onSavedTimerRef.current);
+        }
+        onSavedTimerRef.current = setTimeout(() => {
+          onSavedTimerRef.current = null;
+          onSaved();
+        }, 1200);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setSaving(false);
     }
   };
+
+  const sessionCount = (sessions.data ?? []).length;
 
   if (trifecta.loading || sessions.loading) {
     return (
@@ -159,9 +195,9 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <p className="muted" style={{ fontSize: 14, margin: 0 }}>
-        Final evaluation per the TQA Training Trifecta. Initial suggestions
-        come from this horse's session ratings — adjust as needed before
-        sharing with the owner.
+        {sessionCount === 0
+          ? "No session data yet — score each item manually per the TQA Training Trifecta."
+          : "Final evaluation per the TQA Training Trifecta. Initial suggestions come from this horse's session ratings — adjust as needed before sharing with the owner."}
       </p>
       {(["foundation", "task_completion", "temperament"] as const).map(
         (axis) => (
@@ -195,13 +231,12 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
                     <div
                       style={{
                         display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
+                        flexDirection: "column",
+                        gap: 10,
                       }}
                     >
                       <div
                         style={{
-                          flex: 1,
                           fontSize: 14,
                           fontWeight: 500,
                           lineHeight: 1.45,
@@ -280,7 +315,23 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
       {error && (
         <p style={{ color: "var(--bad)", fontSize: 13, margin: 0 }}>{error}</p>
       )}
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        {savedAt && (
+          <span
+            role="status"
+            aria-live="polite"
+            style={{ color: "var(--ok)", fontSize: 13 }}
+          >
+            Saved ✓
+          </span>
+        )}
         <button className="btn btn-leather" disabled={saving} onClick={save}>
           {saving ? "Saving…" : evaluation ? "Update evaluation" : "Save evaluation"}
         </button>

@@ -1,19 +1,46 @@
-import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { getHorse, setHorseStatus } from "../supabase/queries";
+import { useEffect, useRef, useState } from "react";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { getHorse, getTrifectaForHorse, setHorseStatus } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import TrifectaEvaluation from "../components/TrifectaEvaluation";
 
 export default function HorseFinish() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stepParam = Number(searchParams.get("step") || "1");
+  const step: 1 | 2 | 3 = stepParam === 2 ? 2 : stepParam === 3 ? 3 : 1;
+  const setStep = (n: 1 | 2 | 3) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("step", String(n));
+        return next;
+      },
+      { replace: false },
+    );
+  };
   const [marking, setMarking] = useState(false);
 
   const horse = useQuery(
     () => (id ? getHorse(id) : Promise.resolve(null)),
     [id],
   );
+
+  const trifectaQ = useQuery(
+    () => (id ? getTrifectaForHorse(id) : Promise.resolve(null)),
+    [id],
+  );
+
+  const autoRedirectedRef = useRef(false);
+  useEffect(() => {
+    if (autoRedirectedRef.current) return;
+    if (trifectaQ.loading) return;
+    if (!trifectaQ.data) return;
+    if (searchParams.get("step") !== null) return;
+    autoRedirectedRef.current = true;
+    setSearchParams({ step: "2" }, { replace: true });
+  }, [trifectaQ.loading, trifectaQ.data, searchParams, setSearchParams]);
 
   if (!id) return null;
 
@@ -37,13 +64,21 @@ export default function HorseFinish() {
     );
   }
 
+  // Guard: step 3 (the "Training complete" screen) is only valid once the
+  // horse has actually been marked complete. Direct navigation otherwise
+  // bounces back to step 2 so the trainer must explicitly mark complete.
+  if (step === 3 && horse.data.status !== "complete") {
+    return <Navigate replace to={`/horses/${id}/finish?step=2`} />;
+  }
+
   if (step === 1) {
     return (
       <div className="view">
         <div className="eyebrow">Finish training · Step 1 of 3</div>
         <h1 className="h-display">Final evaluation</h1>
         <p className="muted" style={{ margin: "4px 0 14px", fontSize: 14 }}>
-          {horse.data.name} · pre-filled from session data — review and adjust each item.
+          {horse.data.name} · review and score each item before sharing with
+          the owner.
         </p>
         <TrifectaEvaluation horseId={id} onSaved={() => setStep(2)} />
         <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 14 }}>

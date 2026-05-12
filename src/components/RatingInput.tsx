@@ -42,7 +42,7 @@ export default function RatingInput({
   const resolvedDensity =
     density ?? (size === "sm" ? "compact" : "default");
   return (
-    <div style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%" }}>
       {(lowLabel || highLabel) && (
         <div
           className="mono muted"
@@ -59,9 +59,10 @@ export default function RatingInput({
         </div>
       )}
       <div
-        role="radiogroup"
-        aria-label={label ?? name}
+        role="group"
+        aria-label={label ?? name ?? "Rate -3 to +3"}
         className={`rating rating--dots ${resolvedDensity}`}
+        style={{ justifyContent: "space-between" }}
       >
         {TQA_SCORES.map((score) => {
           const selected = value === score;

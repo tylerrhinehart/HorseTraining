@@ -28,6 +28,17 @@ export default function AppShell({ children }: Props) {
     if (horses.data.length > 0) setActiveId(horses.data[0].id);
   }, [horses.data, activeId, setActiveId]);
 
+  // If activeId points at a horse not in our cached list (e.g. just-created
+  // horse from /horses/new), re-fetch so the topbar pill renders immediately.
+  useEffect(() => {
+    if (!activeId) return;
+    if (horses.loading) return;
+    if (!horses.data) return;
+    if (horses.data.some((h) => h.id === activeId)) return;
+    horses.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
+
   const activeHorse = useMemo(
     () => horses.data?.find((h) => h.id === activeId) ?? null,
     [horses.data, activeId],
@@ -66,9 +77,11 @@ export default function AppShell({ children }: Props) {
                   to={`/horses/${activeHorse.id}`}
                   className="topbar-horse"
                 >
-                  <span style={{ display: "flex", flexDirection: "column" }}>
-                    <span className="topbar-horse-eyebrow">Today</span>
-                    <strong>{activeHorse.name}</strong>
+                  <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <span className="topbar-horse-eyebrow">Active</span>
+                    <strong className="topbar-horse-name" title={activeHorse.name}>
+                      {activeHorse.name}
+                    </strong>
                   </span>
                   <HorseAvatar
                     name={activeHorse.name}

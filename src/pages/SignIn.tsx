@@ -1,33 +1,55 @@
-import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
+
+interface FormValues {
+  email: string;
+  password: string;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignIn() {
   const { signIn, user, configured } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  // True while a user-initiated submit is in flight; lets the explicit
+  // post-submit navigate own the destination instead of the render-time guard.
+  const submittingRef = useRef(false);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>({ mode: "onSubmit" });
 
-  if (user) {
-    const dest =
-      (location.state as { from?: Location } | null)?.from?.pathname ?? "/";
-    return <Navigate to={dest} replace />;
+  // Only restore state.from when RequireAuth set it AND the user wasn't sent
+  // here by their own sign-out (we can't perfectly detect that, so default to
+  // "/" when no protected-route hint exists).
+  const fromPathname =
+    (location.state as { from?: { pathname?: string } } | null)?.from
+      ?.pathname ?? null;
+  const safeFrom =
+    fromPathname && fromPathname !== "/sign-in" && fromPathname !== "/sign-up"
+      ? fromPathname
+      : null;
+
+  if (user && !submittingRef.current) {
+    // Already authenticated landing on /sign-in (e.g. back-button) — go home.
+    return <Navigate to="/" replace />;
   }
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
+  const onSubmit = async (values: FormValues) => {
+    setSubmitError(null);
+    submittingRef.current = true;
     try {
-      await signIn(email, password);
-      navigate("/");
+      await signIn(values.email, values.password);
+      navigate(safeFrom ?? "/", { replace: true });
     } catch (err) {
-      setError((err as Error).message);
+      setSubmitError((err as Error).message);
     } finally {
-      setBusy(false);
+      submittingRef.current = false;
     }
   };
 
@@ -56,7 +78,7 @@ export default function SignIn() {
           set.
         </p>
       )}
-      <form className="card" onSubmit={onSubmit}>
+      <form className="card" noValidate onSubmit={handleSubmit(onSubmit)}>
         <div className="field" style={{ marginBottom: 12 }}>
           <label htmlFor="email" className="label">
             Email
@@ -66,10 +88,20 @@ export default function SignIn() {
             type="email"
             autoComplete="email"
             className="input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+            aria-invalid={errors.email ? true : undefined}
+            {...register("email", {
+              required: "Email is required",
+              pattern: {
+                value: EMAIL_RE,
+                message: "Enter a valid email address",
+              },
+            })}
           />
+          {errors.email && (
+            <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+              {errors.email.message}
+            </p>
+          )}
         </div>
         <div className="field" style={{ marginBottom: 14 }}>
           <label htmlFor="password" className="label">
@@ -80,29 +112,34 @@ export default function SignIn() {
             type="password"
             autoComplete="current-password"
             className="input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+            aria-invalid={errors.password ? true : undefined}
+            {...register("password", { required: "Password is required" })}
           />
+          {errors.password && (
+            <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+              {errors.password.message}
+            </p>
+          )}
         </div>
-        {error && (
-          <p
-            style={{
-              color: "var(--bad)",
-              fontSize: 13,
-              marginBottom: 8,
-            }}
+        {submitError && (
+          <div
+            role="alert"
+            className="alert-error"
+            style={{ marginBottom: 12 }}
           >
-            {error}
-          </p>
+            <span aria-hidden="true" className="alert-error-icon">
+              ⚠
+            </span>
+            <div className="alert-error-body">{submitError}</div>
+          </div>
         )}
         <button
           className="btn btn-leather"
           type="submit"
-          disabled={busy}
+          disabled={isSubmitting}
           style={{ width: "100%", justifyContent: "center" }}
         >
-          {busy ? "Signing in…" : "Sign in"}
+          {isSubmitting ? "Signing in…" : "Sign in"}
         </button>
       </form>
       <p

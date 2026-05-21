@@ -54,103 +54,134 @@ export default function SignIn() {
   };
 
   return (
-    <div className="view" style={{ maxWidth: 420, margin: "60px auto 0" }}>
-      <div className="brand" style={{ justifyContent: "center", marginBottom: 18 }}>
-        <span className="brand-mark">T</span>
+    <div className="auth-layout">
+      <section className="auth-hero" aria-hidden="true">
         <div>
-          <div className="brand-name">TQA Tracker</div>
-          <div className="brand-sub">Training quality assurance</div>
+          <div className="hero-kicker">Command center · 5 phase TQA</div>
+          <h1 className="hero-title">Run every horse like a high-signal training program.</h1>
+          <p className="hero-copy">
+            A redesigned cockpit for trainers: phase momentum, session quality,
+            and finish readiness surfaced with less digging and more confidence.
+          </p>
         </div>
-      </div>
-      <h1 className="h-display" style={{ textAlign: "center" }}>
-        Sign in
-      </h1>
-      {!configured && (
-        <p
-          className="card mono"
-          style={{
-            color: "var(--rust)",
-            fontSize: 12,
-            marginBottom: 12,
-          }}
-        >
-          Supabase isn't configured yet. Sign-in won't work until env vars are
-          set.
-        </p>
-      )}
-      <form className="card" noValidate onSubmit={handleSubmit(onSubmit)}>
-        <div className="field" style={{ marginBottom: 12 }}>
-          <label htmlFor="email" className="label">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            className="input"
-            aria-invalid={errors.email ? true : undefined}
-            {...register("email", {
-              required: "Email is required",
-              pattern: {
-                value: EMAIL_RE,
-                message: "Enter a valid email address",
-              },
-            })}
-          />
-          {errors.email && (
-            <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
-              {errors.email.message}
-            </p>
-          )}
-        </div>
-        <div className="field" style={{ marginBottom: 14 }}>
-          <label htmlFor="password" className="label">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            className="input"
-            aria-invalid={errors.password ? true : undefined}
-            {...register("password", { required: "Password is required" })}
-          />
-          {errors.password && (
-            <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
-              {errors.password.message}
-            </p>
-          )}
-        </div>
-        {submitError && (
-          <div
-            role="alert"
-            className="alert-error"
-            style={{ marginBottom: 12 }}
-          >
-            <span aria-hidden="true" className="alert-error-icon">
-              ⚠
-            </span>
-            <div className="alert-error-body">{submitError}</div>
+        <div className="dashboard-preview">
+          <div className="preview-card">
+            <div className="eyebrow">Current phase</div>
+            <div className="preview-metric">Foundation</div>
+            <div className="preview-bars">
+              <span style={{ width: "92%" }} />
+              <span style={{ width: "74%" }} />
+              <span style={{ width: "58%" }} />
+            </div>
           </div>
-        )}
-        <button
-          className="btn btn-leather"
-          type="submit"
-          disabled={isSubmitting}
-          style={{ width: "100%", justifyContent: "center" }}
+          <div className="preview-card">
+            <div className="eyebrow">Signal</div>
+            <div className="preview-metric">+18%</div>
+            <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+              Quality trend over last 7 sessions
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="auth-panel">
+        <div className="brand" style={{ justifyContent: "center", marginBottom: 22 }}>
+          <span className="brand-mark">T</span>
+          <div>
+            <div className="brand-name">TQA Tracker</div>
+            <div className="brand-sub">Training command center</div>
+          </div>
+        </div>
+        <form className="card auth-card" noValidate onSubmit={handleSubmit(onSubmit)}>
+          <div className="hero-kicker" style={{ marginBottom: 16 }}>Secure trainer access</div>
+          <h1 className="h-display" style={{ fontSize: 42, marginBottom: 10 }}>
+            Welcome back
+          </h1>
+          <p className="muted" style={{ marginBottom: 22, fontSize: 14 }}>
+            Sign in to open your training dashboard, active horses, and TQA scoring workspace.
+          </p>
+          {!configured && (
+            <p
+              className="alert-error"
+              style={{ marginBottom: 14 }}
+            >
+              Supabase isn't configured yet. Sign-in won't work until env vars are
+              set.
+            </p>
+          )}
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label htmlFor="email" className="label">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              className="input"
+              aria-invalid={errors.email ? true : undefined}
+              {...register("email", {
+                required: "Email is required",
+                pattern: {
+                  value: EMAIL_RE,
+                  message: "Enter a valid email address",
+                },
+              })}
+            />
+            {errors.email && (
+              <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+                {errors.email.message}
+              </p>
+            )}
+          </div>
+          <div className="field" style={{ marginBottom: 16 }}>
+            <label htmlFor="password" className="label">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              className="input"
+              aria-invalid={errors.password ? true : undefined}
+              {...register("password", { required: "Password is required" })}
+            />
+            {errors.password && (
+              <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+                {errors.password.message}
+              </p>
+            )}
+          </div>
+          {submitError && (
+            <div
+              role="alert"
+              className="alert-error"
+              style={{ marginBottom: 12 }}
+            >
+              <span aria-hidden="true" className="alert-error-icon">
+                ⚠
+              </span>
+              <div className="alert-error-body">{submitError}</div>
+            </div>
+          )}
+          <button
+            className="btn btn-leather"
+            type="submit"
+            disabled={isSubmitting}
+            style={{ width: "100%", justifyContent: "center" }}
+          >
+            {isSubmitting ? "Signing in…" : "Enter dashboard"}
+          </button>
+        </form>
+        <p
+          className="muted"
+          style={{ textAlign: "center", fontSize: 13, marginTop: 16 }}
         >
-          {isSubmitting ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
-      <p
-        className="muted"
-        style={{ textAlign: "center", fontSize: 13, marginTop: 14 }}
-      >
-        No account?{" "}
-        <Link to="/sign-up" style={{ color: "var(--leather)" }}>
-          Sign up
-        </Link>
-      </p>
+          No account?{" "}
+          <Link to="/sign-up" style={{ color: "var(--leather-2)" }}>
+            Create one
+          </Link>
+        </p>
+      </section>
     </div>
   );
 }

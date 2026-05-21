@@ -39,105 +39,140 @@ export default function SignUp() {
   };
 
   return (
-    <div className="view" style={{ maxWidth: 420, margin: "60px auto 0" }}>
-      <div className="brand" style={{ justifyContent: "center", marginBottom: 18 }}>
-        <span className="brand-mark">T</span>
+    <div className="auth-layout">
+      <section className="auth-hero" aria-hidden="true">
         <div>
-          <div className="brand-name">TQA Tracker</div>
-          <div className="brand-sub">Training quality assurance</div>
-        </div>
-      </div>
-      <h1 className="h-display" style={{ textAlign: "center" }}>
-        Create account
-      </h1>
-      <form className="card" noValidate onSubmit={handleSubmit(onSubmit)}>
-        <div className="field" style={{ marginBottom: 12 }}>
-          <label htmlFor="email" className="label">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            className="input"
-            aria-invalid={errors.email ? true : undefined}
-            {...register("email", {
-              required: "Email is required",
-              pattern: {
-                value: EMAIL_RE,
-                message: "Enter a valid email address",
-              },
-            })}
-          />
-          {errors.email && (
-            <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
-              {errors.email.message}
-            </p>
-          )}
-        </div>
-        <div className="field" style={{ marginBottom: 14 }}>
-          <label htmlFor="password" className="label">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            className="input"
-            aria-invalid={errors.password ? true : undefined}
-            {...register("password", {
-              required: "Password is required",
-              minLength: {
-                value: 8,
-                message: "Password must be at least 8 characters",
-              },
-            })}
-          />
-          {errors.password ? (
-            <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
-              {errors.password.message}
-            </p>
-          ) : (
-            <p className="muted mono" style={{ fontSize: 10, marginTop: 4 }}>
-              At least 8 characters.
-            </p>
-          )}
-        </div>
-        {submitError && (
-          <div
-            role="alert"
-            className="alert-error"
-            style={{ marginBottom: 12 }}
-          >
-            <span aria-hidden="true" className="alert-error-icon">
-              ⚠
-            </span>
-            <div className="alert-error-body">{submitError}</div>
-          </div>
-        )}
-        {info && (
-          <p style={{ color: "var(--ok)", fontSize: 13, marginBottom: 8 }}>
-            {info}
+          <div className="hero-kicker">New trainer workspace</div>
+          <h1 className="hero-title">A sharper operating system for TQA training.</h1>
+          <p className="hero-copy">
+            Create an account and manage horses through a darker, data-first
+            interface designed for fast field use and clearer phase decisions.
           </p>
-        )}
-        <button
-          className="btn btn-leather"
-          type="submit"
-          disabled={isSubmitting}
-          style={{ width: "100%", justifyContent: "center" }}
+        </div>
+        <div className="dashboard-preview">
+          <div className="preview-card">
+            <div className="eyebrow">Training quality</div>
+            <div className="preview-metric">92%</div>
+            <div className="preview-bars">
+              <span style={{ width: "92%" }} />
+              <span style={{ width: "81%" }} />
+              <span style={{ width: "68%" }} />
+            </div>
+          </div>
+          <div className="preview-card">
+            <div className="eyebrow">Ready next</div>
+            <div className="preview-metric">3</div>
+            <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+              Horses queued for review
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="auth-panel">
+        <div className="brand" style={{ justifyContent: "center", marginBottom: 22 }}>
+          <span className="brand-mark">T</span>
+          <div>
+            <div className="brand-name">TQA Tracker</div>
+            <div className="brand-sub">Training command center</div>
+          </div>
+        </div>
+        <form className="card auth-card" noValidate onSubmit={handleSubmit(onSubmit)}>
+          <div className="hero-kicker" style={{ marginBottom: 16 }}>Start tracking</div>
+          <h1 className="h-display" style={{ fontSize: 42, marginBottom: 10 }}>
+            Create account
+          </h1>
+          <p className="muted" style={{ marginBottom: 22, fontSize: 14 }}>
+            Build a TQA workspace for your barn, then invite training decisions into one dashboard.
+          </p>
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label htmlFor="email" className="label">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              className="input"
+              aria-invalid={errors.email ? true : undefined}
+              {...register("email", {
+                required: "Email is required",
+                pattern: {
+                  value: EMAIL_RE,
+                  message: "Enter a valid email address",
+                },
+              })}
+            />
+            {errors.email && (
+              <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+                {errors.email.message}
+              </p>
+            )}
+          </div>
+          <div className="field" style={{ marginBottom: 16 }}>
+            <label htmlFor="password" className="label">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="new-password"
+              className="input"
+              aria-invalid={errors.password ? true : undefined}
+              {...register("password", {
+                required: "Password is required",
+                minLength: {
+                  value: 8,
+                  message: "Password must be at least 8 characters",
+                },
+              })}
+            />
+            {errors.password ? (
+              <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
+                {errors.password.message}
+              </p>
+            ) : (
+              <p className="muted mono" style={{ fontSize: 10, marginTop: 4 }}>
+                At least 8 characters.
+              </p>
+            )}
+          </div>
+          {submitError && (
+            <div
+              role="alert"
+              className="alert-error"
+              style={{ marginBottom: 12 }}
+            >
+              <span aria-hidden="true" className="alert-error-icon">
+                ⚠
+              </span>
+              <div className="alert-error-body">{submitError}</div>
+            </div>
+          )}
+          {info && (
+            <p style={{ color: "var(--ok)", fontSize: 13, marginBottom: 8 }}>
+              {info}
+            </p>
+          )}
+          <button
+            className="btn btn-leather"
+            type="submit"
+            disabled={isSubmitting}
+            style={{ width: "100%", justifyContent: "center" }}
+          >
+            {isSubmitting ? "Creating account…" : "Create command center"}
+          </button>
+        </form>
+        <p
+          className="muted"
+          style={{ textAlign: "center", fontSize: 13, marginTop: 16 }}
         >
-          {isSubmitting ? "Creating account…" : "Create account"}
-        </button>
-      </form>
-      <p
-        className="muted"
-        style={{ textAlign: "center", fontSize: 13, marginTop: 14 }}
-      >
-        Already have an account?{" "}
-        <Link to="/sign-in" style={{ color: "var(--leather)" }}>
-          Sign in
-        </Link>
-      </p>
+          Already have an account?{" "}
+          <Link to="/sign-in" style={{ color: "var(--leather-2)" }}>
+            Sign in
+          </Link>
+        </p>
+      </section>
     </div>
   );
 }

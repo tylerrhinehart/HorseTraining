@@ -38,6 +38,15 @@ export default function HorseDetail() {
   const navigate = useNavigate();
   const [, setActiveId] = useActiveHorseId();
   const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
+  const [advanceDialogOpen, setAdvanceDialogOpen] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
+  const [editSavedAt, setEditSavedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (editSavedAt === null) return;
+    const t = setTimeout(() => setEditSavedAt(null), 3000);
+    return () => clearTimeout(t);
+  }, [editSavedAt]);
 
   const horse = useQuery(
     () => (id ? getHorse(id) : Promise.resolve(null)),
@@ -54,8 +63,8 @@ export default function HorseDetail() {
   );
 
   useEffect(() => {
-    if (id && horse.data && horse.data.status !== "archived") setActiveId(id);
-  }, [id, horse.data, setActiveId]);
+    if (id) setActiveId(id);
+  }, [id, setActiveId]);
 
   const {
     register,
@@ -177,17 +186,32 @@ export default function HorseDetail() {
     return `${sign}${n.toFixed(1)}`;
   };
 
-  const handleAdvance = async () => {
+  const handleAdvance = () => {
     if (!currentPhase || !nextP) return;
-    if (!isAtOrAboveStandard(rolling7Average)) {
-      const ok = window.confirm(
-        `This phase's average is ${formatSignedAvg(rolling7Average)}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP.name}?`,
-      );
-      if (!ok) return;
+    if (isAtOrAboveStandard(rolling7Average)) {
+      // Recommended — advance immediately without confirm
+      void performAdvance();
+      return;
     }
-    await setHorseCurrentPhase(horse.data!.id, nextP.id);
-    horse.refresh();
+    setAdvanceDialogOpen(true);
   };
+
+  const performAdvance = async () => {
+    if (!currentPhase || !nextP) return;
+    setAdvancing(true);
+    try {
+      await setHorseCurrentPhase(horse.data!.id, nextP.id);
+      horse.refresh();
+    } finally {
+      setAdvancing(false);
+      setAdvanceDialogOpen(false);
+    }
+  };
+
+  const advanceDialogCopy =
+    rolling7Average == null
+      ? `No sessions logged in this phase yet. Advance to ${nextP?.name ?? "the next phase"} anyway?`
+      : `This phase's average is ${formatSignedAvg(rolling7Average)}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP?.name ?? "the next phase"}?`;
 
   const handleArchive = async () => {
     await archiveHorse(id);
@@ -219,6 +243,7 @@ export default function HorseDetail() {
       notes: values.notes || null,
     });
     horse.refresh();
+    setEditSavedAt(Date.now());
   };
 
   const avgColor = (avg: number | null): string => {
@@ -414,14 +439,9 @@ export default function HorseDetail() {
                       color: "var(--muted)",
                     }}
                   >
-                    Locked — finish{" "}
-                    {prevP ? prevP.name : "the previous phase"} first.{" "}
-                    <Link
-                      to={`/horses/${id}/sessions/new`}
-                      style={{ color: "var(--leather)" }}
-                    >
-                      Start this phase early
-                    </Link>
+                    Not started yet — finish{" "}
+                    {prevP ? prevP.name : "the previous phase"} and advance to
+                    reach this one.
                   </div>
                 )}
 
@@ -491,25 +511,31 @@ export default function HorseDetail() {
           </div>
 
           {/* Phase running average */}
-          <div style={{ marginBottom: 12 }}>
-            <span
-              style={{
-                fontFamily: "var(--font-display)",
-                fontSize: 32,
-                fontWeight: 600,
-                color: avgColor(currentPhaseAvg),
-                letterSpacing: "0.2px",
-              }}
-            >
-              {round1(currentPhaseAvg)}
-            </span>
-            <span
-              className="mono muted"
-              style={{ fontSize: 11, marginLeft: 8 }}
-            >
-              phase average
-            </span>
-          </div>
+          {currentPhaseSessions.length > 0 ? (
+            <div style={{ marginBottom: 12 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: 32,
+                  fontWeight: 600,
+                  color: avgColor(currentPhaseAvg),
+                  letterSpacing: "0.2px",
+                }}
+              >
+                {round1(currentPhaseAvg)}
+              </span>
+              <span
+                className="mono muted"
+                style={{ fontSize: 11, marginLeft: 8 }}
+              >
+                phase average
+              </span>
+            </div>
+          ) : (
+            <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>
+              No sessions yet
+            </p>
+          )}
 
           {/* Session count + last date */}
           <p className="muted" style={{ fontSize: 13, margin: "0 0 16px" }}>
@@ -609,8 +635,12 @@ export default function HorseDetail() {
       <div style={{ marginTop: "var(--gap)" }}>
         <Link
           to={`/horses/${id}/finish`}
-          className="btn btn-primary"
-          style={{ width: "100%", justifyContent: "center" }}
+          className="btn"
+          style={{
+            width: "100%",
+            justifyContent: "center",
+            background: "transparent",
+          }}
         >
           Finish training
         </Link>
@@ -694,8 +724,22 @@ export default function HorseDetail() {
             />
           </div>
           <div
-            style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: 12,
+            }}
           >
+            {editSavedAt && (
+              <span
+                role="status"
+                aria-live="polite"
+                style={{ color: "var(--ok)", fontSize: 13 }}
+              >
+                Saved ✓
+              </span>
+            )}
             <button
               type="submit"
               className="btn btn-leather btn-sm"
@@ -755,6 +799,53 @@ export default function HorseDetail() {
           </button>
         </div>
       </details>
+
+      {/* ── Advance confirmation dialog ── */}
+      {advanceDialogOpen && nextP && (
+        <div
+          className="scrim"
+          onClick={() => {
+            if (!advancing) setAdvanceDialogOpen(false);
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="advance-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="advance-dialog-title">Advance to {nextP.name}?</h3>
+            <p style={{ margin: "0 0 16px", color: "var(--ink-2)", fontSize: 14 }}>
+              {advanceDialogCopy}
+            </p>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setAdvanceDialogOpen(false)}
+                disabled={advancing}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-leather btn-sm"
+                onClick={performAdvance}
+                disabled={advancing}
+              >
+                {advancing ? "Advancing…" : `Advance to ${nextP.name}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

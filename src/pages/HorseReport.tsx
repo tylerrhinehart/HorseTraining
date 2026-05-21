@@ -10,9 +10,11 @@ import {
 import { useQuery } from "../supabase/useQuery";
 import ReportRenderer from "../features/pdf/ReportRenderer";
 import type { TrifectaEvaluationWithScores } from "../supabase/types";
+import { formatHumanDate } from "../utils/dates";
 
 export default function HorseReport() {
   const { id } = useParams<{ id: string }>();
+  const generatedAt = useMemo(() => new Date().toISOString(), []);
 
   const horse = useQuery(() => (id ? getHorse(id) : Promise.resolve(null)), [id]);
   const sessions = useQuery(
@@ -58,17 +60,30 @@ export default function HorseReport() {
     );
   }
 
+  const sessionCount = sessions.data?.length ?? 0;
+
   return (
     <div className="view" style={{ maxWidth: 1100 }}>
+      <Link
+        to={`/horses/${id}`}
+        className="btn btn-ghost"
+        style={{ marginBottom: 8, alignSelf: "flex-start" }}
+      >
+        ← Back to {horse.data.name}
+      </Link>
       <div className="eyebrow">TQA Report</div>
       <h1 className="h-display">{horse.data.name}</h1>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Generated {formatHumanDate(generatedAt.slice(0, 10))} · based on{" "}
+        {sessionCount} {sessionCount === 1 ? "session" : "sessions"}
+      </p>
       <ReportRenderer
         horse={horse.data}
         sessions={sessions.data ?? []}
         phases={phases.data ?? []}
         questions={questions.data ?? []}
         trifecta={trifecta}
-        generatedAt={new Date().toISOString()}
+        generatedAt={generatedAt}
       />
     </div>
   );

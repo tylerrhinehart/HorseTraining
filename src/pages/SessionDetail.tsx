@@ -132,7 +132,7 @@ export default function SessionDetail() {
         </Link>
         {!editing ? (
           <button
-            className="btn btn-sm"
+            className="btn btn-leather btn-sm"
             onClick={() => setEditing(true)}
           >
             Edit
@@ -148,7 +148,15 @@ export default function SessionDetail() {
             Cancel edit
           </button>
         )}
-        <button className="btn btn-danger btn-sm" onClick={remove}>
+        <button
+          className="btn btn-sm"
+          onClick={remove}
+          style={{
+            color: "var(--bad)",
+            borderColor: "var(--bad)",
+            background: "transparent",
+          }}
+        >
           Delete
         </button>
       </div>

@@ -609,7 +609,7 @@ function DualLineChart({ data }: DualChartProps) {
               y2={yFor(y)}
               stroke={y === 0 ? "#94a3b8" : "#e2e8f0"}
               strokeWidth={y === 0 ? 0.8 : 0.5}
-              strokeDasharray={y === 0 ? "0" : "2,2"}
+              strokeDasharray={y === 0 ? undefined : "2,2"}
             />
             <Path
               d={`M${padL - 16},${yFor(y)} L${padL},${yFor(y)}`}

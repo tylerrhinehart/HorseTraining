@@ -199,10 +199,9 @@ function QuestionRow({
 
   return (
     <div className="card space-y-2">
-      <div className="flex justify-between gap-3">
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div
           style={{
-            flex: 1,
             fontSize: 14,
             fontWeight: 500,
             lineHeight: 1.45,

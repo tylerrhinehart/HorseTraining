@@ -60,13 +60,43 @@ function MultiHorseToday({ horses }: { horses: Horse[] }) {
 
   return (
     <div className="view">
-      <div className="eyebrow">Today</div>
-      <h1 className="h-display">In training</h1>
-      <p className="muted" style={{ marginBottom: 14, fontSize: 14 }}>
-        {horses.length} horses currently in training. Tap a card to open its
-        workspace, or log today's session in one tap.
-      </p>
-      <div style={{ display: "grid", gap: 10 }}>
+      <section className="today-hero">
+        <div className="command-hero">
+          <div className="hero-kicker">Live training board</div>
+          <h1 className="h-display">In training</h1>
+          <p className="hero-copy" style={{ fontSize: 16 }}>
+            {horses.length} horses currently in training. Open a horse workspace,
+            jump straight into today's session, and keep phase decisions visible.
+          </p>
+          <div className="hero-actions">
+            <Link to="/horses/new" className="btn btn-leather">
+              Add horse
+            </Link>
+            <Link to="/reference" className="btn">
+              Review TQA system
+            </Link>
+          </div>
+        </div>
+        <div className="metric-grid">
+          <div className="metric-card">
+            <div className="val">{horses.length}</div>
+            <div className="lab">Active horses</div>
+          </div>
+          <div className="metric-card">
+            <div className="val">
+              {horses.filter((h) => h.current_phase_id).length}
+            </div>
+            <div className="lab">In phase</div>
+          </div>
+          <div className="metric-card">
+            <div className="val">
+              {horses.filter((h) => h.id === activeId).length || "—"}
+            </div>
+            <div className="lab">Selected</div>
+          </div>
+        </div>
+      </section>
+      <div className="horse-row-grid">
         {horses.map((h) => (
           <TodayCard
             key={h.id}

@@ -5,9 +5,12 @@ import {
   getHorse,
   listPhases,
   listQuestionsForPhase,
+  listResourcesForPhase,
+  listResourcesForQuestions,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
+import SessionResourcesPanel from "../components/SessionResourcesPanel";
 import type { TqaScore } from "../supabase/types";
 
 export default function SessionNew() {
@@ -46,6 +49,18 @@ export default function SessionNew() {
   const questions = useQuery(
     () => (phaseId ? listQuestionsForPhase(phaseId) : Promise.resolve([])),
     [phaseId],
+  );
+  const questionIdsKey = (questions.data ?? []).map((q) => q.id).join(",");
+  const phaseResources = useQuery(
+    () => (phaseId ? listResourcesForPhase(phaseId) : Promise.resolve([])),
+    [phaseId],
+  );
+  const questionResources = useQuery(
+    () =>
+      questions.data
+        ? listResourcesForQuestions(questions.data.map((q) => q.id))
+        : Promise.resolve([]),
+    [questionIdsKey],
   );
 
   // Reset drafts when phase changes (different question set).
@@ -148,6 +163,14 @@ export default function SessionNew() {
           />
         </div>
       </div>
+
+      <SessionResourcesPanel
+        questions={questions.data ?? []}
+        phaseResources={phaseResources.data ?? []}
+        questionResources={questionResources.data ?? []}
+        phaseName={currentPhaseName}
+        compact
+      />
 
       {questions.loading ? (
         <div className="card">Loading questions…</div>

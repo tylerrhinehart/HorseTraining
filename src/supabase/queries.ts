@@ -416,6 +416,18 @@ export async function listResourcesForQuestion(questionId: ID): Promise<Resource
   return throwIfError(res) ?? [];
 }
 
+export async function listResourcesForQuestions(
+  questionIds: ID[],
+): Promise<Resource[]> {
+  if (questionIds.length === 0) return [];
+  const res = await sb()
+    .from("resources")
+    .select("*")
+    .in("question_id", questionIds)
+    .order("position", { ascending: true });
+  return throwIfError(res) ?? [];
+}
+
 export async function createResource(input: {
   phaseId?: ID;
   questionId?: ID;

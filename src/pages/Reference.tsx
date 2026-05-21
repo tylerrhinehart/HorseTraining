@@ -3,6 +3,7 @@ import {
   listAllQuestions,
   listPhases,
   listResourcesForPhase,
+  listResourcesForQuestions,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import type { Phase, Question, Resource } from "../supabase/types";
@@ -70,13 +71,23 @@ function PhaseAccordionItem({
   phase,
   questions,
   phaseResources,
+  questionResources,
 }: {
   phase: Phase;
   questions: Question[];
   phaseResources: Resource[];
+  questionResources: Resource[];
 }) {
   const foundation = questions.filter((q) => q.axis === "foundation");
   const temperament = questions.filter((q) => q.axis === "temperament");
+  const questionResourceGroups = questions
+    .map((q) => ({
+      question: q,
+      resources: questionResources.filter((r) => r.question_id === q.id),
+    }))
+    .filter((group) => group.resources.length > 0);
+  const resourceCount =
+    phaseResources.length + questionResourceGroups.reduce((sum, group) => sum + group.resources.length, 0);
 
   return (
     <details className="card" style={{ padding: 0 }}>
@@ -102,8 +113,8 @@ function PhaseAccordionItem({
         </span>
         <span className="muted" style={{ fontSize: 12 }}>
           {foundation.length} foundation · {temperament.length} temperament
-          {phaseResources.length > 0
-            ? ` · ${phaseResources.length} resource${phaseResources.length !== 1 ? "s" : ""}`
+          {resourceCount > 0
+            ? ` · ${resourceCount} resource${resourceCount !== 1 ? "s" : ""}`
             : ""}
         </span>
       </summary>
@@ -129,20 +140,60 @@ function PhaseAccordionItem({
           />
         </div>
 
-        {phaseResources.length > 0 && (
-          <div>
-            <h4
-              className="mono muted"
-              style={{
-                fontSize: 11,
-                letterSpacing: 1.5,
-                textTransform: "uppercase",
-                margin: "0 0 8px",
-              }}
-            >
-              Phase resources
-            </h4>
-            <ResourceList resources={phaseResources} />
+        {(phaseResources.length > 0 || questionResourceGroups.length > 0) && (
+          <div style={{ display: "grid", gap: 12 }}>
+            {phaseResources.length > 0 && (
+              <div>
+                <h4
+                  className="mono muted"
+                  style={{
+                    fontSize: 11,
+                    letterSpacing: 1.5,
+                    textTransform: "uppercase",
+                    margin: "0 0 8px",
+                  }}
+                >
+                  Phase-wide resources
+                </h4>
+                <ResourceList resources={phaseResources} />
+              </div>
+            )}
+            {questionResourceGroups.length > 0 && (
+              <div>
+                <h4
+                  className="mono muted"
+                  style={{
+                    fontSize: 11,
+                    letterSpacing: 1.5,
+                    textTransform: "uppercase",
+                    margin: "0 0 8px",
+                  }}
+                >
+                  Task-linked resources
+                </h4>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {questionResourceGroups.map((group) => (
+                    <div
+                      key={group.question.id}
+                      style={{
+                        border: "1px solid var(--line)",
+                        borderRadius: 12,
+                        padding: 12,
+                        background: "var(--paper-2)",
+                      }}
+                    >
+                      <p style={{ margin: "0 0 8px", fontWeight: 600, fontSize: 13 }}>
+                        <span className="mono muted" style={{ marginRight: 8 }}>
+                          Task {group.question.position + 1}
+                        </span>
+                        {group.question.text}
+                      </p>
+                      <ResourceList resources={group.resources} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -466,6 +517,7 @@ export default function Reference() {
   const [allPhaseResources, setAllPhaseResources] = useState<
     Record<string, Resource[]>
   >({});
+  const [allQuestionResources, setAllQuestionResources] = useState<Resource[]>([]);
 
   useEffect(() => {
     if (!phases.data || phases.data.length === 0) return;
@@ -482,13 +534,29 @@ export default function Reference() {
     });
   }, [phases.data]);
 
+  useEffect(() => {
+    const ids = (questions.data ?? []).map((q) => q.id);
+    if (ids.length === 0) {
+      setAllQuestionResources([]);
+      return;
+    }
+    listResourcesForQuestions(ids).then(setAllQuestionResources);
+  }, [questions.data]);
+
   const questionsFor = (phaseId: string) =>
     (questions.data ?? [])
       .filter((q) => q.phase_id === phaseId)
       .sort((a, b) => a.position - b.position);
 
-  // Aggregate all phase resources for the Videos & Resources section
-  const allResources = Object.values(allPhaseResources).flat();
+  const questionResourcesFor = (phaseId: string) => {
+    const ids = new Set(questionsFor(phaseId).map((q) => q.id));
+    return allQuestionResources.filter((resource) =>
+      resource.question_id ? ids.has(resource.question_id) : false,
+    );
+  };
+
+  // Aggregate all resources for the Videos & Resources section
+  const allResources = [...Object.values(allPhaseResources).flat(), ...allQuestionResources];
 
   // Scroll-spy: highlight the anchor pill matching the most-visible section.
   const [activeSection, setActiveSection] = useState<string>("phases");
@@ -610,6 +678,7 @@ export default function Reference() {
             phase={p}
             questions={questionsFor(p.id)}
             phaseResources={allPhaseResources[p.id] ?? []}
+            questionResources={questionResourcesFor(p.id)}
           />
         ))}
       </div>
@@ -628,7 +697,9 @@ export default function Reference() {
         Videos &amp; Resources
       </h2>
       <p className="muted" style={{ fontSize: 14, marginBottom: 12 }}>
-        All training videos and links attached to phases.
+        All training videos and links, organized by phase first and then by the
+        exact score-sheet task they support. Those task-linked resources also
+        surface inside active session screens.
       </p>
 
       {allResources.length === 0 && !phases.loading && (
@@ -640,17 +711,50 @@ export default function Reference() {
       {allResources.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}>
           {phases.data?.map((p) => {
-            const res = allPhaseResources[p.id] ?? [];
-            if (res.length === 0) return null;
+            const phaseRes = allPhaseResources[p.id] ?? [];
+            const taskRes = questionResourcesFor(p.id);
+            const total = phaseRes.length + taskRes.length;
+            if (total === 0) return null;
+            const taskGroups = questionsFor(p.id)
+              .map((q) => ({
+                question: q,
+                resources: taskRes.filter((r) => r.question_id === q.id),
+              }))
+              .filter((group) => group.resources.length > 0);
             return (
               <div key={p.id} className="card">
                 <div className="card-head">
                   <h3 className="card-title">{p.name}</h3>
                   <span className="card-meta">
-                    {res.length} resource{res.length !== 1 ? "s" : ""}
+                    {total} resource{total !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <ResourceList resources={res} />
+                {phaseRes.length > 0 && (
+                  <div style={{ marginBottom: taskGroups.length > 0 ? 14 : 0 }}>
+                    <h4 className="mono muted" style={{ fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", margin: "0 0 8px" }}>
+                      Phase-wide
+                    </h4>
+                    <ResourceList resources={phaseRes} />
+                  </div>
+                )}
+                {taskGroups.length > 0 && (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <h4 className="mono muted" style={{ fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", margin: 0 }}>
+                      Linked to session tasks
+                    </h4>
+                    {taskGroups.map((group) => (
+                      <div key={group.question.id} style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 12, background: "var(--paper-2)" }}>
+                        <p style={{ margin: "0 0 8px", fontWeight: 600, fontSize: 13 }}>
+                          <span className="mono muted" style={{ marginRight: 8 }}>
+                            Task {group.question.position + 1}
+                          </span>
+                          {group.question.text}
+                        </p>
+                        <ResourceList resources={group.resources} />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}

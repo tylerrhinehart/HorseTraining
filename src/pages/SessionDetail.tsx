@@ -5,10 +5,13 @@ import {
   getPhase,
   getSession,
   listQuestionsForPhase,
+  listResourcesForPhase,
+  listResourcesForQuestions,
   updateSession,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
+import SessionResourcesPanel from "../components/SessionResourcesPanel";
 import { round1, sessionAverage } from "../utils/stats";
 import { formatDateTime } from "../utils/dates";
 import type { TqaScore } from "../supabase/types";
@@ -31,6 +34,21 @@ export default function SessionDetail() {
         ? listQuestionsForPhase(session.data.phase_id)
         : Promise.resolve([]),
     [session.data?.phase_id],
+  );
+  const questionIdsKey = (questions.data ?? []).map((q) => q.id).join(",");
+  const phaseResources = useQuery(
+    () =>
+      session.data
+        ? listResourcesForPhase(session.data.phase_id)
+        : Promise.resolve([]),
+    [session.data?.phase_id],
+  );
+  const questionResources = useQuery(
+    () =>
+      questions.data
+        ? listResourcesForQuestions(questions.data.map((q) => q.id))
+        : Promise.resolve([]),
+    [questionIdsKey],
   );
   const [drafts, setDrafts] = useState<Record<string, DraftRating>>({});
   const [notes, setNotes] = useState("");
@@ -160,6 +178,13 @@ export default function SessionDetail() {
           Delete
         </button>
       </div>
+
+      <SessionResourcesPanel
+        questions={questions.data ?? []}
+        phaseResources={phaseResources.data ?? []}
+        questionResources={questionResources.data ?? []}
+        phaseName={phase.data?.name ?? undefined}
+      />
 
       <PhaseScoreSheet
         questions={questions.data ?? []}

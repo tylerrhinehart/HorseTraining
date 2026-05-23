@@ -112,6 +112,14 @@ export default function AppShell({ children }: Props) {
         </header>
       )}
 
+
+{!onAuthRoute && (
+  <div className="variation-strip" aria-label="Design variation">
+    <span>Show Ring Premium</span>
+    <span>Luxury black-and-ivory show-ring interface with editorial typography and gold decision points.</span>
+  </div>
+)}
+
       <main className="flex-1">{children}</main>
 
       {user && !onAuthRoute && (

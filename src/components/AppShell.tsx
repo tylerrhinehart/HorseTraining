@@ -112,6 +112,14 @@ export default function AppShell({ children }: Props) {
         </header>
       )}
 
+
+{!onAuthRoute && (
+  <div className="variation-strip" aria-label="Design variation">
+    <span>Field Clipboard</span>
+    <span>Dense, rugged, high-readability utility layout for gloves-on barn aisle data entry.</span>
+  </div>
+)}
+
       <main className="flex-1">{children}</main>
 
       {user && !onAuthRoute && (

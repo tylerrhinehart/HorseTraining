@@ -112,6 +112,14 @@ export default function AppShell({ children }: Props) {
         </header>
       )}
 
+
+{!onAuthRoute && (
+  <div className="variation-strip" aria-label="Design variation">
+    <span>Saddle Stitch Ledger</span>
+    <span>Warm tack-room notebook UX with stitched cards, parchment contrast, and a deliberate logbook feel.</span>
+  </div>
+)}
+
       <main className="flex-1">{children}</main>
 
       {user && !onAuthRoute && (

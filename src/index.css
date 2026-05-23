@@ -1229,3 +1229,44 @@
     gap: 12px;
   }
 }
+
+/* UX Variation: Saddle Stitch Ledger
+   Warm tack-room notebook UX: parchment surfaces, leather rails, stitched cards,
+   and compact logbook rhythm for trainers who want the app to feel like a premium stable binder. */
+:root {
+  --paper: #f1e4cf;
+  --paper-2: #fff8e9;
+  --paper-3: #ead4b0;
+  --ink: #2b160c;
+  --ink-2: #5d3924;
+  --muted: #88664d;
+  --line: rgba(77, 39, 19, 0.22);
+  --leather: #7f3f20;
+  --leather-2: #a0522d;
+  --rust: #b45309;
+  --sage: #607744;
+  --gold: #c58a2a;
+  --shadow: 0 20px 44px -28px rgba(64, 31, 14, 0.5);
+  --radius: 8px;
+  --radius-lg: 14px;
+  --gap: 16px;
+}
+body {
+  background:
+    linear-gradient(rgba(77, 39, 19, 0.045) 1px, transparent 1px) 0 0/100% 34px,
+    radial-gradient(circle at 10% -10%, rgba(197, 138, 42, 0.34), transparent 30rem),
+    linear-gradient(135deg, #f5ead6 0%, #ead3ae 100%);
+}
+.topbar { margin: 16px 18px 0; border-radius: 18px; background: #2b160c; color: #fff8e9; border: 0; box-shadow: 0 14px 0 rgba(127,63,32,.14); }
+.brand-mark { background: #fff8e9; color: #7f3f20; border-radius: 999px; box-shadow: inset 0 0 0 3px #c58a2a; }
+.variation-strip { margin: 14px 18px 0; padding: 10px 16px; border: 1px dashed rgba(127,63,32,.45); background: rgba(255,248,233,.72); border-radius: 999px; color: #5d3924; font-weight: 700; font-size: 13px; display: flex; justify-content: space-between; gap: 12px; }
+.view { padding-top: 26px; }
+.h-display { font-family: Georgia, 'Times New Roman', serif; letter-spacing: -1px; color: #2b160c; }
+.today-hero, .command-hero, .card, .metric-card { background: #fff8e9; border: 1px solid rgba(77,39,19,.18); box-shadow: var(--shadow); }
+.card, .metric-card { outline: 1px dashed rgba(127,63,32,.18); outline-offset: -7px; }
+.command-hero { border-left: 10px solid var(--leather); }
+.btn { border-radius: 999px; font-weight: 800; }
+.btn-leather, .btn-primary { background: linear-gradient(135deg, #7f3f20, #c58a2a); color: #fff8e9; }
+.tabbar { bottom: 18px; background: #2b160c; border: 0; border-radius: 18px; color: #f6e7cf; box-shadow: 0 18px 36px -22px rgba(43,22,12,.75); }
+.tabbar a.is-active, .tabbar button.is-active { background: #fff8e9; color: #7f3f20; border-radius: 12px; }
+.input, textarea, select { background: #fffaf0; border-color: rgba(77,39,19,.25); }

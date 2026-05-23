@@ -1,19 +1,23 @@
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { listInTrainingHorses, listPhases } from "../supabase/queries";
-import { useQuery } from "../supabase/useQuery";
-import { useActiveHorseId } from "../state/activeHorse";
-import HorseAvatar, { hashTone } from "../components/HorseAvatar";
 import { differenceInCalendarDays, parseISO } from "date-fns";
+import HorseAvatar, { hashTone } from "../components/HorseAvatar";
+import { useActiveHorseId } from "../state/activeHorse";
+import { listInTrainingHorses, listPhases } from "../supabase/queries";
 import type { Horse, Phase } from "../supabase/types";
+import { useQuery } from "../supabase/useQuery";
+
+const UX_VARIANT: string = "ux-profile-crm";
+const UX_TITLE = "Horse Profile CRM";
+const UX_SHORT = "Client-roster CRM experience with profile cards, owner context, and an activity timeline.";
 
 export default function Today() {
   const horses = useQuery(() => listInTrainingHorses(), []);
 
   if (horses.loading) {
     return (
-      <div className="view">
-        <div className="card">Loading…</div>
+      <div className="view variant-view">
+        <div className="variant-loading-card">Loading training workspace…</div>
       </div>
     );
   }
@@ -21,20 +25,16 @@ export default function Today() {
   const list = horses.data ?? [];
   if (list.length === 0) return <EmptyState />;
   if (list.length === 1) return <SingleHorseRedirect horseId={list[0].id} />;
-  return <MultiHorseToday horses={list} />;
+  return <VariantToday horses={list} />;
 }
 
 function EmptyState() {
   return (
-    <div className="view" style={{ textAlign: "center" }}>
-      <div className="eyebrow">Today</div>
-      <h1 className="h-display">No horses yet</h1>
-      <p className="muted" style={{ marginBottom: 16 }}>
-        Add a horse to start tracking training.
-      </p>
-      <Link to="/horses/new" className="btn btn-leather">
-        Add your first horse
-      </Link>
+    <div className="view variant-view variant-empty">
+      <div className="variant-page-kicker">{UX_TITLE}</div>
+      <h1 className="variant-page-title">Build your first training workspace</h1>
+      <p>{UX_SHORT}</p>
+      <Link to="/horses/new" className="btn btn-leather">Add your first horse</Link>
     </div>
   );
 }
@@ -45,132 +45,175 @@ function SingleHorseRedirect({ horseId }: { horseId: string }) {
     navigate(`/horses/${horseId}`, { replace: true });
   }, [horseId, navigate]);
   return (
-    <div className="view">
-      <div className="card">Loading…</div>
+    <div className="view variant-view">
+      <div className="variant-loading-card">Opening horse workspace…</div>
     </div>
   );
 }
 
-function MultiHorseToday({ horses }: { horses: Horse[] }) {
+function VariantToday({ horses }: { horses: Horse[] }) {
   const phases = useQuery(() => listPhases(), []);
-  const phasesById = new Map<string, Phase>(
-    (phases.data ?? []).map((p) => [p.id, p]),
-  );
+  const phasesById = new Map<string, Phase>((phases.data ?? []).map((p) => [p.id, p]));
   const [activeId] = useActiveHorseId();
+  const activeHorse = horses.find((h) => h.id === activeId) ?? horses[0];
+  const inPhase = horses.filter((h) => h.current_phase_id).length;
+  const needsPhase = horses.length - inPhase;
 
+  if (UX_VARIANT === "ux-command-map") {
+    return <CommandMap horses={horses} activeHorse={activeHorse} phasesById={phasesById} inPhase={inPhase} />;
+  }
+  if (UX_VARIANT === "ux-session-kiosk") {
+    return <SessionKiosk horses={horses} activeHorse={activeHorse} phasesById={phasesById} needsPhase={needsPhase} />;
+  }
+  if (UX_VARIANT === "ux-stable-kanban") {
+    return <StableKanban horses={horses} phasesById={phasesById} />;
+  }
+  if (UX_VARIANT === "ux-profile-crm") {
+    return <ProfileCrm horses={horses} activeHorse={activeHorse} phasesById={phasesById} />;
+  }
+  return <MobileCoach horses={horses} activeHorse={activeHorse} phasesById={phasesById} />;
+}
+
+function CommandMap({ horses, activeHorse, phasesById, inPhase }: { horses: Horse[]; activeHorse: Horse; phasesById: Map<string, Phase>; inPhase: number }) {
   return (
-    <div className="view">
-      <section className="today-hero">
-        <div className="command-hero">
-          <div className="hero-kicker">Live training board</div>
-          <h1 className="h-display">In training</h1>
-          <p className="hero-copy" style={{ fontSize: 16 }}>
-            {horses.length} horses currently in training. Open a horse workspace,
-            jump straight into today's session, and keep phase decisions visible.
-          </p>
-          <div className="hero-actions">
-            <Link to="/horses/new" className="btn btn-leather">
-              Add horse
-            </Link>
-            <Link to="/reference" className="btn">
-              Review TQA system
-            </Link>
-          </div>
+    <div className="view variant-view command-map-page">
+      <section className="command-map-hero">
+        <div>
+          <div className="variant-page-kicker">Live command map</div>
+          <h1 className="variant-page-title">Run the barn from one split-screen console.</h1>
+          <p>{horses.length} active horses, {inPhase} assigned to phases. The active horse stays pinned while the roster becomes a route map.</p>
         </div>
-        <div className="metric-grid">
-          <div className="metric-card">
-            <div className="val">{horses.length}</div>
-            <div className="lab">Active horses</div>
-          </div>
-          <div className="metric-card">
-            <div className="val">
-              {horses.filter((h) => h.current_phase_id).length}
-            </div>
-            <div className="lab">In phase</div>
-          </div>
-          <div className="metric-card">
-            <div className="val">
-              {horses.filter((h) => h.id === activeId).length || "—"}
-            </div>
-            <div className="lab">Selected</div>
-          </div>
+        <div className="command-map-actions">
+          <Link to={`/horses/${activeHorse.id}/sessions/new`} className="btn btn-leather">Start {activeHorse.name}</Link>
+          <Link to="/horses/new" className="btn">Add horse</Link>
         </div>
       </section>
-      <div className="horse-row-grid">
-        {horses.map((h) => (
-          <TodayCard
-            key={h.id}
-            horse={h}
-            phasesById={phasesById}
-            isActive={h.id === activeId}
-          />
-        ))}
-      </div>
+      <section className="command-map-layout">
+        <div className="command-map-roster">
+          <div className="variant-section-title">Training route tiles</div>
+          {horses.map((horse, index) => <RouteTile key={horse.id} horse={horse} phase={phaseFor(horse, phasesById)} index={index + 1} active={horse.id === activeHorse.id} />)}
+        </div>
+        <aside className="command-map-inspector">
+          <div className="variant-section-title">Pinned inspector</div>
+          <HorseAvatar name={activeHorse.name} tone={hashTone(activeHorse.name)} size={86} />
+          <h2>{activeHorse.name}</h2>
+          <p>{activeHorse.owner_name ? `Owner: ${activeHorse.owner_name}` : "Owner not entered"}</p>
+          <div className="inspector-stat"><span>Current phase</span><strong>{phaseFor(activeHorse, phasesById) || "Unassigned"}</strong></div>
+          <div className="inspector-stat"><span>Training day</span><strong>{trainingDay(activeHorse)}</strong></div>
+          <Link to={`/horses/${activeHorse.id}`} className="btn btn-leather">Open workspace</Link>
+          <Link to={`/horses/${activeHorse.id}/sessions/new`} className="btn">Log session</Link>
+        </aside>
+      </section>
     </div>
   );
 }
 
-function TodayCard({
-  horse,
-  phasesById,
-  isActive,
-}: {
-  horse: Horse;
-  phasesById: Map<string, Phase>;
-  isActive: boolean;
-}) {
-  const phase = horse.current_phase_id ? phasesById.get(horse.current_phase_id) : null;
-  const arrival = horse.arrival_date ? parseISO(horse.arrival_date) : null;
-  const dayN = arrival ? differenceInCalendarDays(new Date(), arrival) + 1 : null;
+function SessionKiosk({ horses, activeHorse, phasesById, needsPhase }: { horses: Horse[]; activeHorse: Horse; phasesById: Map<string, Phase>; needsPhase: number }) {
   return (
-    <div
-      className="card"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "12px 16px",
-        ...(isActive
-          ? {
-              borderColor: "var(--ink)",
-              boxShadow: "0 0 0 2px var(--leather) inset",
-            }
-          : null),
-      }}
-    >
-      <HorseAvatar name={horse.name} tone={hashTone(horse.name)} size={48} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <Link
-          to={`/horses/${horse.id}`}
-          style={{ textDecoration: "none", color: "inherit" }}
-        >
-          <div
-            style={{
-              fontWeight: 600,
-              fontFamily: "var(--font-display)",
-              fontSize: 18,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            {horse.name}
-            {isActive && <span className="horse-active-flag">In session</span>}
-          </div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            {horse.owner_name ? `Owner: ${horse.owner_name}` : "—"}
-            {phase ? ` · ${phase.name}` : ""}
-            {dayN != null ? ` · Day ${dayN}` : ""}
-          </div>
-        </Link>
-      </div>
-      <Link
-        to={`/horses/${horse.id}/sessions/new`}
-        className="btn btn-leather btn-sm"
-      >
-        Log session
-      </Link>
+    <div className="view variant-view kiosk-page">
+      <section className="kiosk-stage">
+        <div className="kiosk-stepper"><span className="is-current">1 Pick horse</span><span>2 Log session</span><span>3 Decide phase</span></div>
+        <h1 className="variant-page-title">Who are we training right now?</h1>
+        <p>Designed for a tablet on the barn wall: fewer lists, bigger tap targets, and a session-first workflow.</p>
+        <div className="kiosk-primary-card">
+          <HorseAvatar name={activeHorse.name} tone={hashTone(activeHorse.name)} size={96} />
+          <div><small>Suggested next</small><h2>{activeHorse.name}</h2><p>{phaseFor(activeHorse, phasesById) || "Ready for phase assignment"} · {trainingDay(activeHorse)}</p></div>
+          <Link to={`/horses/${activeHorse.id}/sessions/new`} className="btn btn-leather">Begin session</Link>
+        </div>
+      </section>
+      <section className="kiosk-picker">
+        <div className="variant-section-title">Tap a horse to start</div>
+        {horses.map((horse) => <KioskHorse key={horse.id} horse={horse} phase={phaseFor(horse, phasesById)} />)}
+      </section>
+      <aside className="kiosk-status"><strong>{needsPhase}</strong><span>need phase review</span><Link to="/reference">Open TQA guide</Link></aside>
     </div>
   );
+}
+
+function StableKanban({ horses, phasesById }: { horses: Horse[]; phasesById: Map<string, Phase> }) {
+  const groups = new Map<string, Horse[]>();
+  horses.forEach((horse) => {
+    const key = phaseFor(horse, phasesById) || "Unassigned";
+    groups.set(key, [...(groups.get(key) ?? []), horse]);
+  });
+  return (
+    <div className="view variant-view kanban-page">
+      <section className="kanban-topline">
+        <div><div className="variant-page-kicker">Stable board</div><h1 className="variant-page-title">Manage training like a phase pipeline.</h1></div>
+        <Link to="/horses/new" className="btn btn-leather">Add card</Link>
+      </section>
+      <section className="kanban-board">
+        {Array.from(groups.entries()).map(([phase, group]) => (
+          <div className="kanban-column" key={phase}>
+            <div className="kanban-column-head"><strong>{phase}</strong><span>{group.length}</span></div>
+            {group.map((horse) => <KanbanCard key={horse.id} horse={horse} phase={phase} />)}
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+}
+
+function ProfileCrm({ horses, activeHorse, phasesById }: { horses: Horse[]; activeHorse: Horse; phasesById: Map<string, Phase> }) {
+  return (
+    <div className="view variant-view crm-page">
+      <section className="crm-directory">
+        <div className="variant-page-kicker">Client roster CRM</div>
+        <h1 className="variant-page-title">Every horse becomes a profile account.</h1>
+        <div className="crm-search">Search by horse, owner, phase, or next decision…</div>
+        {horses.map((horse) => <CrmProfile key={horse.id} horse={horse} phase={phaseFor(horse, phasesById)} active={horse.id === activeHorse.id} />)}
+      </section>
+      <aside className="crm-timeline">
+        <div className="variant-section-title">Relationship timeline</div>
+        <h2>{activeHorse.name}</h2>
+        {["Review last session notes", "Send owner update", "Confirm next TQA decision"].map((label, index) => (
+          <div className="timeline-item" key={label}><span>{index + 1}</span><strong>{label}</strong><small>{index === 0 ? "Today" : index === 1 ? "After session" : "Next checkpoint"}</small></div>
+        ))}
+        <Link to={`/horses/${activeHorse.id}`} className="btn btn-leather">Open full profile</Link>
+      </aside>
+    </div>
+  );
+}
+
+function MobileCoach({ horses, activeHorse, phasesById }: { horses: Horse[]; activeHorse: Horse; phasesById: Map<string, Phase> }) {
+  return (
+    <div className="view variant-view mobile-coach-page">
+      <section className="coach-hero-card">
+        <div className="variant-page-kicker">Coach companion</div>
+        <h1 className="variant-page-title">Today’s ride plan in your pocket.</h1>
+        <p>Swipe-style cards, a sticky action tray, and mobile-first hierarchy for walking the aisle.</p>
+      </section>
+      <section className="coach-story-strip">
+        {horses.slice(0, 8).map((horse) => <Link to={`/horses/${horse.id}`} className="coach-story" key={horse.id}><HorseAvatar name={horse.name} tone={hashTone(horse.name)} /><span>{horse.name}</span></Link>)}
+      </section>
+      <section className="coach-card-stack">
+        {horses.map((horse) => <CoachCard key={horse.id} horse={horse} phase={phaseFor(horse, phasesById)} featured={horse.id === activeHorse.id} />)}
+      </section>
+      <div className="coach-action-tray"><span>Ready: {activeHorse.name}</span><Link to={`/horses/${activeHorse.id}/sessions/new`} className="btn btn-leather">Log now</Link></div>
+    </div>
+  );
+}
+
+function RouteTile({ horse, phase, index, active }: { horse: Horse; phase: string | null; index: number; active: boolean }) {
+  return <Link to={`/horses/${horse.id}`} className={`route-tile ${active ? "is-active" : ""}`}><span className="route-index">{String(index).padStart(2, "0")}</span><HorseAvatar name={horse.name} tone={hashTone(horse.name)} /><strong>{horse.name}</strong><small>{phase || "Unassigned"} · {trainingDay(horse)}</small></Link>;
+}
+function KioskHorse({ horse, phase }: { horse: Horse; phase: string | null }) {
+  return <Link to={`/horses/${horse.id}/sessions/new`} className="kiosk-horse"><HorseAvatar name={horse.name} tone={hashTone(horse.name)} size={58} /><span><strong>{horse.name}</strong><small>{phase || "Set phase"} · {trainingDay(horse)}</small></span><em>Start</em></Link>;
+}
+function KanbanCard({ horse, phase }: { horse: Horse; phase: string }) {
+  return <article className="kanban-card"><Link to={`/horses/${horse.id}`}><strong>{horse.name}</strong></Link><small>{horse.owner_name || "No owner"}</small><p>{trainingDay(horse)} · {phase}</p><Link to={`/horses/${horse.id}/sessions/new`} className="btn btn-sm">Session</Link></article>;
+}
+function CrmProfile({ horse, phase, active }: { horse: Horse; phase: string | null; active: boolean }) {
+  return <Link to={`/horses/${horse.id}`} className={`crm-profile ${active ? "is-active" : ""}`}><HorseAvatar name={horse.name} tone={hashTone(horse.name)} size={54} /><span><strong>{horse.name}</strong><small>{horse.owner_name || "Owner missing"}</small></span><em>{phase || "No phase"}</em></Link>;
+}
+function CoachCard({ horse, phase, featured }: { horse: Horse; phase: string | null; featured: boolean }) {
+  return <article className={`coach-card ${featured ? "is-featured" : ""}`}><div><HorseAvatar name={horse.name} tone={hashTone(horse.name)} size={72} /><span><strong>{horse.name}</strong><small>{phase || "Phase review"}</small></span></div><p>{trainingDay(horse)} · {horse.owner_name ? `Owner: ${horse.owner_name}` : "Owner not entered"}</p><footer><Link to={`/horses/${horse.id}`} className="btn">Open</Link><Link to={`/horses/${horse.id}/sessions/new`} className="btn btn-leather">Log</Link></footer></article>;
+}
+function phaseFor(horse: Horse, phasesById: Map<string, Phase>) {
+  return horse.current_phase_id ? phasesById.get(horse.current_phase_id)?.name ?? null : null;
+}
+function trainingDay(horse: Horse) {
+  if (!horse.arrival_date) return "No arrival date";
+  const day = differenceInCalendarDays(new Date(), parseISO(horse.arrival_date)) + 1;
+  return `Day ${day}`;
 }

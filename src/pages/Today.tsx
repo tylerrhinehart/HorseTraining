@@ -6,7 +6,7 @@ import { listInTrainingHorses, listPhases } from "../supabase/queries";
 import type { Horse, Phase } from "../supabase/types";
 import { useQuery } from "../supabase/useQuery";
 
-const UX_CONCEPT = "ledger";
+const UX_CONCEPT: string = "ledger";
 const UX_TITLE = "Saddle Stitch Ledger";
 
 export default function Today() {

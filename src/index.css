@@ -1324,3 +1324,268 @@
   .kiosk-primary-card { grid-template-columns:1fr; text-align:center; }
   .kiosk-status { position:static; margin:0 32px 32px; }
 }
+
+/* Mobile hardening pass — prevents squished layouts/cut-off content across all
+   design variants by forcing narrow screens into a single-column, wrap-first
+   layout with safe viewport widths and thumb-friendly spacing. */
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; max-width: 100%; overflow-x: hidden; }
+img, svg, video, canvas { max-width: 100%; }
+
+@media (max-width: 720px) {
+  :root { --tabbar-h: 76px; --gap: 14px; }
+  body { min-width: 0; overflow-x: hidden; }
+  .app-root,
+  .app-root-variant,
+  .variant-main,
+  main,
+  .view,
+  .variant-view {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  .topbar,
+  .variant-shellbar {
+    margin: 0 !important;
+    border-radius: 0 0 18px 18px !important;
+    padding: 12px 14px !important;
+    gap: 10px !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+  }
+  .brand,
+  .variant-brand,
+  .topbar-horse,
+  .variant-active-horse {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .brand-name,
+  .brand-sub,
+  .variant-brand strong,
+  .variant-brand em,
+  .variant-active-horse strong,
+  .variant-active-horse small,
+  .topbar-horse-name {
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+  .variant-settings { display: none !important; }
+
+  .view,
+  .variant-view {
+    padding: 16px 14px calc(var(--tabbar-h) + 28px) !important;
+  }
+  .h-display,
+  .variant-page-title {
+    font-size: clamp(34px, 12vw, 52px) !important;
+    line-height: .96 !important;
+    letter-spacing: -0.045em !important;
+    overflow-wrap: anywhere !important;
+  }
+  .hero-copy,
+  p,
+  .muted { overflow-wrap: anywhere; }
+
+  .today-hero,
+  .command-hero,
+  .metric-grid,
+  .horse-row-grid,
+  .field-row,
+  .settings-grid,
+  .report-grid,
+  .detail-grid,
+  .reference-grid,
+  .session-grid,
+  .command-map-layout,
+  .command-map-roster,
+  .kiosk-page,
+  .crm-page,
+  .kanban-board,
+  .kanban-topline {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-auto-columns: minmax(0, 1fr) !important;
+    gap: 14px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  .today-hero,
+  .command-hero,
+  .command-map-hero,
+  .kiosk-stage,
+  .crm-directory,
+  .crm-timeline,
+  .command-map-inspector,
+  .card,
+  .metric-card,
+  .route-tile,
+  .kiosk-primary-card,
+  .kiosk-horse,
+  .kanban-column,
+  .kanban-card,
+  .crm-profile,
+  .coach-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    border-radius: min(var(--radius-lg, 18px), 22px) !important;
+  }
+
+  .command-hero,
+  .command-map-hero,
+  .hero-actions,
+  .command-map-actions,
+  .card-head,
+  .kiosk-primary-card,
+  .kiosk-horse,
+  .crm-profile,
+  .coach-card > div,
+  .coach-card footer,
+  .field-row,
+  .tabbar,
+  .variant-mobile-tabs {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .horse-row-grid .card,
+  .card[style*="display: flex"] {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 12px !important;
+  }
+  .horse-row-grid .card > a.btn,
+  .horse-row-grid .card .btn,
+  .card[style*="display: flex"] > a.btn {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 44px !important;
+  }
+
+  .btn,
+  button,
+  .kiosk-horse,
+  .route-tile,
+  .crm-profile,
+  .coach-story {
+    min-height: 44px !important;
+  }
+  .btn { justify-content: center !important; text-align: center !important; white-space: normal !important; }
+
+  .tabbar,
+  .variant-mobile-tabs {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    padding: 7px !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    border-radius: 18px !important;
+  }
+  .tabbar a,
+  .tabbar button,
+  .variant-mobile-tabs a {
+    min-width: 0 !important;
+    padding: 8px 4px !important;
+    font-size: 11px !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .variant-nav-panel { display: none !important; }
+  .app-root-variant:not(.ux-mobile-coach),
+  .ux-command-map,
+  .ux-session-kiosk,
+  .ux-stable-kanban,
+  .ux-profile-crm {
+    display: grid !important;
+    grid-template: "shellbar" auto "main" 1fr / minmax(0, 1fr) !important;
+  }
+
+  .command-map-inspector,
+  .crm-timeline {
+    position: static !important;
+    top: auto !important;
+  }
+  .command-map-hero { align-items: stretch !important; }
+  .command-map-roster { align-content: start !important; }
+  .route-tile { grid-template-columns: auto minmax(0, 1fr) !important; min-height: 0 !important; }
+  .route-index { position: static !important; grid-column: 1 / -1 !important; }
+
+  .kiosk-page { padding: 16px 14px calc(var(--tabbar-h) + 28px) !important; }
+  .kiosk-stage { min-height: 0 !important; padding: 24px 18px !important; }
+  .kiosk-stepper { display: grid !important; grid-template-columns: 1fr !important; }
+  .kiosk-primary-card { grid-template-columns: 1fr !important; text-align: center !important; }
+  .kiosk-status {
+    position: static !important;
+    margin: 0 !important;
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) !important;
+  }
+
+  .kanban-board {
+    grid-auto-flow: row !important;
+    overflow-x: hidden !important;
+    min-height: 0 !important;
+  }
+  .kanban-column { padding: 12px !important; }
+  .kanban-column-head { gap: 10px !important; }
+
+  .crm-profile { grid-template-columns: auto minmax(0, 1fr) !important; }
+  .crm-profile em { grid-column: 1 / -1 !important; }
+  .timeline-item { grid-template-columns: 34px minmax(0, 1fr) !important; }
+
+  .ux-mobile-coach {
+    max-width: 100% !important;
+    min-height: 100vh !important;
+    box-shadow: none !important;
+  }
+  .mobile-coach-page { padding: 14px 12px 154px !important; }
+  .coach-hero-card { padding: 20px !important; }
+  .coach-hero-card .variant-page-title { font-size: clamp(34px, 11vw, 46px) !important; }
+  .coach-story-strip { max-width: 100% !important; overflow-x: auto !important; padding-bottom: 10px !important; }
+  .coach-card footer { display: grid !important; grid-template-columns: 1fr 1fr !important; }
+  .coach-action-tray {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 86px !important;
+    transform: none !important;
+    width: auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    text-align: center !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .view,
+  .variant-view { padding-left: 10px !important; padding-right: 10px !important; }
+  .topbar,
+  .variant-shellbar { padding-left: 10px !important; padding-right: 10px !important; }
+  .brand-mark,
+  .variant-brand-mark { width: 36px !important; height: 36px !important; font-size: 11px !important; }
+  .h-display,
+  .variant-page-title { font-size: clamp(30px, 13vw, 44px) !important; }
+  .metric-card,
+  .card,
+  .command-hero,
+  .command-map-hero,
+  .kiosk-stage,
+  .coach-hero-card { padding: 16px !important; }
+  .tabbar a,
+  .variant-mobile-tabs a { font-size: 10px !important; }
+}
+

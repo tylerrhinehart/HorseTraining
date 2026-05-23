@@ -112,6 +112,14 @@ export default function AppShell({ children }: Props) {
         </header>
       )}
 
+
+{!onAuthRoute && (
+  <div className="variation-strip" aria-label="Design variation">
+    <span>Arena Night Ops</span>
+    <span>High-contrast night arena cockpit with neon status cues and fast-glance operational hierarchy.</span>
+  </div>
+)}
+
       <main className="flex-1">{children}</main>
 
       {user && !onAuthRoute && (

@@ -1229,3 +1229,40 @@
     gap: 12px;
   }
 }
+
+/* UX Variation: Arena Night Ops
+   High-contrast night arena cockpit: neon status, glass panels, strong glow states,
+   and a command-console hierarchy optimized for fast evening checks. */
+:root {
+  --paper: #020617;
+  --paper-2: rgba(15, 23, 42, 0.86);
+  --paper-3: rgba(30, 41, 59, 0.92);
+  --ink: #f8fafc;
+  --ink-2: #cbd5e1;
+  --muted: #7dd3fc;
+  --line: rgba(125, 211, 252, 0.24);
+  --leather: #22d3ee;
+  --leather-2: #a78bfa;
+  --rust: #fb7185;
+  --sage: #34d399;
+  --gold: #facc15;
+  --shadow: 0 24px 70px -30px rgba(34,211,238,.35), 0 0 0 1px rgba(125,211,252,.12);
+  --glow: 0 0 42px rgba(34, 211, 238, .42);
+  --radius: 4px;
+  --radius-lg: 10px;
+}
+body { background: radial-gradient(circle at 20% 0%, rgba(34,211,238,.24), transparent 30rem), radial-gradient(circle at 90% 20%, rgba(167,139,250,.2), transparent 26rem), #020617; }
+.app-root { max-width: 1500px; }
+.topbar { margin: 10px; border-radius: 8px; background: rgba(2,6,23,.84); border: 1px solid rgba(125,211,252,.28); box-shadow: 0 0 0 1px rgba(34,211,238,.08), var(--glow); }
+.brand-mark { border-radius: 4px; background: linear-gradient(135deg,#22d3ee,#a78bfa); color: #020617; }
+.brand-sub, .eyebrow, .hero-kicker, .card-meta { color: #7dd3fc; }
+.variation-strip { margin: 0 10px; padding: 8px 12px; border: 1px solid rgba(34,211,238,.35); background: linear-gradient(90deg, rgba(34,211,238,.14), rgba(167,139,250,.12)); color: #e0f2fe; font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; display:flex; justify-content:space-between; }
+.h-display { text-transform: uppercase; letter-spacing: -.04em; text-shadow: 0 0 24px rgba(34,211,238,.35); }
+.today-hero { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(260px,.9fr); gap: 16px; align-items: stretch; }
+.card, .command-hero, .metric-card { background: linear-gradient(180deg, rgba(15,23,42,.94), rgba(2,6,23,.78)); border: 1px solid rgba(125,211,252,.24); box-shadow: var(--shadow); }
+.card::before, .metric-card::before { content: ''; display: block; height: 2px; margin: -1px -1px 10px; background: linear-gradient(90deg,#22d3ee,#a78bfa,transparent); border-radius: 999px; }
+.btn { border-radius: 6px; text-transform: uppercase; letter-spacing: .08em; font-family: var(--font-mono); }
+.btn-leather, .btn-primary { background: linear-gradient(135deg,#22d3ee,#a78bfa); color: #020617; }
+.tabbar { width: min(760px, calc(100vw - 22px)); border-radius: 8px; background: rgba(2,6,23,.9); border-color: rgba(34,211,238,.28); }
+.tabbar a.is-active { background: rgba(34,211,238,.16); color: #67e8f9; box-shadow: inset 0 0 0 1px rgba(34,211,238,.35); border-radius: 6px; }
+@media (max-width: 760px){ .today-hero{ grid-template-columns:1fr; } }

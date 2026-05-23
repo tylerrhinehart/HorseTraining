@@ -1229,3 +1229,44 @@
     gap: 12px;
   }
 }
+
+/* UX Variation: Show Ring Premium
+   Luxury show-ring interface: black/ivory palette, editorial typography,
+   gold decision points, and spacious premium cards for client-facing polish. */
+:root {
+  --paper: #0b0a08;
+  --paper-2: #15120e;
+  --paper-3: #211b14;
+  --ink: #fff7e8;
+  --ink-2: #dbcdb4;
+  --muted: #a99a82;
+  --line: rgba(218, 165, 32, 0.22);
+  --leather: #d6a84f;
+  --leather-2: #f1d48a;
+  --rust: #c66a2c;
+  --sage: #9faa74;
+  --gold: #f6d365;
+  --shadow: 0 28px 72px -30px rgba(0,0,0,.9), 0 0 0 1px rgba(246,211,101,.08);
+  --radius: 0px;
+  --radius-lg: 0px;
+  --gap: 24px;
+}
+body { background: radial-gradient(circle at 50% -10%, rgba(246,211,101,.16), transparent 30rem), linear-gradient(135deg,#0b0a08 0%, #17110b 55%, #050505 100%); }
+.app-root { max-width: 1280px; }
+.topbar { margin: 0; border-radius: 0; background: rgba(11,10,8,.92); border: 0; border-bottom: 1px solid rgba(246,211,101,.28); padding-block: 24px; }
+.brand-name, .h-display, .card-title { font-family: Didot, 'Bodoni 72', Georgia, serif; font-weight: 500; }
+.brand-mark { background: transparent; color: #f6d365; border: 1px solid #f6d365; border-radius: 0; box-shadow: none; }
+.brand-sub, .eyebrow, .hero-kicker { color: #d6a84f; letter-spacing: .22em; }
+.variation-strip { margin: 0; padding: 9px 24px; background:#f6d365; color:#0b0a08; display:flex; justify-content:space-between; font-family: var(--font-mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase; }
+.h-display { font-size: clamp(46px, 7vw, 92px); line-height: .85; color: #fff7e8; }
+.view { padding-top: 44px; }
+.command-hero, .card, .metric-card { background: linear-gradient(180deg,#15120e,#0f0d0a); border: 1px solid rgba(246,211,101,.18); box-shadow: var(--shadow); }
+.command-hero { border-top: 4px solid #f6d365; }
+.metric-card { text-align: center; }
+.metric-card .val { color: #f6d365; }
+.btn { border-radius: 0; border-color: rgba(246,211,101,.35); text-transform: uppercase; letter-spacing: .12em; }
+.btn-leather, .btn-primary { background: #f6d365; color: #0b0a08; }
+.btn:hover { background: rgba(246,211,101,.12); }
+.tabbar { bottom: 0; width: 100%; max-width: none; border-radius: 0; background: rgba(11,10,8,.96); border: 0; border-top: 1px solid rgba(246,211,101,.24); }
+.tabbar a.is-active { background: transparent; color: #f6d365; box-shadow: inset 0 3px 0 #f6d365; border-radius: 0; }
+.input, textarea, select { background:#0f0d0a; border-color: rgba(246,211,101,.25); }

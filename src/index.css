@@ -1229,3 +1229,47 @@
     gap: 12px;
   }
 }
+
+/* UX Variation: Field Clipboard
+   Rugged utility UX: dense, durable, high-readability controls for gloves-on
+   barn aisle use, with clear outlines and clipboard-like information grouping. */
+:root {
+  --paper: #e9ece1;
+  --paper-2: #fffdf4;
+  --paper-3: #d8dccf;
+  --ink: #12150f;
+  --ink-2: #2e3328;
+  --muted: #596151;
+  --line: rgba(18, 21, 15, 0.28);
+  --leather: #1f4d36;
+  --leather-2: #316b4b;
+  --rust: #a33d1f;
+  --sage: #556b2f;
+  --gold: #b8871f;
+  --shadow: 6px 6px 0 rgba(18,21,15,.16);
+  --radius: 2px;
+  --radius-lg: 2px;
+  --gap: 12px;
+}
+body { background: linear-gradient(90deg, rgba(18,21,15,.045) 1px, transparent 1px) 0 0/24px 24px, linear-gradient(rgba(18,21,15,.035) 1px, transparent 1px) 0 0/24px 24px, #e9ece1; }
+.app-root { max-width: 1440px; }
+.topbar { margin: 12px; border: 2px solid #12150f; border-radius: 2px; background: #fffdf4; color: #12150f; box-shadow: var(--shadow); padding-block: 12px; }
+.brand-mark { border-radius: 2px; background:#1f4d36; color:#fffdf4; box-shadow:none; }
+.brand-sub, .eyebrow, .hero-kicker, .card-meta { color:#596151; font-weight:900; }
+.variation-strip { margin: 0 12px 12px; padding: 8px 10px; background:#1f4d36; color:#fffdf4; border:2px solid #12150f; box-shadow: var(--shadow); display:flex; justify-content:space-between; font-weight:900; text-transform:uppercase; font-size:12px; letter-spacing:.08em; }
+.view { padding: 14px 12px 98px; }
+.h-display { font-size: clamp(34px, 5vw, 58px); text-transform: uppercase; letter-spacing: -.05em; }
+.today-hero { display:grid; grid-template-columns: 1fr 420px; gap: 12px; }
+.command-hero, .card, .metric-card { background:#fffdf4; border:2px solid #12150f; box-shadow: var(--shadow); }
+.command-hero { padding: 20px; }
+.metric-grid { gap: 10px; }
+.metric-card { padding: 12px; }
+.metric-card .val { font-family: var(--font-mono); }
+.horse-row-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
+.btn { border:2px solid #12150f; border-radius: 2px; box-shadow: 3px 3px 0 rgba(18,21,15,.22); font-weight:900; }
+.btn-leather, .btn-primary { background:#1f4d36; color:#fffdf4; }
+.btn:active { transform: translate(2px,2px); box-shadow:1px 1px 0 rgba(18,21,15,.22); }
+.tabbar { width:min(600px, calc(100vw - 24px)); border:2px solid #12150f; border-radius:2px; background:#fffdf4; box-shadow: var(--shadow); }
+.tabbar a.is-active { background:#1f4d36; color:#fffdf4; border-radius:2px; }
+.input, textarea, select { background:#fffdf4; border:2px solid #12150f; border-radius:2px; }
+@media (max-width: 860px){ .today-hero{ grid-template-columns:1fr; } .horse-row-grid{ grid-template-columns:1fr; } }

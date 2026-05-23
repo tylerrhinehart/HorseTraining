@@ -1229,3 +1229,326 @@
     gap: 12px;
   }
 }
+
+/* UX Variation: Arena Night Ops
+   High-contrast night arena cockpit: neon status, glass panels, strong glow states,
+   and a command-console hierarchy optimized for fast evening checks. */
+:root {
+  --paper: #020617;
+  --paper-2: rgba(15, 23, 42, 0.86);
+  --paper-3: rgba(30, 41, 59, 0.92);
+  --ink: #f8fafc;
+  --ink-2: #cbd5e1;
+  --muted: #7dd3fc;
+  --line: rgba(125, 211, 252, 0.24);
+  --leather: #22d3ee;
+  --leather-2: #a78bfa;
+  --rust: #fb7185;
+  --sage: #34d399;
+  --gold: #facc15;
+  --shadow: 0 24px 70px -30px rgba(34,211,238,.35), 0 0 0 1px rgba(125,211,252,.12);
+  --glow: 0 0 42px rgba(34, 211, 238, .42);
+  --radius: 4px;
+  --radius-lg: 10px;
+}
+body { background: radial-gradient(circle at 20% 0%, rgba(34,211,238,.24), transparent 30rem), radial-gradient(circle at 90% 20%, rgba(167,139,250,.2), transparent 26rem), #020617; }
+.app-root { max-width: 1500px; }
+.topbar { margin: 10px; border-radius: 8px; background: rgba(2,6,23,.84); border: 1px solid rgba(125,211,252,.28); box-shadow: 0 0 0 1px rgba(34,211,238,.08), var(--glow); }
+.brand-mark { border-radius: 4px; background: linear-gradient(135deg,#22d3ee,#a78bfa); color: #020617; }
+.brand-sub, .eyebrow, .hero-kicker, .card-meta { color: #7dd3fc; }
+.variation-strip { margin: 0 10px; padding: 8px 12px; border: 1px solid rgba(34,211,238,.35); background: linear-gradient(90deg, rgba(34,211,238,.14), rgba(167,139,250,.12)); color: #e0f2fe; font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; display:flex; justify-content:space-between; }
+.h-display { text-transform: uppercase; letter-spacing: -.04em; text-shadow: 0 0 24px rgba(34,211,238,.35); }
+.today-hero { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(260px,.9fr); gap: 16px; align-items: stretch; }
+.card, .command-hero, .metric-card { background: linear-gradient(180deg, rgba(15,23,42,.94), rgba(2,6,23,.78)); border: 1px solid rgba(125,211,252,.24); box-shadow: var(--shadow); }
+.card::before, .metric-card::before { content: ''; display: block; height: 2px; margin: -1px -1px 10px; background: linear-gradient(90deg,#22d3ee,#a78bfa,transparent); border-radius: 999px; }
+.btn { border-radius: 6px; text-transform: uppercase; letter-spacing: .08em; font-family: var(--font-mono); }
+.btn-leather, .btn-primary { background: linear-gradient(135deg,#22d3ee,#a78bfa); color: #020617; }
+.tabbar { width: min(760px, calc(100vw - 22px)); border-radius: 8px; background: rgba(2,6,23,.9); border-color: rgba(34,211,238,.28); }
+.tabbar a.is-active { background: rgba(34,211,238,.16); color: #67e8f9; box-shadow: inset 0 0 0 1px rgba(34,211,238,.35); border-radius: 6px; }
+@media (max-width: 760px){ .today-hero{ grid-template-columns:1fr; } }
+
+/* Mobile hardening pass — prevents squished layouts/cut-off content across all
+   design variants by forcing narrow screens into a single-column, wrap-first
+   layout with safe viewport widths and thumb-friendly spacing. */
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; max-width: 100%; overflow-x: hidden; }
+img, svg, video, canvas { max-width: 100%; }
+
+@media (max-width: 720px) {
+  :root { --tabbar-h: 76px; --gap: 14px; }
+  body { min-width: 0; overflow-x: hidden; }
+  .app-root,
+  .app-root-variant,
+  .variant-main,
+  main,
+  .view,
+  .variant-view {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  .topbar,
+  .variant-shellbar {
+    margin: 0 !important;
+    border-radius: 0 0 18px 18px !important;
+    padding: 12px 14px !important;
+    gap: 10px !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+  }
+  .brand,
+  .variant-brand,
+  .topbar-horse,
+  .variant-active-horse {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .brand-name,
+  .brand-sub,
+  .variant-brand strong,
+  .variant-brand em,
+  .variant-active-horse strong,
+  .variant-active-horse small,
+  .topbar-horse-name {
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+  .variant-settings { display: none !important; }
+
+  .view,
+  .variant-view {
+    padding: 16px 14px calc(var(--tabbar-h) + 28px) !important;
+  }
+  .h-display,
+  .variant-page-title {
+    font-size: clamp(34px, 12vw, 52px) !important;
+    line-height: .96 !important;
+    letter-spacing: -0.045em !important;
+    overflow-wrap: anywhere !important;
+  }
+  .hero-copy,
+  p,
+  .muted { overflow-wrap: anywhere; }
+
+  .today-hero,
+  .command-hero,
+  .metric-grid,
+  .horse-row-grid,
+  .field-row,
+  .settings-grid,
+  .report-grid,
+  .detail-grid,
+  .reference-grid,
+  .session-grid,
+  .command-map-layout,
+  .command-map-roster,
+  .kiosk-page,
+  .crm-page,
+  .kanban-board,
+  .kanban-topline {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-auto-columns: minmax(0, 1fr) !important;
+    gap: 14px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  .today-hero,
+  .command-hero,
+  .command-map-hero,
+  .kiosk-stage,
+  .crm-directory,
+  .crm-timeline,
+  .command-map-inspector,
+  .card,
+  .metric-card,
+  .route-tile,
+  .kiosk-primary-card,
+  .kiosk-horse,
+  .kanban-column,
+  .kanban-card,
+  .crm-profile,
+  .coach-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    border-radius: min(var(--radius-lg, 18px), 22px) !important;
+  }
+
+  .command-hero,
+  .command-map-hero,
+  .hero-actions,
+  .command-map-actions,
+  .card-head,
+  .kiosk-primary-card,
+  .kiosk-horse,
+  .crm-profile,
+  .coach-card > div,
+  .coach-card footer,
+  .field-row,
+  .tabbar,
+  .variant-mobile-tabs {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .horse-row-grid .card,
+  .card[style*="display: flex"] {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 12px !important;
+  }
+  .horse-row-grid .card > a.btn,
+  .horse-row-grid .card .btn,
+  .card[style*="display: flex"] > a.btn {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 44px !important;
+  }
+
+  .btn,
+  button,
+  .kiosk-horse,
+  .route-tile,
+  .crm-profile,
+  .coach-story {
+    min-height: 44px !important;
+  }
+  .btn { justify-content: center !important; text-align: center !important; white-space: normal !important; }
+
+  .tabbar,
+  .variant-mobile-tabs {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    padding: 7px !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    border-radius: 18px !important;
+  }
+  .tabbar a,
+  .tabbar button,
+  .variant-mobile-tabs a {
+    min-width: 0 !important;
+    padding: 8px 4px !important;
+    font-size: 11px !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .variant-nav-panel { display: none !important; }
+  .app-root-variant:not(.ux-mobile-coach),
+  .ux-command-map,
+  .ux-session-kiosk,
+  .ux-stable-kanban,
+  .ux-profile-crm {
+    display: grid !important;
+    grid-template: "shellbar" auto "main" 1fr / minmax(0, 1fr) !important;
+  }
+
+  .command-map-inspector,
+  .crm-timeline {
+    position: static !important;
+    top: auto !important;
+  }
+  .command-map-hero { align-items: stretch !important; }
+  .command-map-roster { align-content: start !important; }
+  .route-tile { grid-template-columns: auto minmax(0, 1fr) !important; min-height: 0 !important; }
+  .route-index { position: static !important; grid-column: 1 / -1 !important; }
+
+  .kiosk-page { padding: 16px 14px calc(var(--tabbar-h) + 28px) !important; }
+  .kiosk-stage { min-height: 0 !important; padding: 24px 18px !important; }
+  .kiosk-stepper { display: grid !important; grid-template-columns: 1fr !important; }
+  .kiosk-primary-card { grid-template-columns: 1fr !important; text-align: center !important; }
+  .kiosk-status {
+    position: static !important;
+    margin: 0 !important;
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) !important;
+  }
+
+  .kanban-board {
+    grid-auto-flow: row !important;
+    overflow-x: hidden !important;
+    min-height: 0 !important;
+  }
+  .kanban-column { padding: 12px !important; }
+  .kanban-column-head { gap: 10px !important; }
+
+  .crm-profile { grid-template-columns: auto minmax(0, 1fr) !important; }
+  .crm-profile em { grid-column: 1 / -1 !important; }
+  .timeline-item { grid-template-columns: 34px minmax(0, 1fr) !important; }
+
+  .ux-mobile-coach {
+    max-width: 100% !important;
+    min-height: 100vh !important;
+    box-shadow: none !important;
+  }
+  .mobile-coach-page { padding: 14px 12px 154px !important; }
+  .coach-hero-card { padding: 20px !important; }
+  .coach-hero-card .variant-page-title { font-size: clamp(34px, 11vw, 46px) !important; }
+  .coach-story-strip { max-width: 100% !important; overflow-x: auto !important; padding-bottom: 10px !important; }
+  .coach-card footer { display: grid !important; grid-template-columns: 1fr 1fr !important; }
+  .coach-action-tray {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 86px !important;
+    transform: none !important;
+    width: auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    text-align: center !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .view,
+  .variant-view { padding-left: 10px !important; padding-right: 10px !important; }
+  .topbar,
+  .variant-shellbar { padding-left: 10px !important; padding-right: 10px !important; }
+  .brand-mark,
+  .variant-brand-mark { width: 36px !important; height: 36px !important; font-size: 11px !important; }
+  .h-display,
+  .variant-page-title { font-size: clamp(30px, 13vw, 44px) !important; }
+  .metric-card,
+  .card,
+  .command-hero,
+  .command-map-hero,
+  .kiosk-stage,
+  .coach-hero-card { padding: 16px !important; }
+  .tabbar a,
+  .variant-mobile-tabs a { font-size: 10px !important; }
+}
+
+/* Actual UX rework pass — each variant now changes the home workflow itself.
+   The single-horse redirect is removed so reviewers always see the concept UI. */
+.ux-lab-view { padding: clamp(18px, 4vw, 42px); max-width: 1440px; margin: 0 auto; width: 100%; }
+.ux-lab-view a { color: inherit; }
+.ux-kicker { text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 900; opacity: .7; }
+.ux-lab-view h1 { font-size: clamp(38px, 7vw, 92px); line-height: .9; letter-spacing: -.065em; margin: 8px 0 18px; }
+.ux-lab-loading,.ux-empty-lab { background: var(--paper-2); border: 1px solid var(--line); border-radius: 24px; padding: 28px; }
+.ux-horse-line { display:grid; grid-template-columns:auto auto minmax(0,1fr) auto; gap:12px; align-items:center; text-decoration:none; background:var(--paper-2); border:1px solid var(--line); border-radius:18px; padding:14px; }
+.ux-horse-line strong,.ux-horse-line small { display:block; } .ux-horse-line em{font-style:normal;font-weight:900;color:var(--leather);} .ux-step,.ux-stat{background:var(--paper-2);border:1px solid var(--line);border-radius:18px;padding:16px;} .ux-stat{display:flex;justify-content:space-between;gap:12px;}
+.ledger-spread{display:grid;grid-template-columns:360px 1fr;gap:22px}.ledger-spread aside,.ledger-pages,.ledger-checks{background:var(--paper-2);border:1px solid var(--line);border-radius:28px;padding:24px}.ledger-pages{display:grid;gap:12px}.ledger-checks{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+.arena-radar{display:flex;justify-content:space-between;gap:22px;background:var(--paper-2);border:1px solid var(--line);border-radius:28px;padding:26px}.arena-panels{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;margin-top:18px}.arena-ring{min-height:520px;border-radius:999px;border:1px solid var(--line);background:radial-gradient(circle,var(--paper-3),transparent 65%);position:relative}.radar-dot{position:absolute;display:grid;justify-items:center;text-decoration:none;font-size:12px}.dot-0{left:48%;top:8%}.dot-1{left:75%;top:30%}.dot-2{left:65%;top:68%}.dot-3{left:28%;top:70%}.dot-4{left:12%;top:34%}.dot-5{left:44%;top:44%}.arena-console{background:var(--paper-2);border:1px solid var(--line);border-radius:28px;padding:22px}
+.pasture-morning-plan{background:linear-gradient(135deg,var(--paper-2),var(--paper-3));border:1px solid var(--line);border-radius:34px;padding:30px}.pasture-actions{display:flex;gap:10px;flex-wrap:wrap}.plan-chip{background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:900}.pasture-path{display:grid;gap:12px;margin-top:18px}.pasture-stop{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--paper-2);border:1px solid var(--line);border-radius:22px;padding:14px}.pasture-stop>span{font-size:28px;font-weight:900;color:var(--leather)}.pasture-focus{margin-top:18px;background:var(--paper-2);border:1px solid var(--line);border-radius:24px;padding:20px}
+.ux-premium-workflow{display:grid;grid-template-columns:minmax(320px,.85fr) 1.15fr;gap:22px}.premium-cover{min-height:560px;display:flex;flex-direction:column;justify-content:flex-end;background:var(--paper-2);border:1px solid var(--line);border-radius:0;padding:34px}.premium-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.premium-card{background:var(--paper-2);border:1px solid var(--line);padding:22px;text-decoration:none;min-height:220px}.premium-decision{grid-column:2;background:var(--paper-2);border:1px solid var(--line);padding:24px}
+.clipboard-header{display:flex;justify-content:space-between;align-items:end;gap:16px}.clipboard-sheet{margin-top:18px;background:var(--paper-2);border:2px solid var(--ink);box-shadow:var(--shadow);padding:10px}.sheet-row{display:grid;grid-template-columns:1.1fr 1fr .8fr auto;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding:12px}.sheet-head{font-size:12px;text-transform:uppercase;letter-spacing:.1em}
+.command-split{display:grid;grid-template-columns:340px 1fr;gap:20px}.command-split aside{background:var(--paper-2);border:1px solid var(--line);border-radius:28px;padding:26px}.command-map-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.kiosk-question{text-align:center;min-height:360px;display:grid;place-items:center;background:var(--paper-2);border:1px solid var(--line);border-radius:42px;padding:30px}.kiosk-choice-wall{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:18px}.kiosk-choice{min-height:190px;display:grid;place-items:center;text-align:center;text-decoration:none;background:var(--paper-2);border:1px solid var(--line);border-radius:28px;padding:18px}.kiosk-choice span,.kiosk-choice small{display:block}
+.kanban-swimlanes{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(280px,1fr);gap:14px;overflow-x:auto}.swimlane{background:var(--paper-2);border:1px solid var(--line);border-radius:24px;padding:14px}.swimlane h2{display:flex;justify-content:space-between}.swimlane h2 span{background:var(--leather);color:var(--paper);border-radius:999px;padding:2px 10px}.swim-card{display:block;text-decoration:none;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px}.swim-card b,.swim-card small{display:block}
+.ux-crm-workflow{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:22px}.crm-master,.crm-detail{background:var(--paper-2);border:1px solid var(--line);border-radius:28px;padding:24px}.crm-account{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;text-decoration:none;border-bottom:1px solid var(--line);padding:12px 0}.crm-account b,.crm-account small{display:block}.crm-account em{font-style:normal;color:var(--leather);font-weight:900}.crm-detail{position:sticky;top:100px;align-self:start;display:grid;gap:12px}
+.ux-coach-workflow{max-width:560px}.coach-now{background:linear-gradient(135deg,var(--leather),var(--gold));color:var(--paper);border-radius:34px;padding:24px}.coach-feed{display:grid;gap:12px;margin-top:16px}.coach-feed-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--paper-2);border:1px solid var(--line);border-radius:26px;padding:14px}.coach-sticky{position:sticky;bottom:90px;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--ink);color:var(--paper);border-radius:22px;padding:12px;margin-top:16px}
+@media(max-width:720px){.ux-lab-view{padding:14px 12px calc(var(--tabbar-h,76px) + 24px)}.ux-lab-view h1{font-size:clamp(34px,12vw,52px)}.ledger-spread,.arena-panels,.ux-premium-workflow,.command-split,.ux-crm-workflow{grid-template-columns:1fr}.ledger-checks,.premium-gallery,.kiosk-choice-wall{grid-template-columns:1fr}.premium-decision{grid-column:auto}.premium-cover{min-height:360px}.arena-ring{min-height:360px}.clipboard-header{display:grid}.sheet-row{grid-template-columns:1fr}.sheet-head{display:none}.kanban-swimlanes{grid-auto-flow:row;overflow-x:hidden}.pasture-stop,.coach-feed-card,.ux-horse-line,.crm-account{grid-template-columns:auto minmax(0,1fr)}.pasture-stop .btn,.coach-feed-card .btn,.ux-horse-line em,.crm-account em{grid-column:1/-1}.coach-sticky{position:fixed;left:12px;right:12px;bottom:88px;z-index:60}.ux-step,.ux-stat,.ledger-spread aside,.ledger-pages,.ledger-checks,.premium-cover,.premium-card,.clipboard-sheet,.command-split aside,.crm-master,.crm-detail{padding:16px}}
+

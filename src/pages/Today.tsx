@@ -7,7 +7,7 @@ import { listInTrainingHorses, listPhases } from "../supabase/queries";
 import type { Horse, Phase } from "../supabase/types";
 import { useQuery } from "../supabase/useQuery";
 
-const UX_VARIANT = "ux-command-map";
+const UX_VARIANT: string = "ux-command-map";
 const UX_TITLE = "Trainer Command Map";
 const UX_SHORT = "Split-screen command map with persistent side rail, active-horse inspector, and route tiles.";
 

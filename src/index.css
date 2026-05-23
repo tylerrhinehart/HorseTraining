@@ -1229,3 +1229,42 @@
     gap: 12px;
   }
 }
+
+/* UX Variation: Pasture Morning
+   Soft daylight and low-stress barn workflow: airy spacing, green cues,
+   rounded cards, and calmer progressive disclosure for field use. */
+:root {
+  --paper: #f6fbef;
+  --paper-2: rgba(255, 255, 255, 0.9);
+  --paper-3: #e6f4d8;
+  --ink: #183222;
+  --ink-2: #39513f;
+  --muted: #6b806f;
+  --line: rgba(58, 93, 66, 0.16);
+  --leather: #2f855a;
+  --leather-2: #68a063;
+  --rust: #d97706;
+  --sage: #79a954;
+  --gold: #eab308;
+  --shadow: 0 18px 54px -34px rgba(47, 99, 64, .35);
+  --radius: 22px;
+  --radius-lg: 34px;
+  --gap: 22px;
+}
+body { background: radial-gradient(circle at 18% -8%, rgba(134, 239, 172, .42), transparent 28rem), radial-gradient(circle at 90% 8%, rgba(254, 240, 138, .34), transparent 24rem), linear-gradient(180deg,#fbfff6 0%, #eef8e6 100%); }
+.app-root { max-width: 1180px; }
+.topbar { margin: 22px 22px 0; border-radius: 999px; background: rgba(255,255,255,.76); color: #183222; border: 1px solid rgba(47,133,90,.14); box-shadow: var(--shadow); }
+.brand-mark { border-radius: 999px; background: linear-gradient(135deg,#bbf7d0,#2f855a); color: #183222; box-shadow:none; }
+.variation-strip { margin: 14px 28px 0; padding: 12px 18px; border-radius: 999px; background: rgba(220,252,231,.82); color: #27563a; display:flex; justify-content:space-between; font-size:13px; }
+.view { padding: 36px 22px 120px; }
+.h-display { font-size: clamp(42px, 8vw, 86px); line-height: .9; color: #183222; }
+.today-hero { gap: 24px; align-items: stretch; }
+.command-hero { padding: clamp(28px,5vw,56px); background: linear-gradient(145deg, rgba(255,255,255,.94), rgba(220,252,231,.62)); border: 1px solid rgba(47,133,90,.12); border-radius: 38px; }
+.metric-card, .card { background: rgba(255,255,255,.88); border: 1px solid rgba(47,133,90,.14); box-shadow: var(--shadow); }
+.horse-row-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.horse-row-grid .card { min-height: 124px; align-items: flex-start !important; flex-direction: column; }
+.btn { border-radius: 999px; padding-inline: 20px; }
+.btn-leather, .btn-primary { background: linear-gradient(135deg,#2f855a,#9ccc65); color: white; }
+.tabbar { width: min(420px, calc(100vw - 30px)); border-radius: 999px; background: rgba(255,255,255,.86); border-color: rgba(47,133,90,.16); }
+.tabbar a.is-active { background: #dcfce7; color: #166534; border-radius: 999px; }
+.input, textarea, select { background: rgba(255,255,255,.92); border-color: rgba(47,133,90,.2); }

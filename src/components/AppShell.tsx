@@ -112,6 +112,14 @@ export default function AppShell({ children }: Props) {
         </header>
       )}
 
+
+{!onAuthRoute && (
+  <div className="variation-strip" aria-label="Design variation">
+    <span>Pasture Morning</span>
+    <span>Soft daylight, airy spacing, rounded cards, and calmer progressive disclosure for low-stress barn use.</span>
+  </div>
+)}
+
       <main className="flex-1">{children}</main>
 
       {user && !onAuthRoute && (

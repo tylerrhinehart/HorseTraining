@@ -26,6 +26,9 @@ const mkSession = (
   phase_id: "p",
   occurred_at: occurredAt,
   notes: null,
+  rider: null,
+  bit: null,
+  task_completions: [],
   created_at: occurredAt,
   updated_at: occurredAt,
   ratings: ratings.map((r, i) => ({

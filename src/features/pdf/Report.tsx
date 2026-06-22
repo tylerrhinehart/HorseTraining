@@ -32,6 +32,11 @@ import {
   type TrifectaAxis,
 } from "../../content/trifecta";
 import { SCORE_LEGEND } from "../../content/tqa-template";
+import {
+  FIVE_FOUNDATION_LEGEND,
+  FIVE_TEMPERAMENT_LEGEND,
+} from "../../content/programs";
+import type { RatingScaleKind } from "../../supabase/types";
 
 const styles = StyleSheet.create({
   page: {
@@ -163,7 +168,10 @@ export function HorseReport({
   const fTrend = trend(points, "foundation");
   const tTrend = trend(points, "temperament");
   const latest = points.length > 0 ? points[points.length - 1] : null;
-  const certified = latest && meetsCertificationThreshold(latest);
+  const scale: RatingScaleKind =
+    horse.training_type === "foundation" ? "tqa" : "five";
+  // The +2.7 certification threshold is defined on the −3…+3 Foundation scale.
+  const certified = scale === "tqa" && latest && meetsCertificationThreshold(latest);
 
   const phaseFor = (id: string) => phases.find((p) => p.id === id)?.name ?? "—";
 
@@ -194,7 +202,7 @@ export function HorseReport({
             : "No arrival date"}
         </Text>
 
-        <ScoreLegendBlock />
+        <ScoreLegendBlock scale={scale} />
 
         <Text style={styles.h2}>Summary</Text>
         <View style={styles.metaGrid}>
@@ -225,7 +233,13 @@ export function HorseReport({
           />
           <Meta
             label="Cert threshold"
-            value={certified ? "Met (≥ +2.7 both axes)" : "Not met"}
+            value={
+              scale === "five"
+                ? "1–5 scale"
+                : certified
+                  ? "Met (≥ +2.7 both axes)"
+                  : "Not met"
+            }
           />
         </View>
 
@@ -324,6 +338,7 @@ export function HorseReport({
               session={s}
               questions={questions}
               phaseFor={phaseFor}
+              scale={scale}
             />
           ))
         )}
@@ -397,11 +412,23 @@ function arrowFor(dir: "up" | "down" | "flat" | "n/a"): string {
   return "—";
 }
 
-function formatScore(n: number): string {
+function formatScore(n: number, scale: RatingScaleKind = "tqa"): string {
+  if (scale === "five") return String(n);
   return n > 0 ? `+${n}` : String(n);
 }
 
-function ScoreLegendBlock() {
+function ScoreLegendBlock({ scale }: { scale: RatingScaleKind }) {
+  if (scale === "five") {
+    return (
+      <View style={styles.scoreLegend}>
+        {([1, 2, 3, 4, 5] as const).map((s) => (
+          <Text key={`f${s}`} style={styles.legendChip}>
+            {s} = {FIVE_FOUNDATION_LEGEND[s]} (Found.) / {FIVE_TEMPERAMENT_LEGEND[s]} (Temp.)
+          </Text>
+        ))}
+      </View>
+    );
+  }
   return (
     <View style={styles.scoreLegend}>
       {([3, 2, 1, 0, -1, -2, -3] as const).map((s) => (
@@ -435,12 +462,14 @@ interface SessionScoreSheetBlockProps {
   session: SessionWithRatings;
   questions: Question[];
   phaseFor: (id: string) => string;
+  scale: RatingScaleKind;
 }
 
 function SessionScoreSheetBlock({
   session,
   questions,
   phaseFor,
+  scale,
 }: SessionScoreSheetBlockProps) {
   const phaseQuestions = questions
     .filter((q) => q.phase_id === session.phase_id)
@@ -471,7 +500,7 @@ function SessionScoreSheetBlock({
                   <Text style={styles.itemNum}>{i + 1}.</Text>
                   <Text style={styles.itemText}>{q.text}</Text>
                   <Text style={styles.itemScore}>
-                    {r ? formatScore(r.score) : "—"}
+                    {r ? formatScore(r.score, scale) : "—"}
                   </Text>
                 </View>
                 {r?.comment && (
@@ -494,7 +523,7 @@ function SessionScoreSheetBlock({
                     {q.low_label} / {q.high_label}
                   </Text>
                   <Text style={styles.itemScore}>
-                    {r ? formatScore(r.score) : "—"}
+                    {r ? formatScore(r.score, scale) : "—"}
                   </Text>
                 </View>
                 {r?.comment && (

@@ -269,7 +269,7 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
                         onChange={(s) =>
                           setDrafts((d) => ({
                             ...d,
-                            [item.code]: { ...d[item.code], score: s },
+                            [item.code]: { ...d[item.code], score: s as TqaScore },
                           }))
                         }
                         label={item.text}

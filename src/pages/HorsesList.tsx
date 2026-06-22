@@ -5,6 +5,7 @@ import { listHorses, listPhases } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import { useActiveHorseId } from "../state/activeHorse";
 import { gradientFor, hashTone, initialsOf } from "../components/HorseAvatar";
+import { programLabel } from "../content/programs";
 import { formatHumanDate } from "../utils/dates";
 import type { Horse, Phase } from "../supabase/types";
 
@@ -150,6 +151,9 @@ function HorseCard({
         <h3 className="horse-name">{horse.name}</h3>
         <span className="horse-sub">
           {horse.owner_name ? `Owner: ${horse.owner_name}` : "—"}
+        </span>
+        <span className="pill pill-muted" style={{ marginTop: 2, alignSelf: "flex-start" }}>
+          {programLabel(horse.training_type)}
         </span>
         {phase && (
           <span className="horse-sub" style={{ color: "var(--leather)" }}>

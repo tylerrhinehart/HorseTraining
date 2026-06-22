@@ -8,7 +8,9 @@ import {
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
-import type { TqaScore } from "../supabase/types";
+import TaskCompletionPicker from "../components/TaskCompletionPicker";
+import { BIT_OPTIONS } from "../content/programs";
+import type { TaskCompletion } from "../supabase/types";
 
 export default function SessionNew() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +28,9 @@ export default function SessionNew() {
   );
   const [drafts, setDrafts] = useState<Record<string, DraftRating>>({});
   const [notes, setNotes] = useState("");
+  const [rider, setRider] = useState("");
+  const [bit, setBit] = useState("");
+  const [tasks, setTasks] = useState<TaskCompletion[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,10 +74,12 @@ export default function SessionNew() {
     );
   }
 
-  const currentPhaseName =
-    phases.data?.find((p) => p.id === phaseId)?.name ?? "—";
+  const currentPhase = phases.data?.find((p) => p.id === phaseId) ?? null;
+  const currentPhaseName = currentPhase?.name ?? "—";
+  const scale = currentPhase?.scale ?? "tqa";
+  const isPerformance = horse.data.training_type !== "foundation";
 
-  const setScore = (qid: string, score: TqaScore) =>
+  const setScore = (qid: string, score: number) =>
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], score } }));
   const setComment = (qid: string, comment: string) =>
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], comment } }));
@@ -103,6 +110,9 @@ export default function SessionNew() {
         phase_id: phaseId,
         occurred_at: new Date(occurredAt).toISOString(),
         notes: notes || null,
+        rider: isPerformance ? rider || null : null,
+        bit: isPerformance ? bit || null : null,
+        task_completions: isPerformance ? tasks : [],
         ratings,
       });
       navigate(`/horses/${id}`);
@@ -147,7 +157,45 @@ export default function SessionNew() {
             onChange={(e) => setOccurredAt(e.target.value)}
           />
         </div>
+        {isPerformance && (
+          <>
+            <div className="field">
+              <label className="label" htmlFor="session-rider">
+                Rider
+              </label>
+              <input
+                id="session-rider"
+                className="input"
+                placeholder="Who rode today"
+                value={rider}
+                onChange={(e) => setRider(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="session-bit">
+                Bit (this week)
+              </label>
+              <select
+                id="session-bit"
+                className="input"
+                value={bit}
+                onChange={(e) => setBit(e.target.value)}
+              >
+                <option value="">—</option>
+                {BIT_OPTIONS.map((b) => (
+                  <option key={b.code} value={b.code}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
       </div>
+
+      {isPerformance && (
+        <TaskCompletionPicker value={tasks} onChange={setTasks} />
+      )}
 
       {questions.loading ? (
         <div className="card">Loading questions…</div>
@@ -157,6 +205,7 @@ export default function SessionNew() {
           drafts={drafts}
           onScore={setScore}
           onComment={setComment}
+          scale={scale}
         />
       )}
 

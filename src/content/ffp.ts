@@ -78,7 +78,7 @@ export const FRAMEWORK_QUESTIONS: FrameworkQuestion[] = [
     number: 1,
     question: "How much should I expect to pay a professional horse trainer?",
     summary:
-      "Price varies depending on feed and board, as well as the type and level of professional horse trainer.",
+      "Nationwide, expect roughly $1,200–$2,000 per month with feed and board for a qualified trainer who meets the industry quality standard. See the pricing breakdown below.",
   },
   {
     number: 2,
@@ -98,6 +98,28 @@ export const FRAMEWORK_QUESTIONS: FrameworkQuestion[] = [
     question: "What should I expect from the trainer at the end of the 2 months?",
     summary:
       "Five trainer expectations: ride the horse for the client (or provide video), give a Training Trifecta evaluation, ideally give the client riding lessons, walk the client through the full process, and discuss owner expectations on pickup.",
+  },
+];
+
+// Industry pricing, per Wade Black: the published figures are accurate for the
+// local area but low nationwide. Qualified trainers meeting the standard run
+// $1,200–$2,000/month with feed and board included.
+export interface PricingTier {
+  label: string;
+  range: string;
+  note: string;
+}
+
+export const INDUSTRY_PRICING: PricingTier[] = [
+  {
+    label: "Base training fee",
+    range: "$800–$1,000 / month / horse",
+    note: "Does not include feed, board, shoeing, teeth, or chiropractic.",
+  },
+  {
+    label: "With feed & board (nationwide)",
+    range: "$1,200–$2,000 / month",
+    note: "For a qualified trainer who can meet the industry quality standard. Varies with the price of feed and board and the trainer's level.",
   },
 ];
 

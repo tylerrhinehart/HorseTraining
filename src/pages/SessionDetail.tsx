@@ -9,9 +9,10 @@ import {
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
+import TaskCompletionPicker from "../components/TaskCompletionPicker";
+import { bitLabel } from "../content/programs";
 import { round1, sessionAverage } from "../utils/stats";
 import { formatDateTime } from "../utils/dates";
-import type { TqaScore } from "../supabase/types";
 
 export default function SessionDetail() {
   const { id } = useParams();
@@ -70,7 +71,9 @@ export default function SessionDetail() {
     );
   }
 
-  const setScore = (qid: string, score: TqaScore) =>
+  const scale = phase.data?.scale ?? "tqa";
+
+  const setScore = (qid: string, score: number) =>
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], score } }));
   const setComment = (qid: string, comment: string) =>
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], comment } }));
@@ -161,11 +164,28 @@ export default function SessionDetail() {
         </button>
       </div>
 
+      {(session.data.rider || session.data.bit) && (
+        <p className="mono muted" style={{ margin: "0 0 12px", fontSize: 13 }}>
+          {session.data.rider && <>Rider: {session.data.rider}</>}
+          {session.data.rider && session.data.bit && " · "}
+          {session.data.bit && <>Bit: {bitLabel(session.data.bit)}</>}
+        </p>
+      )}
+
+      {session.data.task_completions?.length > 0 && (
+        <TaskCompletionPicker
+          value={session.data.task_completions}
+          onChange={() => {}}
+          readOnly
+        />
+      )}
+
       <PhaseScoreSheet
         questions={questions.data ?? []}
         drafts={drafts}
         onScore={setScore}
         onComment={setComment}
+        scale={scale}
         readOnly={!editing}
       />
 

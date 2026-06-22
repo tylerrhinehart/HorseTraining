@@ -10,7 +10,29 @@ export type PhaseCode =
   | "phase_1"
   | "phase_2"
   | "phase_3"
-  | "phase_4";
+  | "phase_4"
+  | "performance_warmup";
+
+// The "type of training" picked per horse — determines which score sheets are
+// filled out. See src/content/programs.ts.
+export type TrainingType = "foundation" | "foundation_to_finish" | "sale_horse";
+
+// Score-sheet scale. Foundation uses the −3…+3 TQA scale; Performance/Sale use
+// a 1…5 scale. The scale is a property of the phase.
+export type RatingScaleKind = "tqa" | "five";
+
+// One Task Completion picked during a performance warm-up session.
+export interface TaskCompletion {
+  job: string; // TaskJob.code
+  phase: number; // 1–4
+}
+
+// Sale-horse target framing + selected performance disciplines.
+export interface ProgramMeta {
+  target_market?: string;
+  price_low?: number;
+  price_high?: number;
+}
 
 export const TQA_SCORES: TqaScore[] = [-3, -2, -1, 0, 1, 2, 3];
 
@@ -37,6 +59,9 @@ export interface Horse {
   arrival_date: string | null;
   status: HorseStatus;
   current_phase_id: ID | null;
+  // training program:
+  training_type: TrainingType;
+  program_meta: ProgramMeta;
   // existing:
   archived_at: string | null;
   created_at: string;
@@ -47,6 +72,8 @@ export interface Phase {
   id: ID;
   user_id: ID;
   code: PhaseCode;
+  program: TrainingType;
+  scale: RatingScaleKind;
   position: number;
   name: string;
   created_at: string;
@@ -71,6 +98,10 @@ export interface Session {
   phase_id: ID;
   occurred_at: string;
   notes: string | null;
+  // performance/sale programs only:
+  rider: string | null;
+  bit: string | null;
+  task_completions: TaskCompletion[];
   created_at: string;
   updated_at: string;
 }
@@ -82,7 +113,8 @@ export interface Rating {
   question_id: ID;
   axis_snapshot: Axis;
   question_text_snapshot: string;
-  score: TqaScore;
+  // -3…+3 on the TQA scale, or 1…5 on the performance scale.
+  score: number;
   comment: string | null;
 }
 

@@ -1,7 +1,9 @@
 -- TQA digitization schema. Run on a fresh Supabase project; this file
--- drops and recreates all app tables and is NOT a migration.
+-- drops and recreates all app tables and is NOT a migration. To update an
+-- EXISTING project without losing data, run supabase/migration_programs.sql.
 --
--- Mirrors src/content/tqa-template.ts and src/content/trifecta.ts.
+-- Mirrors src/content/tqa-template.ts, src/content/trifecta.ts,
+-- src/content/programs.ts, and src/content/performance-template.ts.
 
 create extension if not exists "pgcrypto";
 
@@ -34,12 +36,17 @@ create table public.profiles (
 create table public.phases (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
-  code text not null check (code in ('groundwork','phase_1','phase_2','phase_3','phase_4')),
+  -- code is now program-scoped free text (e.g. 'groundwork', 'performance_warmup').
+  code text not null,
+  program text not null default 'foundation'
+    check (program in ('foundation','foundation_to_finish','sale_horse')),
+  -- scoring scale for this phase's questions: 'tqa' (−3…+3) or 'five' (1…5).
+  scale text not null default 'tqa' check (scale in ('tqa','five')),
   position int not null,
   name text not null,
   created_at timestamptz not null default now(),
-  unique (user_id, code),
-  unique (user_id, position)
+  unique (user_id, program, code),
+  unique (user_id, program, position)
 );
 
 create table public.questions (
@@ -71,6 +78,11 @@ create table public.horses (
   owner_contact text,
   arrival_date date,
   status text not null default 'in_training' check (status in ('in_training','complete','archived')),
+  -- which program / set of score sheets this horse follows:
+  training_type text not null default 'foundation'
+    check (training_type in ('foundation','foundation_to_finish','sale_horse')),
+  -- sale-horse target framing etc.: { target_market, price_low, price_high }
+  program_meta jsonb not null default '{}'::jsonb,
   current_phase_id uuid references public.phases on delete set null,
   -- existing tail:
   archived_at timestamptz,
@@ -88,6 +100,10 @@ create table public.sessions (
   phase_id uuid not null references public.phases on delete restrict,
   occurred_at timestamptz not null default now(),
   notes text,
+  -- performance/sale programs only:
+  rider text,
+  bit text,
+  task_completions jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -102,7 +118,8 @@ create table public.ratings (
   question_id uuid not null references public.questions on delete restrict,
   axis_snapshot text not null check (axis_snapshot in ('foundation','temperament')),
   question_text_snapshot text not null,
-  score smallint not null check (score between -3 and 3),
+  -- −3…+3 on the TQA scale, or 1…5 on the performance scale.
+  score smallint not null check (score between -3 and 5),
   comment text,
   unique (session_id, question_id)
 );
@@ -198,12 +215,14 @@ create trigger touch_sessions              before update on public.sessions     
 create trigger touch_trifecta_evaluations  before update on public.trifecta_evaluations  for each row execute function public.touch_updated_at();
 
 -- ---------------------------------------------------------------------------
--- Canonical template seed: profile + 5 phases + 70 questions verbatim.
+-- Canonical template seed: profile + Foundation phases/questions, the
+-- Performance Horse Warm-Up for the two performance programs, and the
+-- Foundation phase videos.
 --
--- This block is the SQL counterpart of src/content/tqa-template.ts. Keep
--- the two in sync if either is edited. The function is idempotent — it
--- skips users who already have phases — so it can also be used to backfill
--- existing accounts after a schema reset.
+-- This block is the SQL counterpart of src/content/tqa-template.ts and
+-- src/content/performance-template.ts. Keep them in sync if either is edited.
+-- The function is idempotent — it skips users who already have phases — so it
+-- can also be used to backfill existing accounts after a schema reset.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.seed_canonical_template(p_user_id uuid)
@@ -218,6 +237,8 @@ declare
   p2_id  uuid;
   p3_id  uuid;
   p4_id  uuid;
+  f2f_id uuid;
+  sale_id uuid;
   existing_phase_count int;
 begin
   insert into public.profiles (id) values (p_user_id) on conflict do nothing;
@@ -315,6 +336,48 @@ begin
       (5, 'Reaction to social separation',                 'Calm',      'Nervous')
     ) as t(pos, txt, lo, hi);
   end loop;
+
+  -- -------------------------------------------------------------------------
+  -- Foundation phase videos (per Wade Black's email). Phase-level resources.
+  -- -------------------------------------------------------------------------
+  insert into public.resources (user_id, phase_id, title, url, kind, position) values
+    (p_user_id, gw_id, 'Groundwork video', 'https://youtu.be/QUP5XSe73oo', 'youtube', 0),
+    (p_user_id, p1_id, 'Phase 1 video',    'https://youtu.be/97rDdcw5SJQ', 'youtube', 0),
+    (p_user_id, p2_id, 'Phase 2 video',    'https://youtu.be/xvORqrG1BNY', 'youtube', 0),
+    (p_user_id, p3_id, 'Phase 3 video',    'https://youtu.be/Je5RaMkXZPE', 'youtube', 0),
+    (p_user_id, p4_id, 'Phase 4 video',    'https://www.youtube.com/watch?v=nFd0WHDvMPk', 'youtube', 0);
+
+  -- -------------------------------------------------------------------------
+  -- Performance Horse Warm-Up — one phase each for the Foundation to Finish
+  -- and Sale Horse programs. Scored 1…5. Verbatim from the TQA All-Around
+  -- Performance Horse Warm-Up sheet (mirrors src/content/performance-template.ts).
+  -- -------------------------------------------------------------------------
+  insert into public.phases (user_id, code, program, scale, position, name) values
+    (p_user_id, 'performance_warmup', 'foundation_to_finish', 'five', 0, 'Performance Horse Warm-Up'),
+    (p_user_id, 'performance_warmup', 'sale_horse',           'five', 0, 'Performance Horse Warm-Up');
+
+  select id into f2f_id  from public.phases where user_id = p_user_id and program = 'foundation_to_finish' and code = 'performance_warmup';
+  select id into sale_id from public.phases where user_id = p_user_id and program = 'sale_horse'           and code = 'performance_warmup';
+
+  insert into public.questions (user_id, phase_id, axis, position, text, low_label, high_label)
+  select p_user_id, pid, axis, pos, txt, lo, hi
+  from (select unnest(array[f2f_id, sale_id]) as pid) phases
+  cross join (values
+    ('foundation',  0, 'Ground Work & Phase 1 Review', 'Very Poor', 'Excellent'),
+    ('foundation',  1, 'HD & Stage 4 (Inside -> Outside Rein) — Snake Trails (Walk, Slow & Extended Trot, Lope)', 'Very Poor', 'Excellent'),
+    ('foundation',  2, 'Vertical & Horizontal Direction — Walking, Slow Trot, Extended Trot, Loping', 'Very Poor', 'Excellent'),
+    ('foundation',  3, 'Large Fasts and Small Slows — w/ Willing Submission and Vertical Direction', 'Very Poor', 'Excellent'),
+    ('foundation',  4, 'Stage 2 w/ Willing Submission & Vertical Direction — Standing, Walking, Jigging, Trotting, Loping', 'Very Poor', 'Excellent'),
+    ('foundation',  5, 'Stage 3 w/ Willing Submission & Vertical Direction — Standing, Walking, Jigging, Trotting, Loping', 'Very Poor', 'Excellent'),
+    ('foundation',  6, 'Stage 4 w/ Willing Submission & Vertical Direction — Standing, Walking, Trotting, Rollbacks and Spins', 'Very Poor', 'Excellent'),
+    ('foundation',  7, 'Task Completion — Pick One Job From the "Task Completion" Sheet', 'Very Poor', 'Excellent'),
+    ('temperament', 0, 'Self-preservation (fight or flight)',           'Low',       'High'),
+    ('temperament', 1, 'Confidence',                                    'Low',       'High'),
+    ('temperament', 2, 'Sensitivity (response to light pressure)',      'Dull',      'Very Responsive'),
+    ('temperament', 3, 'Energy (motivation and determination)',         'Low',       'High'),
+    ('temperament', 4, 'Willingness (response to request)',             'Resistant', 'Willing'),
+    ('temperament', 5, 'Reaction to social separation',                 'Calm',      'Nervous')
+  ) as q(axis, pos, txt, lo, hi);
 end;
 $$;
 

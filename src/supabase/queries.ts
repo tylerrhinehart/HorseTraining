@@ -4,11 +4,14 @@ import type {
   HorseStatus,
   ID,
   Phase,
+  ProgramMeta,
   Question,
   Resource,
   Session,
   SessionWithRatings,
+  TaskCompletion,
   TqaScore,
+  TrainingType,
   TrifectaAxisDb,
   TrifectaEvaluation,
   TrifectaScore,
@@ -33,6 +36,17 @@ export async function listPhases(): Promise<Phase[]> {
   const res = await sb()
     .from("phases")
     .select("*")
+    .order("position", { ascending: true });
+  return throwIfError(res) ?? [];
+}
+
+export async function listPhasesForProgram(
+  program: TrainingType,
+): Promise<Phase[]> {
+  const res = await sb()
+    .from("phases")
+    .select("*")
+    .eq("program", program)
     .order("position", { ascending: true });
   return throwIfError(res) ?? [];
 }
@@ -82,6 +96,8 @@ export interface HorseInput {
   dob?: string | null;
   sex?: string | null;
   color?: string | null;
+  training_type?: TrainingType;
+  program_meta?: ProgramMeta;
 }
 
 export async function listHorses(opts?: { statuses?: HorseStatus[] }): Promise<Horse[]> {
@@ -111,8 +127,11 @@ export async function getHorse(id: ID): Promise<Horse | null> {
 export async function createHorse(input: HorseInput): Promise<Horse> {
   const userId = await currentUserId();
   const today = new Date().toISOString().slice(0, 10);
-  const phases = await listPhases();
-  const groundwork = phases.find((p) => p.code === "groundwork");
+  const trainingType: TrainingType = input.training_type ?? "foundation";
+  // Start the horse on the first phase of its chosen program (Groundwork for
+  // Foundation, the Performance Horse Warm-Up for the performance programs).
+  const phases = await listPhasesForProgram(trainingType);
+  const firstPhase = phases[0] ?? null;
 
   const { data, error } = await sb()
     .from("horses")
@@ -128,7 +147,9 @@ export async function createHorse(input: HorseInput): Promise<Horse> {
       sex: input.sex ?? null,
       color: input.color ?? null,
       status: "in_training",
-      current_phase_id: groundwork?.id ?? null,
+      training_type: trainingType,
+      program_meta: input.program_meta ?? {},
+      current_phase_id: firstPhase?.id ?? null,
     })
     .select()
     .single();
@@ -152,11 +173,27 @@ export async function updateHorse(
       | "arrival_date"
       | "status"
       | "current_phase_id"
+      | "program_meta"
     >
   >,
 ): Promise<void> {
   const res = await sb().from("horses").update(patch).eq("id", id);
   if (res.error) throw new Error(res.error.message);
+}
+
+// Switching a horse's program resets its current phase to that program's first
+// phase (different programs have entirely different score sheets).
+export async function setHorseTrainingType(
+  id: ID,
+  trainingType: TrainingType,
+): Promise<void> {
+  const phases = await listPhasesForProgram(trainingType);
+  const firstPhase = phases[0] ?? null;
+  const { error } = await sb()
+    .from("horses")
+    .update({ training_type: trainingType, current_phase_id: firstPhase?.id ?? null })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
 }
 
 export async function setHorseStatus(id: ID, status: HorseStatus): Promise<void> {
@@ -238,6 +275,9 @@ export interface SessionInput {
   phase_id: ID;
   occurred_at: string; // ISO date or timestamp
   notes?: string | null;
+  rider?: string | null;
+  bit?: string | null;
+  task_completions?: TaskCompletion[];
   ratings: SessionRatingInput[];
 }
 
@@ -251,6 +291,9 @@ export async function createSession(input: SessionInput): Promise<Session> {
       phase_id: input.phase_id,
       occurred_at: input.occurred_at,
       notes: input.notes ?? null,
+      rider: input.rider ?? null,
+      bit: input.bit ?? null,
+      task_completions: input.task_completions ?? [],
     })
     .select()
     .single();
@@ -283,6 +326,9 @@ export async function updateSession(
     phase_id?: ID;
     occurred_at?: string;
     notes?: string | null;
+    rider?: string | null;
+    bit?: string | null;
+    task_completions?: TaskCompletion[];
     ratings?: SessionRatingInput[];
   },
 ): Promise<void> {
@@ -293,6 +339,11 @@ export async function updateSession(
   if (input.occurred_at !== undefined) patch.occurred_at = input.occurred_at;
   if (input.notes !== undefined)
     patch.notes = input.notes?.trim() ? input.notes.trim() : null;
+  if (input.rider !== undefined)
+    patch.rider = input.rider?.trim() ? input.rider.trim() : null;
+  if (input.bit !== undefined) patch.bit = input.bit || null;
+  if (input.task_completions !== undefined)
+    patch.task_completions = input.task_completions;
   if (Object.keys(patch).length > 0) {
     const res = await sb().from("sessions").update(patch).eq("id", id);
     if (res.error) throw new Error(res.error.message);

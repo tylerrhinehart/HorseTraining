@@ -1,19 +1,21 @@
 import { useMemo, useState } from "react";
 import RatingInput from "./RatingInput";
 import { SCORE_LEGEND } from "../content/tqa-template";
+import { FIVE_FOUNDATION_LEGEND, FIVE_TEMPERAMENT_LEGEND } from "../content/programs";
 import { listResourcesForQuestion } from "../supabase/queries";
-import type { Question, Resource, TqaScore } from "../supabase/types";
+import type { Question, RatingScaleKind, Resource } from "../supabase/types";
 
 export interface DraftRating {
-  score?: TqaScore;
+  score?: number;
   comment?: string;
 }
 
 interface Props {
   questions: Question[];
   drafts: Record<string, DraftRating>;
-  onScore: (questionId: string, score: TqaScore) => void;
+  onScore: (questionId: string, score: number) => void;
   onComment: (questionId: string, comment: string) => void;
+  scale?: RatingScaleKind;
   readOnly?: boolean;
 }
 
@@ -26,6 +28,7 @@ export default function PhaseScoreSheet({
   drafts,
   onScore,
   onComment,
+  scale = "tqa",
   readOnly = false,
 }: Props) {
   const { foundation, temperament } = useMemo(() => {
@@ -40,7 +43,7 @@ export default function PhaseScoreSheet({
 
   return (
     <div className="space-y-4">
-      <ScoreLegend />
+      <ScoreLegend scale={scale} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Column
           title="Foundation / Task Completion"
@@ -48,6 +51,7 @@ export default function PhaseScoreSheet({
           drafts={drafts}
           onScore={onScore}
           onComment={onComment}
+          scale={scale}
           readOnly={readOnly}
         />
         <Column
@@ -56,6 +60,7 @@ export default function PhaseScoreSheet({
           drafts={drafts}
           onScore={onScore}
           onComment={onComment}
+          scale={scale}
           readOnly={readOnly}
         />
       </div>
@@ -63,7 +68,39 @@ export default function PhaseScoreSheet({
   );
 }
 
-function ScoreLegend() {
+function ScoreLegend({ scale }: { scale: RatingScaleKind }) {
+  if (scale === "five") {
+    return (
+      <details className="card" style={{ fontSize: 12 }}>
+        <summary
+          style={{
+            cursor: "pointer",
+            color: "var(--leather)",
+            fontFamily: "var(--font-display)",
+          }}
+        >
+          Score legend (1–5)
+        </summary>
+        <div
+          style={{
+            marginTop: 8,
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          }}
+        >
+          <FiveLegendColumn
+            title="Foundation / Task Completion"
+            legend={FIVE_FOUNDATION_LEGEND}
+          />
+          <FiveLegendColumn
+            title="Temperament"
+            legend={FIVE_TEMPERAMENT_LEGEND}
+          />
+        </div>
+      </details>
+    );
+  }
   return (
     <details className="card" style={{ fontSize: 12 }}>
       <summary
@@ -110,12 +147,47 @@ function ScoreLegend() {
   );
 }
 
+function FiveLegendColumn({
+  title,
+  legend,
+}: {
+  title: string;
+  legend: Record<1 | 2 | 3 | 4 | 5, string>;
+}) {
+  return (
+    <div>
+      <p
+        className="mono muted"
+        style={{
+          fontSize: 10,
+          letterSpacing: 1.2,
+          textTransform: "uppercase",
+          margin: "0 0 4px",
+        }}
+      >
+        {title}
+      </p>
+      <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 4 }}>
+        {([1, 2, 3, 4, 5] as const).map((s) => (
+          <li key={s} style={{ display: "flex", gap: 8 }}>
+            <span className="mono" style={{ width: 16, textAlign: "right" }}>
+              {s}
+            </span>
+            <span>{legend[s]}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 interface ColumnProps {
   title: string;
   questions: Question[];
   drafts: Record<string, DraftRating>;
-  onScore: (questionId: string, score: TqaScore) => void;
+  onScore: (questionId: string, score: number) => void;
   onComment: (questionId: string, comment: string) => void;
+  scale: RatingScaleKind;
   readOnly: boolean;
 }
 
@@ -125,6 +197,7 @@ function Column({
   drafts,
   onScore,
   onComment,
+  scale,
   readOnly,
 }: ColumnProps) {
   return (
@@ -151,6 +224,7 @@ function Column({
             draft={draft}
             onScore={onScore}
             onComment={onComment}
+            scale={scale}
             readOnly={readOnly}
           />
         );
@@ -163,8 +237,9 @@ interface QuestionRowProps {
   question: Question;
   index: number;
   draft: DraftRating;
-  onScore: (questionId: string, score: TqaScore) => void;
+  onScore: (questionId: string, score: number) => void;
   onComment: (questionId: string, comment: string) => void;
+  scale: RatingScaleKind;
   readOnly: boolean;
 }
 
@@ -174,6 +249,7 @@ function QuestionRow({
   draft,
   onScore,
   onComment,
+  scale,
   readOnly,
 }: QuestionRowProps) {
   const [helpOpen, setHelpOpen] = useState(false);
@@ -247,6 +323,7 @@ function QuestionRow({
           label={q.text}
           lowLabel={q.low_label}
           highLabel={q.high_label}
+          scale={scale}
         />
       </div>
 

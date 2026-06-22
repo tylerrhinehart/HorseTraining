@@ -11,8 +11,11 @@ import {
   listSessionsForHorse,
   setHorseCurrentPhase,
   setHorseStatus,
+  setHorseTrainingType,
   updateHorse,
 } from "../supabase/queries";
+import { PROGRAMS, programLabel } from "../content/programs";
+import type { ProgramMeta, TrainingType } from "../supabase/types";
 import { useQuery } from "../supabase/useQuery";
 import { useActiveHorseId } from "../state/activeHorse";
 import {
@@ -31,6 +34,10 @@ interface EditFormValues {
   owner_contact: string;
   arrival_date: string;
   notes: string;
+  training_type: TrainingType;
+  target_market: string;
+  price_low: string;
+  price_high: string;
 }
 
 export default function HorseDetail() {
@@ -70,8 +77,11 @@ export default function HorseDetail() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { isSubmitting: isEditSubmitting },
   } = useForm<EditFormValues>();
+
+  const editTrainingType = watch("training_type");
 
   // Sync edit form defaults when horse data loads
   useEffect(() => {
@@ -82,6 +92,10 @@ export default function HorseDetail() {
         owner_contact: horse.data.owner_contact ?? "",
         arrival_date: horse.data.arrival_date ?? "",
         notes: horse.data.notes ?? "",
+        training_type: horse.data.training_type,
+        target_market: horse.data.program_meta?.target_market ?? "",
+        price_low: horse.data.program_meta?.price_low?.toString() ?? "",
+        price_high: horse.data.program_meta?.price_high?.toString() ?? "",
       });
     }
   }, [horse.data, reset]);
@@ -114,9 +128,10 @@ export default function HorseDetail() {
     );
   }
 
-  const allPhases: Phase[] = (phases.data ?? []).slice().sort(
-    (a, b) => a.position - b.position,
-  );
+  // Only this horse's program has its score sheets; filter the global phase list.
+  const allPhases: Phase[] = (phases.data ?? [])
+    .filter((p) => p.program === horse.data!.training_type)
+    .sort((a, b) => a.position - b.position);
 
   // Determine current phase (defensive: fall back to first)
   const currentPhase =
@@ -235,19 +250,38 @@ export default function HorseDetail() {
   };
 
   const onEditSubmit = async (values: EditFormValues) => {
+    const program_meta: ProgramMeta = {};
+    if (values.training_type === "sale_horse") {
+      if (values.target_market?.trim())
+        program_meta.target_market = values.target_market.trim();
+      if (values.price_low) program_meta.price_low = Number(values.price_low);
+      if (values.price_high) program_meta.price_high = Number(values.price_high);
+    }
     await updateHorse(id, {
       name: values.name,
       owner_name: values.owner_name || null,
       owner_contact: values.owner_contact || null,
       arrival_date: values.arrival_date || null,
       notes: values.notes || null,
+      program_meta,
     });
+    // Switching program resets the current phase to the new program's first.
+    if (values.training_type !== horse.data!.training_type) {
+      await setHorseTrainingType(id, values.training_type);
+    }
     horse.refresh();
     setEditSavedAt(Date.now());
   };
 
+  const isFiveScale = horse.data.training_type !== "foundation";
   const avgColor = (avg: number | null): string => {
     if (avg === null) return "var(--muted)";
+    if (isFiveScale) {
+      // 1…5 performance scale: 4+ Good, below 3 Poor.
+      if (avg >= 4) return "var(--ok)";
+      if (avg < 3) return "var(--bad)";
+      return "var(--ink-2)";
+    }
     if (avg >= 2.0) return "var(--ok)";
     if (avg < 0) return "var(--bad)";
     return "var(--ink-2)";
@@ -293,6 +327,12 @@ export default function HorseDetail() {
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
             Owner: {horse.data.owner_name ?? "—"}
           </p>
+          <span
+            className="pill pill-leather"
+            style={{ marginTop: 6, display: "inline-block" }}
+          >
+            {programLabel(horse.data.training_type)}
+          </span>
         </div>
         {dayLabel && (
           <div
@@ -666,6 +706,60 @@ export default function HorseDetail() {
           onSubmit={handleSubmit(onEditSubmit)}
           style={{ marginTop: 16 }}
         >
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label className="label" htmlFor="edit-training-type">
+              Type of training
+            </label>
+            <select
+              id="edit-training-type"
+              className="input"
+              {...register("training_type")}
+            >
+              {PROGRAMS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} — {p.tagline}
+                </option>
+              ))}
+            </select>
+            {editTrainingType !== horse.data.training_type && (
+              <p style={{ color: "var(--bad)", fontSize: 12, margin: "4px 0 0" }}>
+                Changing the program resets this horse to the new program's first
+                phase.
+              </p>
+            )}
+          </div>
+          {editTrainingType === "sale_horse" && (
+            <div className="field-row">
+              <div className="field">
+                <label className="label" htmlFor="edit-target-market">
+                  Target market
+                </label>
+                <input
+                  id="edit-target-market"
+                  className="input"
+                  {...register("target_market")}
+                />
+              </div>
+              <div className="field">
+                <label className="label">Target sale price</label>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="number"
+                    className="input"
+                    placeholder="Low"
+                    {...register("price_low")}
+                  />
+                  <span className="muted">–</span>
+                  <input
+                    type="number"
+                    className="input"
+                    placeholder="High"
+                    {...register("price_high")}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           <div className="field-row">
             <div className="field">
               <label className="label" htmlFor="edit-name">

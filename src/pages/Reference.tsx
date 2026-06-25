@@ -26,6 +26,7 @@ import { SCORE_LEGEND } from "../content/tqa-template";
 import {
   FIVE_FOUNDATION_LEGEND,
   FIVE_TEMPERAMENT_LEGEND,
+  PERFORMANCE_WARMUP_VIDEOS,
   PROGRAMS,
   TASK_COMPLETION_JOBS,
   TASK_PHASES,
@@ -616,6 +617,24 @@ function TaskCompletionMenu() {
   );
 }
 
+// Warm-up video segments for the performance programs. Public URLs were not
+// provided; the segments live in the official document linked on the phase.
+function WarmupVideoList() {
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-head">
+        <h3 className="card-title">Performance Horse Warm-Up videos</h3>
+        <span className="card-meta">in the official document</span>
+      </div>
+      <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4, fontSize: 14 }}>
+        {PERFORMANCE_WARMUP_VIDEOS.map((v) => (
+          <li key={v}>Performance Horse Warm-Up: {v}</li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 // ─── main page ───────────────────────────────────────────────────────────────
 
 interface SectionDef {
@@ -804,7 +823,12 @@ export default function Reference() {
         </div>
       )}
 
-      {program !== "foundation" && <TaskCompletionMenu />}
+      {program !== "foundation" && (
+        <>
+          <WarmupVideoList />
+          <TaskCompletionMenu />
+        </>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}>
         {programPhases.map((p) => (

@@ -124,5 +124,19 @@ begin
         (u.id, p3_id, 'Phase 3 video',    'https://youtu.be/Je5RaMkXZPE', 'youtube', 0),
         (u.id, p4_id, 'Phase 4 video',    'https://www.youtube.com/watch?v=nFd0WHDvMPk', 'youtube', 0);
     end if;
+
+    -- Performance programs: official score-sheet/warm-up doc (only if none yet).
+    select id into f2f_id  from public.phases where user_id = u.id and program = 'foundation_to_finish' and code = 'performance_warmup';
+    select id into sale_id from public.phases where user_id = u.id and program = 'sale_horse'           and code = 'performance_warmup';
+    if f2f_id is not null and not exists (select 1 from public.resources where phase_id = f2f_id) then
+      insert into public.resources (user_id, phase_id, title, url, kind, notes, position)
+      select u.id, pid,
+             'Foundation to Finish — Performance Horse score sheets & warm-up videos',
+             'https://www.dropbox.com/scl/fi/4mbij1k3aj6f06wga4p8g/Sale-Horse-Ready-2024-All-Around-Performance-Horse.docx?rlkey=1iu0ofhaidt19d10k5ga4fedb&st=v603gncc&dl=0',
+             'link',
+             'Official document with the Performance Horse task-completion phases and warm-up. Warm-up video segments: Introduction, Ground Work, First Get On, Review of Vocab Words, Reining Cow Horse Warm-Up.',
+             0
+      from (select unnest(array[f2f_id, sale_id]) as pid) phases;
+    end if;
   end loop;
 end $$;

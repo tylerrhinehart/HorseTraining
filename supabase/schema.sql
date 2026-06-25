@@ -378,6 +378,18 @@ begin
     ('temperament', 4, 'Willingness (response to request)',             'Resistant', 'Willing'),
     ('temperament', 5, 'Reaction to social separation',                 'Calm',      'Nervous')
   ) as q(axis, pos, txt, lo, hi);
+
+  -- Official source document for the performance programs (holds the score
+  -- sheet plus the warm-up videos). Titled "Foundation to Finish / Performance
+  -- Horse" per Wade's request, not "TQA Warm-Up".
+  insert into public.resources (user_id, phase_id, title, url, kind, notes, position)
+  select p_user_id, pid,
+         'Foundation to Finish — Performance Horse score sheets & warm-up videos',
+         'https://www.dropbox.com/scl/fi/4mbij1k3aj6f06wga4p8g/Sale-Horse-Ready-2024-All-Around-Performance-Horse.docx?rlkey=1iu0ofhaidt19d10k5ga4fedb&st=v603gncc&dl=0',
+         'link',
+         'Official document with the Performance Horse task-completion phases and warm-up. Warm-up video segments: Introduction, Ground Work, First Get On, Review of Vocab Words, Reining Cow Horse Warm-Up.',
+         0
+  from (select unnest(array[f2f_id, sale_id]) as pid) phases;
 end;
 $$;
 

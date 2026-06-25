@@ -127,8 +127,13 @@ export function bitLabel(code: string | null | undefined): string | null {
   return BIT_OPTIONS.find((b) => b.code === code)?.label ?? code;
 }
 
-// Official source documents (Dropbox) for the performance/sale score sheets.
-export const PERFORMANCE_DOC_URL =
-  "https://www.dropbox.com/scl/fi/nxkwk88abu146k17e8zkj/TQA-All-Around-Performance-Horse-Warmup-1.pdf";
-export const SALE_HORSE_DOC_URL =
-  "https://www.dropbox.com/scl/fi/4mbij1k3aj6f06wga4p8g/Sale-Horse-Ready-2024-All-Around-Performance-Horse.docx";
+// The five warm-up video segments Wade lists for the performance programs.
+// Public URLs were not provided; they live in the official document seeded as a
+// phase resource (see supabase/schema.sql).
+export const PERFORMANCE_WARMUP_VIDEOS: string[] = [
+  "Introduction",
+  "Ground Work",
+  "First Get On",
+  "Review of Vocab Words",
+  "Reining Cow Horse Warm-Up",
+];

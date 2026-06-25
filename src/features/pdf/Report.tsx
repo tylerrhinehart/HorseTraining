@@ -245,6 +245,7 @@ export function HorseReport({
 
         <Text style={styles.h2}>Per-axis progress</Text>
         <DualLineChart
+          scale={scale}
           data={points.map((p, i) => ({
             index: i + 1,
             foundation: p.foundationAverage,
@@ -586,9 +587,10 @@ function QuestionAveragesTable({
 
 interface DualChartProps {
   data: { index: number; foundation: number | null; temperament: number | null }[];
+  scale?: RatingScaleKind;
 }
 
-function DualLineChart({ data }: DualChartProps) {
+function DualLineChart({ data, scale = "tqa" }: DualChartProps) {
   const width = 540;
   const height = 200;
   const padL = 36;
@@ -597,8 +599,11 @@ function DualLineChart({ data }: DualChartProps) {
   const padB = 24;
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
-  const yMin = -3;
-  const yMax = 3;
+  // Axis spans the active scale: −3…+3 (Foundation) or 1…5 (performance).
+  const yMin = scale === "five" ? 1 : -3;
+  const yMax = scale === "five" ? 5 : 3;
+  const ticks = scale === "five" ? [1, 2, 3, 4, 5] : [-3, -2, -1, 0, 1, 2, 3];
+  const midline = scale === "five" ? 3 : 0;
   const n = Math.max(data.length, 1);
   const xFor = (idx: number) =>
     padL + ((idx - 1) / Math.max(n - 1, 1)) * innerW;
@@ -629,16 +634,16 @@ function DualLineChart({ data }: DualChartProps) {
   return (
     <Svg width={width} height={height}>
       <G>
-        {[-3, -2, -1, 0, 1, 2, 3].map((y) => (
+        {ticks.map((y) => (
           <G key={y}>
             <Line
               x1={padL}
               y1={yFor(y)}
               x2={padL + innerW}
               y2={yFor(y)}
-              stroke={y === 0 ? "#94a3b8" : "#e2e8f0"}
-              strokeWidth={y === 0 ? 0.8 : 0.5}
-              strokeDasharray={y === 0 ? undefined : "2,2"}
+              stroke={y === midline ? "#94a3b8" : "#e2e8f0"}
+              strokeWidth={y === midline ? 0.8 : 0.5}
+              strokeDasharray={y === midline ? undefined : "2,2"}
             />
             <Path
               d={`M${padL - 16},${yFor(y)} L${padL},${yFor(y)}`}

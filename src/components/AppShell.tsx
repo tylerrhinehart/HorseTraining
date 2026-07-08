@@ -2,8 +2,10 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { useActiveHorseId } from "../state/activeHorse";
-import { listHorses } from "../supabase/queries";
+import { listInTrainingHorses, listPhases } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
+import { prefetchQuery } from "../supabase/cache";
+import { qk } from "../supabase/keys";
 import HorseAvatar, { hashTone } from "./HorseAvatar";
 
 interface Props {
@@ -17,10 +19,14 @@ export default function AppShell({ children }: Props) {
   const location = useLocation();
   const [activeId, setActiveId] = useActiveHorseId();
 
-  const horses = useQuery(
-    () => (user ? listHorses({ statuses: ['in_training'] }) : Promise.resolve([])),
-    [user?.id],
-  );
+  const horses = useQuery(qk.horses("in_training"), listInTrainingHorses);
+
+  // Prime the cache so first navigations paint instantly.
+  useEffect(() => {
+    if (!user) return;
+    prefetchQuery(qk.horses("in_training"), listInTrainingHorses);
+    prefetchQuery(qk.phases(), listPhases);
+  }, [user]);
 
   useEffect(() => {
     if (!horses.data) return;

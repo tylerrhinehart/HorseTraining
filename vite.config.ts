@@ -9,7 +9,13 @@ const basePath = process.env.BASE_PATH ?? "/";
 export default defineConfig({
   base: basePath,
   build: {
-    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-pdf": ["@react-pdf/renderer"],
+        },
+      },
+    },
   },
   plugins: [
     react(),

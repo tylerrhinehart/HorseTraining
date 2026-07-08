@@ -8,6 +8,9 @@ import {
   listSessionsForHorse,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
+import { qk } from "../supabase/keys";
+import ErrorState from "../components/ErrorState";
+import { SkeletonCard } from "../components/Skeleton";
 import ReportRenderer from "../features/pdf/ReportRenderer";
 import type { TrifectaEvaluationWithScores } from "../supabase/types";
 import { formatHumanDate } from "../utils/dates";
@@ -16,16 +19,14 @@ export default function HorseReport() {
   const { id } = useParams<{ id: string }>();
   const generatedAt = useMemo(() => new Date().toISOString(), []);
 
-  const horse = useQuery(() => (id ? getHorse(id) : Promise.resolve(null)), [id]);
-  const sessions = useQuery(
-    () => (id ? listSessionsForHorse(id) : Promise.resolve([])),
-    [id],
+  const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
+  const sessions = useQuery(id ? qk.sessions(id) : null, () =>
+    listSessionsForHorse(id!),
   );
-  const phases = useQuery(() => listPhases(), []);
-  const questions = useQuery(() => listAllQuestions(), []);
-  const trifectaQ = useQuery(
-    () => (id ? getTrifectaForHorse(id) : Promise.resolve(null)),
-    [id],
+  const phases = useQuery(qk.phases(), () => listPhases());
+  const questions = useQuery(["questions", "all"], () => listAllQuestions());
+  const trifectaQ = useQuery(id ? qk.trifecta(id) : null, () =>
+    getTrifectaForHorse(id!),
   );
 
   const trifecta: TrifectaEvaluationWithScores | null = useMemo(() => {
@@ -34,6 +35,22 @@ export default function HorseReport() {
   }, [trifectaQ.data]);
 
   if (!id) return null;
+
+  // A real query failure surfaces the retry UI instead of masquerading as
+  // "Horse not found" (that branch is reserved for a genuine null result).
+  const queries = [horse, sessions, phases, questions, trifectaQ];
+  const failed = queries.find((q) => q.error && q.data === undefined);
+  if (failed) {
+    return (
+      <div className="view">
+        <ErrorState
+          error={failed.error}
+          onRetry={() => queries.forEach((q) => q.refresh())}
+        />
+      </div>
+    );
+  }
+
   if (
     horse.loading ||
     sessions.loading ||
@@ -42,8 +59,19 @@ export default function HorseReport() {
     trifectaQ.loading
   ) {
     return (
-      <div className="view">
-        <div className="card">Generating report…</div>
+      <div className="view" style={{ maxWidth: 1100 }}>
+        <p
+          className="muted"
+          role="status"
+          aria-live="polite"
+          style={{ marginTop: 0, marginBottom: 12 }}
+        >
+          Generating report…
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <SkeletonCard lines={4} />
+          <SkeletonCard lines={6} />
+        </div>
       </div>
     );
   }

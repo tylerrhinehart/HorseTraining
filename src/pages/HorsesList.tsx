@@ -1,20 +1,37 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { differenceInCalendarDays } from "date-fns";
-import { listHorses, listPhases } from "../supabase/queries";
+import {
+  listHorses,
+  listPhases,
+  getHorse,
+  listSessionsForHorse,
+  listRatingsForHorse,
+} from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
+import { qk } from "../supabase/keys";
+import { prefetchQuery } from "../supabase/cache";
 import { useActiveHorseId } from "../state/activeHorse";
 import { gradientFor, hashTone, initialsOf } from "../components/HorseAvatar";
+import ErrorState from "../components/ErrorState";
+import { SkeletonCard } from "../components/Skeleton";
 import { programLabel } from "../content/programs";
 import { formatHumanDate } from "../utils/dates";
 import type { Horse, Phase } from "../supabase/types";
 
+// Warm the horse workspace caches on intent (hover/focus/touch) so tapping a
+// card opens instantly.
+function prefetchHorse(id: string) {
+  prefetchQuery(qk.horse(id), () => getHorse(id));
+  prefetchQuery(qk.sessions(id), () => listSessionsForHorse(id));
+  prefetchQuery(qk.ratings(id), () => listRatingsForHorse(id));
+}
+
 export default function HorsesList() {
-  const horsesQuery = useQuery(
-    () => listHorses({ statuses: ["in_training", "complete", "archived"] }),
-    [],
+  const horsesQuery = useQuery(qk.horses("all"), () =>
+    listHorses({ statuses: ["in_training", "complete", "archived"] }),
   );
-  const phasesQuery = useQuery(() => listPhases(), []);
+  const phasesQuery = useQuery(qk.phases(), () => listPhases());
   const [activeId, setActiveId] = useActiveHorseId();
 
   const phasesById = useMemo(() => {
@@ -22,6 +39,14 @@ export default function HorsesList() {
     for (const p of phasesQuery.data ?? []) map.set(p.id, p);
     return map;
   }, [phasesQuery.data]);
+
+  if (horsesQuery.error && horsesQuery.data === undefined) {
+    return (
+      <div className="view">
+        <ErrorState error={horsesQuery.error} onRetry={horsesQuery.refresh} />
+      </div>
+    );
+  }
 
   const horses = horsesQuery.data ?? [];
   const inTraining = horses.filter((h) => h.status === "in_training");
@@ -37,15 +62,23 @@ export default function HorsesList() {
         <Link to="/horses/new" className="btn btn-leather">+ New horse</Link>
       </div>
 
-      {horsesQuery.loading && <div className="card muted">Loading…</div>}
-      {horsesQuery.error && (
-        <div className="card" style={{ color: "var(--bad)" }}>
-          {horsesQuery.error.message}
+      {horsesQuery.loading && (
+        <div style={{ display: "grid", gap: 10 }}>
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
         </div>
       )}
       {!horsesQuery.loading && horses.length === 0 && (
-        <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>
-          No horses yet. Tap "+ New horse" to start.
+        <div style={{ textAlign: "center", padding: "24px 0" }}>
+          <div className="eyebrow">Roster</div>
+          <h1 className="h-display">No horses yet</h1>
+          <p className="muted" style={{ marginBottom: 16 }}>
+            Add a horse to start tracking training.
+          </p>
+          <Link to="/horses/new" className="btn btn-leather">
+            + Add your first horse
+          </Link>
         </div>
       )}
 
@@ -134,12 +167,16 @@ function HorseCard({
   const phase = horse.current_phase_id
     ? phasesById.get(horse.current_phase_id)
     : null;
+  const warm = () => prefetchHorse(horse.id);
 
   return (
     <Link
       to={`/horses/${horse.id}`}
       className={`horse-card ${isActive ? "is-active" : ""}`}
       onClick={onClick}
+      onPointerEnter={warm}
+      onFocus={warm}
+      onTouchStart={warm}
     >
       <div className="horse-photo" style={{ background: photoBg }}>
         <span className="horse-initials">{initialsOf(horse.name)}</span>

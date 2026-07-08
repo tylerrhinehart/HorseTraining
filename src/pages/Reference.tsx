@@ -5,6 +5,10 @@ import {
   listResourcesForPhase,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
+import { fetchQuery } from "../supabase/cache";
+import { qk } from "../supabase/keys";
+import ErrorState from "../components/ErrorState";
+import { SkeletonCard } from "../components/Skeleton";
 import type { Phase, Question, Resource, TrainingType } from "../supabase/types";
 import {
   FFP_SECTIONS,
@@ -421,6 +425,7 @@ function IndustryStandardsSection() {
       <div className="card">
         <div className="card-head">
           <h2 className="card-title">Recommended ride cadences</h2>
+          <span className="card-meta">Foundation program</span>
         </div>
         <ul
           style={{
@@ -447,7 +452,10 @@ function IndustryStandardsSection() {
       <div className="card">
         <div className="card-head">
           <h2 className="card-title">Phase timeline</h2>
-          <span className="card-meta">{TOTAL_WEEKS} weeks total</span>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+            <span className="card-meta">Foundation program</span>
+            <span className="card-meta">{TOTAL_WEEKS} weeks total</span>
+          </div>
         </div>
         <ul
           style={{
@@ -676,8 +684,8 @@ function SectionHeading({
 }
 
 export default function Reference() {
-  const phases = useQuery(() => listPhases(), []);
-  const questions = useQuery(() => listAllQuestions(), []);
+  const phases = useQuery(qk.phases(), () => listPhases());
+  const questions = useQuery(["questions", "all"], () => listAllQuestions());
 
   const [program, setProgram] = useState<TrainingType>("foundation");
 
@@ -685,17 +693,29 @@ export default function Reference() {
     Record<string, Resource[]>
   >({});
 
+  // Resources render after phases without blocking them: once phases resolve,
+  // pull each phase's resources through the SWR cache (dedupes with any other
+  // reader) and stitch them into a per-phase map.
   useEffect(() => {
     if (!phases.data || phases.data.length === 0) return;
+    let cancelled = false;
     Promise.all(
       phases.data.map((p) =>
-        listResourcesForPhase(p.id).then((res) => ({ id: p.id, res })),
+        fetchQuery(qk.resourcesForPhase(p.id), () =>
+          listResourcesForPhase(p.id),
+        ).then((res) => ({ id: p.id, res })),
       ),
-    ).then((results) => {
-      const map: Record<string, Resource[]> = {};
-      for (const { id, res } of results) map[id] = res;
-      setAllPhaseResources(map);
-    });
+    )
+      .then((results) => {
+        if (cancelled) return;
+        const map: Record<string, Resource[]> = {};
+        for (const { id, res } of results) map[id] = res;
+        setAllPhaseResources(map);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [phases.data]);
 
   const questionsFor = (phaseId: string) =>
@@ -816,13 +836,6 @@ export default function Reference() {
         {PROGRAMS.find((p) => p.id === program)?.description}
       </p>
 
-      {phases.loading && <div className="card muted">Loading phases…</div>}
-      {phases.error && (
-        <div className="card" style={{ color: "var(--bad)" }}>
-          {phases.error.message}
-        </div>
-      )}
-
       {program !== "foundation" && (
         <>
           <WarmupVideoList />
@@ -830,16 +843,28 @@ export default function Reference() {
         </>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}>
-        {programPhases.map((p) => (
-          <PhaseAccordionItem
-            key={p.id}
-            phase={p}
-            questions={questionsFor(p.id)}
-            phaseResources={allPhaseResources[p.id] ?? []}
-          />
-        ))}
-      </div>
+      {phases.error && phases.data === undefined ? (
+        <div style={{ marginBottom: 32 }}>
+          <ErrorState error={phases.error} onRetry={phases.refresh} />
+        </div>
+      ) : phases.loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}>
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}>
+          {programPhases.map((p) => (
+            <PhaseAccordionItem
+              key={p.id}
+              phase={p}
+              questions={questionsFor(p.id)}
+              phaseResources={allPhaseResources[p.id] ?? []}
+            />
+          ))}
+        </div>
+      )}
 
       {/* ── 4. Videos & Resources ── */}
       <SectionHeading id="resources" refEl={setRef("resources")}>
@@ -851,7 +876,12 @@ export default function Reference() {
 
       {allResources.length === 0 && !phases.loading && (
         <div className="card muted" style={{ textAlign: "center", marginBottom: 32 }}>
-          No resources attached yet. Open a phase to add videos and links.
+          <p style={{ margin: 0 }}>
+            No resources attached yet. Open a phase to add videos and links.
+          </p>
+          <a className="btn btn-leather" href="#phases" style={{ marginTop: 12 }}>
+            Browse phases
+          </a>
         </div>
       )}
 

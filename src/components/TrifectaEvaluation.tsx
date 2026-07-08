@@ -12,6 +12,9 @@ import {
   type TrifectaScoreInput,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
+import { qk } from "../supabase/keys";
+import { useToast } from "./Toast";
+import { SkeletonCard } from "./Skeleton";
 import type {
   SessionWithRatings,
   TqaScore,
@@ -74,8 +77,13 @@ function suggestionFromSessions(
 }
 
 export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
-  const trifecta = useQuery(() => getTrifectaForHorse(horseId), [horseId]);
-  const sessions = useQuery(() => listSessionsForHorse(horseId), [horseId]);
+  const trifecta = useQuery(qk.trifecta(horseId), () =>
+    getTrifectaForHorse(horseId),
+  );
+  const sessions = useQuery(qk.sessions(horseId), () =>
+    listSessionsForHorse(horseId),
+  );
+  const toast = useToast();
 
   const evaluation: TrifectaEvaluationWithScores | null = useMemo(() => {
     if (!trifecta.data) return null;
@@ -160,7 +168,6 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
         notes,
         scores,
       });
-      trifecta.refresh();
       setSavedAt(Date.now());
       // Delay onSaved so the "Saved ✓" badge is visible to the user before
       // the parent advances steps / unmounts this component.
@@ -174,7 +181,9 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
         }, 1200);
       }
     } catch (e) {
-      setError((e as Error).message);
+      const message = (e as Error).message;
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -182,14 +191,11 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
 
   const sessionCount = (sessions.data ?? []).length;
 
-  if (trifecta.loading || sessions.loading) {
-    return (
-      <div className="card">
-        <p className="muted" style={{ fontSize: 14, margin: 0 }}>
-          Loading…
-        </p>
-      </div>
-    );
+  if (
+    (trifecta.data === undefined && trifecta.loading) ||
+    (sessions.data === undefined && sessions.loading)
+  ) {
+    return <SkeletonCard lines={4} />;
   }
 
   return (

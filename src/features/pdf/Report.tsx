@@ -19,9 +19,9 @@ import type {
 } from "../../supabase/types";
 import { formatDateTime, formatHumanDate } from "../../utils/dates";
 import {
+  formatAvg,
   meetsCertificationThreshold,
   questionAverages,
-  round1,
   sessionAverage,
   sessionAverages,
   trend,
@@ -225,11 +225,11 @@ export function HorseReport({
           />
           <Meta
             label="Latest Foundation"
-            value={round1(latest?.foundationAverage ?? null)}
+            value={formatAvg(latest?.foundationAverage ?? null, scale)}
           />
           <Meta
             label="Latest Temperament"
-            value={round1(latest?.temperamentAverage ?? null)}
+            value={formatAvg(latest?.temperamentAverage ?? null, scale)}
           />
           <Meta
             label="Cert threshold"
@@ -261,6 +261,7 @@ export function HorseReport({
             questions={referencedQuestions}
             sessions={sorted}
             phaseFor={phaseFor}
+            scale={scale}
           />
         )}
 
@@ -311,10 +312,10 @@ export function HorseReport({
                           </Text>
                           <Text style={{ width: 160 }}>{phaseFor(s.phase_id)}</Text>
                           <Text style={{ width: 60, textAlign: "right" }}>
-                            {round1(f)}
+                            {formatAvg(f, scale)}
                           </Text>
                           <Text style={{ width: 70, textAlign: "right" }}>
-                            {round1(t)}
+                            {formatAvg(t, scale)}
                           </Text>
                         </View>
                       );
@@ -488,7 +489,7 @@ function SessionScoreSheetBlock({
         {phaseFor(session.phase_id)} · {formatDateTime(session.occurred_at)}
       </Text>
       <Text style={styles.muted}>
-        Foundation {round1(fAvg)} · Temperament {round1(tAvg)}
+        Foundation {formatAvg(fAvg, scale)} · Temperament {formatAvg(tAvg, scale)}
       </Text>
       <View style={styles.twoCol}>
         <View style={styles.colHalf}>
@@ -548,10 +549,12 @@ function QuestionAveragesTable({
   questions,
   sessions,
   phaseFor,
+  scale,
 }: {
   questions: Question[];
   sessions: SessionWithRatings[];
   phaseFor: (id: string) => string;
+  scale: RatingScaleKind;
 }) {
   const grouped = new Map<string, Question[]>();
   for (const q of questions) {
@@ -575,7 +578,7 @@ function QuestionAveragesTable({
                 <Text style={{ width: 40, textAlign: "right", fontSize: 8 }}>
                   {q.count}×
                 </Text>
-                <Text style={styles.itemScore}>{round1(q.average)}</Text>
+                <Text style={styles.itemScore}>{formatAvg(q.average, scale)}</Text>
               </View>
             ))}
           </View>

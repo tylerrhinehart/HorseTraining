@@ -4,9 +4,12 @@ import { useAuth } from "../auth/AuthProvider";
 import { supabaseConfigured } from "../supabase/client";
 import {
   listAllQuestions,
+  listAllSessionsWithRatings,
+  listAllTrifectas,
   listHorses,
   listPhases,
 } from "../supabase/queries";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 type InstallEvent = Event & {
   prompt: () => Promise<void>;
@@ -18,6 +21,8 @@ export default function Settings() {
   const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [exportFailed, setExportFailed] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -31,12 +36,16 @@ export default function Settings() {
 
   const exportData = async () => {
     setExportStatus(null);
+    setExportFailed(false);
     try {
-      const [horses, phases, questions] = await Promise.all([
-        listHorses({ statuses: ["in_training", "complete", "archived"] }),
-        listPhases(),
-        listAllQuestions(),
-      ]);
+      const [horses, phases, questions, sessions, trifecta_evaluations] =
+        await Promise.all([
+          listHorses({ statuses: ["in_training", "complete", "archived"] }),
+          listPhases(),
+          listAllQuestions(),
+          listAllSessionsWithRatings(),
+          listAllTrifectas(),
+        ]);
       const blob = new Blob(
         [
           JSON.stringify(
@@ -47,6 +56,8 @@ export default function Settings() {
               horses,
               phases,
               questions,
+              sessions,
+              trifecta_evaluations,
             },
             null,
             2,
@@ -62,6 +73,7 @@ export default function Settings() {
       URL.revokeObjectURL(url);
       setExportStatus("Export downloaded.");
     } catch (err) {
+      setExportFailed(true);
       setExportStatus(`Failed: ${(err as Error).message}`);
     }
   };
@@ -87,10 +99,7 @@ export default function Settings() {
         <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
           <button
             className="btn btn-ghost"
-            onClick={() => {
-              if (!window.confirm("Sign out?")) return;
-              signOut();
-            }}
+            onClick={() => setConfirmSignOut(true)}
           >
             Sign out
           </button>
@@ -117,9 +126,8 @@ export default function Settings() {
           <span className="card-meta">JSON snapshot</span>
         </div>
         <p className="muted" style={{ marginTop: 0 }}>
-          Download a JSON snapshot of your horses, phases, and questions.
-          Sessions and ratings are linked from horses but exported separately
-          on demand.
+          Download a complete JSON snapshot of your horses, phases, questions,
+          sessions (with ratings), and Trifecta evaluations.
         </p>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button className="btn btn-leather" onClick={exportData}>
@@ -128,7 +136,10 @@ export default function Settings() {
           {exportStatus && (
             <span
               className="mono"
-              style={{ fontSize: 12, color: "var(--ok)" }}
+              style={{
+                fontSize: 12,
+                color: exportFailed ? "var(--bad)" : "var(--ok)",
+              }}
             >
               {exportStatus}
             </span>
@@ -166,6 +177,18 @@ export default function Settings() {
           </p>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmSignOut}
+        title="Sign out?"
+        body="You'll need to sign back in to view your horses."
+        confirmLabel="Sign out"
+        onConfirm={() => {
+          setConfirmSignOut(false);
+          signOut();
+        }}
+        onCancel={() => setConfirmSignOut(false)}
+      />
     </div>
   );
 }

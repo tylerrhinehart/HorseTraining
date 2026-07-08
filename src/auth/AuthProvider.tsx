@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase, supabaseConfigured } from "../supabase/client";
+import { clearCache } from "../supabase/cache";
 
 interface AuthContextValue {
   loading: boolean;
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signOut() {
         if (!supabase) return;
         await supabase.auth.signOut();
+        clearCache();
       },
     }),
     [loading, session],

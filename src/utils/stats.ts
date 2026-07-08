@@ -2,6 +2,7 @@ import type {
   Axis,
   Question,
   Rating,
+  RatingScaleKind,
   SessionWithRatings,
 } from "../supabase/types";
 
@@ -107,6 +108,13 @@ export function round1(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
   const v = n.toFixed(1);
   return n > 0 ? `+${v}` : v;
+}
+
+/** Scale-aware display: signed on the ±3 TQA scale, unsigned on 1–5. */
+export function formatAvg(n: number | null | undefined, scale: RatingScaleKind = "tqa"): string {
+  if (n === null || n === undefined) return "—";
+  const v = n.toFixed(1);
+  return scale === "five" ? v : n > 0 ? `+${v}` : v;
 }
 
 /**

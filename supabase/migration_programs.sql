@@ -140,3 +140,78 @@ begin
     end if;
   end loop;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- 4. Atomic write RPCs. These make each session/rating (and trifecta eval/score)
+--    write a single transaction so a malformed rating can't orphan a session.
+--    create or replace ⇒ idempotent. Plain (invoker-rights) plpgsql — NO
+--    security definer — so RLS still applies; auth.uid() is the signed-in user.
+--    (Duplicated verbatim in supabase/schema.sql; keep in sync.)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.create_session_with_ratings(
+  p_horse_id uuid, p_phase_id uuid, p_occurred_at timestamptz, p_notes text,
+  p_rider text, p_bit text, p_task_completions jsonb, p_ratings jsonb
+) returns public.sessions language plpgsql as $$
+declare v_session public.sessions;
+begin
+  insert into public.sessions (user_id, horse_id, phase_id, occurred_at, notes, rider, bit, task_completions)
+  values (auth.uid(), p_horse_id, p_phase_id, coalesce(p_occurred_at, now()), p_notes, p_rider, p_bit, coalesce(p_task_completions, '[]'::jsonb))
+  returning * into v_session;
+  insert into public.ratings (user_id, session_id, question_id, axis_snapshot, question_text_snapshot, score, comment)
+  select auth.uid(), v_session.id, (r->>'question_id')::uuid, r->>'axis',
+         r->>'question_text_snapshot', (r->>'score')::smallint, nullif(r->>'comment','')
+  from jsonb_array_elements(coalesce(p_ratings, '[]'::jsonb)) as r;
+  return v_session;
+end $$;
+
+grant execute on function public.create_session_with_ratings(uuid, uuid, timestamptz, text, text, text, jsonb, jsonb) to authenticated;
+
+-- Session edit: notes/rider/bit are set unconditionally (the client always
+-- sends the full current form state, so null means "clear it"); occurred_at and
+-- task_completions fall back to the existing value when null. When p_ratings is
+-- non-null the whole rating set is replaced in the same transaction.
+create or replace function public.update_session_with_ratings(
+  p_session_id uuid, p_occurred_at timestamptz, p_notes text,
+  p_rider text, p_bit text, p_task_completions jsonb, p_ratings jsonb
+) returns void language plpgsql as $$
+begin
+  update public.sessions set
+    occurred_at = coalesce(p_occurred_at, occurred_at),
+    notes = p_notes,
+    rider = p_rider,
+    bit = p_bit,
+    task_completions = coalesce(p_task_completions, task_completions)
+  where id = p_session_id;
+  if p_ratings is not null then
+    delete from public.ratings where session_id = p_session_id;
+    insert into public.ratings (user_id, session_id, question_id, axis_snapshot, question_text_snapshot, score, comment)
+    select auth.uid(), p_session_id, (r->>'question_id')::uuid, r->>'axis',
+           r->>'question_text_snapshot', (r->>'score')::smallint, nullif(r->>'comment','')
+    from jsonb_array_elements(p_ratings) as r;
+  end if;
+end $$;
+
+grant execute on function public.update_session_with_ratings(uuid, timestamptz, text, text, text, jsonb, jsonb) to authenticated;
+
+-- Trifecta upsert: one evaluation per horse (unique(horse_id)); its scores are
+-- fully replaced from the passed array in the same transaction.
+create or replace function public.upsert_trifecta_with_scores(
+  p_horse_id uuid, p_notes text, p_scores jsonb
+) returns public.trifecta_evaluations language plpgsql as $$
+declare v_eval public.trifecta_evaluations;
+begin
+  insert into public.trifecta_evaluations (user_id, horse_id, notes, evaluated_at)
+  values (auth.uid(), p_horse_id, p_notes, now())
+  on conflict (horse_id) do update
+    set notes = excluded.notes, evaluated_at = excluded.evaluated_at
+  returning * into v_eval;
+  delete from public.trifecta_scores where evaluation_id = v_eval.id;
+  insert into public.trifecta_scores (user_id, evaluation_id, axis, item_code, item_text_snapshot, score, comment)
+  select auth.uid(), v_eval.id, s->>'axis', s->>'item_code',
+         s->>'item_text_snapshot', (s->>'score')::smallint, nullif(s->>'comment','')
+  from jsonb_array_elements(coalesce(p_scores, '[]'::jsonb)) as s;
+  return v_eval;
+end $$;
+
+grant execute on function public.upsert_trifecta_with_scores(uuid, text, jsonb) to authenticated;

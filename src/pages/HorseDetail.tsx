@@ -11,8 +11,12 @@ import {
   listSessionsForHorse,
   setHorseCurrentPhase,
   setHorseStatus,
+  setHorseTrainingType,
   updateHorse,
 } from "../supabase/queries";
+import { qk } from "../supabase/keys";
+import { PROGRAMS, programLabel } from "../content/programs";
+import type { ProgramMeta, TrainingType } from "../supabase/types";
 import { useQuery } from "../supabase/useQuery";
 import { useActiveHorseId } from "../state/activeHorse";
 import {
@@ -20,9 +24,13 @@ import {
   isAtOrAboveStandard,
   nextPhase,
 } from "../utils/phaseProgression";
-import { sessionAverages, round1 } from "../utils/stats";
+import { sessionAverages, formatAvg } from "../utils/stats";
 import { formatHumanDate } from "../utils/dates";
 import HorseAvatar, { hashTone } from "../components/HorseAvatar";
+import ConfirmDialog from "../components/ConfirmDialog";
+import ErrorState from "../components/ErrorState";
+import { SkeletonCard } from "../components/Skeleton";
+import { useToast } from "../components/Toast";
 import type { Phase } from "../supabase/types";
 
 interface EditFormValues {
@@ -31,15 +39,24 @@ interface EditFormValues {
   owner_contact: string;
   arrival_date: string;
   notes: string;
+  training_type: TrainingType;
+  target_market: string;
+  price_low: string;
+  price_high: string;
 }
 
 export default function HorseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const [, setActiveId] = useActiveHorseId();
   const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
   const [advanceDialogOpen, setAdvanceDialogOpen] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [editSavedAt, setEditSavedAt] = useState<number | null>(null);
 
   useEffect(() => {
@@ -48,18 +65,13 @@ export default function HorseDetail() {
     return () => clearTimeout(t);
   }, [editSavedAt]);
 
-  const horse = useQuery(
-    () => (id ? getHorse(id) : Promise.resolve(null)),
-    [id],
+  const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
+  const sessions = useQuery(id ? qk.sessions(id) : null, () =>
+    listSessionsForHorse(id!),
   );
-  const sessions = useQuery(
-    () => (id ? listSessionsForHorse(id) : Promise.resolve([])),
-    [id],
-  );
-  const phases = useQuery(() => listPhases(), []);
-  const ratings = useQuery(
-    () => (id ? listRatingsForHorse(id) : Promise.resolve([])),
-    [id],
+  const phases = useQuery(qk.phases(), () => listPhases());
+  const ratings = useQuery(id ? qk.ratings(id) : null, () =>
+    listRatingsForHorse(id!),
   );
 
   useEffect(() => {
@@ -70,8 +82,11 @@ export default function HorseDetail() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { isSubmitting: isEditSubmitting },
   } = useForm<EditFormValues>();
+
+  const editTrainingType = watch("training_type");
 
   // Sync edit form defaults when horse data loads
   useEffect(() => {
@@ -82,25 +97,38 @@ export default function HorseDetail() {
         owner_contact: horse.data.owner_contact ?? "",
         arrival_date: horse.data.arrival_date ?? "",
         notes: horse.data.notes ?? "",
+        training_type: horse.data.training_type,
+        target_market: horse.data.program_meta?.target_market ?? "",
+        price_low: horse.data.program_meta?.price_low?.toString() ?? "",
+        price_high: horse.data.program_meta?.price_high?.toString() ?? "",
       });
     }
   }, [horse.data, reset]);
 
   if (!id) return null;
 
-  if (
-    horse.loading ||
-    phases.loading ||
-    sessions.loading ||
-    ratings.loading
-  ) {
+  // Full-page skeleton only on the horse's true first load (nothing cached yet).
+  if (horse.data === undefined && horse.loading) {
     return (
-      <div className="view">
-        <div className="card">Loading…</div>
+      <div className="view" style={{ maxWidth: 720 }}>
+        <SkeletonCard lines={2} />
+        <div style={{ marginTop: 20 }}>
+          <SkeletonCard lines={4} />
+        </div>
       </div>
     );
   }
 
+  // Fetch failure is distinct from "not found": surface a retry UI.
+  if (horse.error && horse.data === undefined) {
+    return (
+      <div className="view" style={{ maxWidth: 720 }}>
+        <ErrorState error={horse.error} onRetry={horse.refresh} />
+      </div>
+    );
+  }
+
+  // Genuine "not found" only once the query resolved to null (no error, loaded).
   if (!horse.data) {
     return (
       <div className="view">
@@ -114,9 +142,16 @@ export default function HorseDetail() {
     );
   }
 
-  const allPhases: Phase[] = (phases.data ?? []).slice().sort(
-    (a, b) => a.position - b.position,
-  );
+  // Secondary queries stream in behind the header; show skeletons meanwhile.
+  const detailsReady =
+    phases.data !== undefined &&
+    sessions.data !== undefined &&
+    ratings.data !== undefined;
+
+  // Only this horse's program has its score sheets; filter the global phase list.
+  const allPhases: Phase[] = (phases.data ?? [])
+    .filter((p) => p.program === horse.data!.training_type)
+    .sort((a, b) => a.position - b.position);
 
   // Determine current phase (defensive: fall back to first)
   const currentPhase =
@@ -146,6 +181,8 @@ export default function HorseDetail() {
   const rolling7Average = computeRollingAverage(currentPhaseAvgs);
 
   const nextP = currentPhase ? nextPhase(currentPhase, allPhases) : null;
+  // Advancing is a TQA-scale (Foundation) concept — gate it on the phase scale.
+  const canAdvance = !!nextP && currentPhase?.scale === "tqa";
 
   // Last session date for current phase
   const sortedCurrentPhaseSessions = [...currentPhaseSessions].sort(
@@ -156,16 +193,23 @@ export default function HorseDetail() {
       ? sortedCurrentPhaseSessions[0].occurred_at
       : null;
 
-  // Day X of 60
+  // Scale-aware display: signed ±3 for Foundation, unsigned 1–5 otherwise.
+  const scale = horse.data.training_type === "foundation" ? "tqa" : "five";
+
+  // Day label — "Day X of 60"/"Day 60+" is a Foundation-only framing (Wade A1).
   let dayLabel: string | null = null;
   if (horse.data.arrival_date) {
     const today = new Date();
     const arrival = parseISO(horse.data.arrival_date);
     const dayNum = differenceInDays(today, arrival) + 1;
-    if (dayNum >= 1 && dayNum <= 60) {
-      dayLabel = `Day ${dayNum} of 60`;
-    } else if (dayNum > 60) {
-      dayLabel = "Day 60+";
+    if (horse.data.training_type === "foundation") {
+      if (dayNum >= 1 && dayNum <= 60) {
+        dayLabel = `Day ${dayNum} of 60`;
+      } else if (dayNum > 60) {
+        dayLabel = "Day 60+";
+      }
+    } else if (dayNum >= 1) {
+      dayLabel = `Day ${dayNum}`;
     }
   }
 
@@ -180,14 +224,8 @@ export default function HorseDetail() {
     );
   };
 
-  const formatSignedAvg = (n: number | null): string => {
-    if (n == null) return "—";
-    const sign = n >= 0 ? "+" : "";
-    return `${sign}${n.toFixed(1)}`;
-  };
-
   const handleAdvance = () => {
-    if (!currentPhase || !nextP) return;
+    if (!currentPhase || !canAdvance) return;
     if (isAtOrAboveStandard(rolling7Average)) {
       // Recommended — advance immediately without confirm
       void performAdvance();
@@ -197,57 +235,101 @@ export default function HorseDetail() {
   };
 
   const performAdvance = async () => {
-    if (!currentPhase || !nextP) return;
+    if (!currentPhase || !nextP || currentPhase.scale !== "tqa") return;
     setAdvancing(true);
     try {
       await setHorseCurrentPhase(horse.data!.id, nextP.id);
-      horse.refresh();
+      toast.success(`Advanced to ${nextP.name}`);
+      setAdvanceDialogOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message || "Couldn't advance the phase.");
     } finally {
       setAdvancing(false);
-      setAdvanceDialogOpen(false);
     }
   };
 
   const advanceDialogCopy =
     rolling7Average == null
       ? `No sessions logged in this phase yet. Advance to ${nextP?.name ?? "the next phase"} anyway?`
-      : `This phase's average is ${formatSignedAvg(rolling7Average)}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP?.name ?? "the next phase"}?`;
+      : `This phase's average is ${formatAvg(rolling7Average, scale)}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP?.name ?? "the next phase"}?`;
 
   const handleArchive = async () => {
-    await archiveHorse(id);
-    navigate("/horses");
+    setArchiving(true);
+    try {
+      await archiveHorse(id);
+      navigate("/horses");
+    } catch (e) {
+      // Stay on the page so the action can be retried.
+      toast.error((e as Error).message || "Couldn't archive the horse.");
+    } finally {
+      setArchiving(false);
+    }
   };
 
   const handleReopen = async () => {
-    await setHorseStatus(id, "in_training");
-    horse.refresh();
+    setReopening(true);
+    try {
+      await setHorseStatus(id, "in_training");
+      toast.success("Training re-opened");
+    } catch (e) {
+      toast.error((e as Error).message || "Couldn't re-open training.");
+    } finally {
+      setReopening(false);
+    }
   };
 
-  const handleDelete = async () => {
-    if (
-      !window.confirm(
-        `Permanently delete "${horse.data!.name}" and all sessions? This cannot be undone.`,
-      )
-    )
-      return;
-    await deleteHorse(id);
-    navigate("/horses");
+  const performDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteHorse(id);
+      toast.success("Horse deleted");
+      navigate("/horses");
+    } catch (e) {
+      // Stay on the page so the action can be retried.
+      toast.error((e as Error).message || "Couldn't delete the horse.");
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+    }
   };
 
   const onEditSubmit = async (values: EditFormValues) => {
-    await updateHorse(id, {
-      name: values.name,
-      owner_name: values.owner_name || null,
-      owner_contact: values.owner_contact || null,
-      arrival_date: values.arrival_date || null,
-      notes: values.notes || null,
-    });
-    horse.refresh();
-    setEditSavedAt(Date.now());
+    const program_meta: ProgramMeta = {};
+    if (values.training_type === "sale_horse") {
+      if (values.target_market?.trim())
+        program_meta.target_market = values.target_market.trim();
+      if (values.price_low) program_meta.price_low = Number(values.price_low);
+      if (values.price_high) program_meta.price_high = Number(values.price_high);
+    }
+    try {
+      await updateHorse(id, {
+        name: values.name,
+        owner_name: values.owner_name || null,
+        owner_contact: values.owner_contact || null,
+        arrival_date: values.arrival_date || null,
+        notes: values.notes || null,
+        program_meta,
+      });
+      // Switching program resets the current phase to the new program's first.
+      if (values.training_type !== horse.data!.training_type) {
+        await setHorseTrainingType(id, values.training_type);
+      }
+      toast.success("Saved");
+      setEditSavedAt(Date.now());
+    } catch (e) {
+      toast.error((e as Error).message || "Couldn't save changes.");
+    }
   };
 
+  const isFiveScale = horse.data.training_type !== "foundation";
   const avgColor = (avg: number | null): string => {
     if (avg === null) return "var(--muted)";
+    if (isFiveScale) {
+      // 1…5 performance scale: 4+ Good, below 3 Poor.
+      if (avg >= 4) return "var(--ok)";
+      if (avg < 3) return "var(--bad)";
+      return "var(--ink-2)";
+    }
     if (avg >= 2.0) return "var(--ok)";
     if (avg < 0) return "var(--bad)";
     return "var(--ink-2)";
@@ -293,6 +375,12 @@ export default function HorseDetail() {
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
             Owner: {horse.data.owner_name ?? "—"}
           </p>
+          <span
+            className="pill pill-leather"
+            style={{ marginTop: 6, display: "inline-block" }}
+          >
+            {programLabel(horse.data.training_type)}
+          </span>
         </div>
         {dayLabel && (
           <div
@@ -312,323 +400,336 @@ export default function HorseDetail() {
         )}
       </div>
 
-      {/* ── 2. Phase progression strip ── */}
-      <div className="card" style={{ marginTop: 20 }}>
-        <div className="card-head">
-          <h2 className="card-title">Phase progression</h2>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-          {allPhases.map((phase, idx) => {
-            const isCurrent =
-              currentPhase != null && phase.id === currentPhase.id;
-            const isCompleted =
-              currentPhase != null && phase.position < currentPhase.position;
-            const isUpcoming =
-              currentPhase != null && phase.position > currentPhase.position;
+      {!detailsReady ? (
+        <>
+          <div style={{ marginTop: 20 }}>
+            <SkeletonCard lines={4} />
+          </div>
+          <div style={{ marginTop: "var(--gap)" }}>
+            <SkeletonCard lines={3} />
+          </div>
+        </>
+      ) : (
+        <>
+          {/* ── 2. Phase progression strip ── */}
+          <div className="card" style={{ marginTop: 20 }}>
+            <div className="card-head">
+              <h2 className="card-title">Phase progression</h2>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {allPhases.map((phase, idx) => {
+                const isCurrent =
+                  currentPhase != null && phase.id === currentPhase.id;
+                const isCompleted =
+                  currentPhase != null && phase.position < currentPhase.position;
+                const isUpcoming =
+                  currentPhase != null && phase.position > currentPhase.position;
 
-            const phaseSessionCount = allSessions.filter(
-              (s) => s.phase_id === phase.id,
-            ).length;
-            const phaseAvg = phaseAvgFromRatings(phase.id);
+                const phaseSessionCount = allSessions.filter(
+                  (s) => s.phase_id === phase.id,
+                ).length;
+                const phaseAvg = phaseAvgFromRatings(phase.id);
 
-            const isExpanded =
-              isCurrent || expandedPhaseId === phase.id;
+                const isExpanded =
+                  isCurrent || expandedPhaseId === phase.id;
 
-            const stateIcon = isCompleted ? "✓" : isCurrent ? "●" : "·";
+                const stateIcon = isCompleted ? "✓" : isCurrent ? "●" : "·";
 
-            const phaseSessions = [...allSessions]
-              .filter((s) => s.phase_id === phase.id)
-              .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+                const phaseSessions = [...allSessions]
+                  .filter((s) => s.phase_id === phase.id)
+                  .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
 
-            const prevP =
-              idx > 0 ? allPhases[idx - 1] : null;
+                const prevP =
+                  idx > 0 ? allPhases[idx - 1] : null;
 
-            return (
-              <div
-                key={phase.id}
-                style={{
-                  borderTop: idx === 0 ? "none" : "1px solid var(--line)",
-                  paddingTop: idx === 0 ? 0 : 12,
-                  paddingBottom: 12,
-                }}
-              >
-                {/* Phase row header */}
-                <button
-                  type="button"
-                  aria-expanded={isExpanded}
-                  aria-label={`${phase.name} — ${
-                    isCompleted ? "completed" : isCurrent ? "current" : "upcoming"
-                  }${
-                    isCompleted || isUpcoming
-                      ? isExpanded
-                        ? ", expanded"
-                        : ", collapsed"
-                      : ""
-                  }`}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    width: "100%",
-                    textAlign: "left",
-                    cursor: isCompleted || isUpcoming ? "pointer" : "default",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                  onClick={() => {
-                    if (isCompleted || isUpcoming) {
-                      setExpandedPhaseId(
-                        expandedPhaseId === phase.id ? null : phase.id,
-                      );
-                    }
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      fontSize: 18,
-                      fontWeight: 700,
-                      width: 20,
-                      color: isCompleted
-                        ? "var(--ok)"
-                        : isCurrent
-                          ? "var(--leather)"
-                          : "var(--muted)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {stateIcon}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      fontSize: 16,
-                      fontWeight: isCurrent ? 700 : 400,
-                      color: isUpcoming ? "var(--muted)" : "var(--ink)",
-                    }}
-                  >
-                    {phase.name}
-                  </span>
-                  <span
-                    className="mono muted"
-                    style={{ fontSize: 11, marginLeft: "auto" }}
-                  >
-                    {phaseSessionCount} session{phaseSessionCount !== 1 ? "s" : ""}
-                    {phaseAvg !== null && (
-                      <> · avg{" "}
-                        <span style={{ color: avgColor(phaseAvg) }}>
-                          {round1(phaseAvg)}
-                        </span>
-                      </>
-                    )}
-                  </span>
-                </button>
-
-                {/* Expanded content */}
-                {isExpanded && isUpcoming && (
+                return (
                   <div
+                    key={phase.id}
                     style={{
-                      marginTop: 8,
-                      marginLeft: 30,
-                      padding: "10px 12px",
-                      background: "var(--paper)",
-                      border: "1px solid var(--line)",
-                      borderRadius: "var(--radius)",
-                      fontSize: 13,
-                      color: "var(--muted)",
+                      borderTop: idx === 0 ? "none" : "1px solid var(--line)",
+                      paddingTop: idx === 0 ? 0 : 12,
+                      paddingBottom: 12,
                     }}
                   >
-                    Not started yet — finish{" "}
-                    {prevP ? prevP.name : "the previous phase"} and advance to
-                    reach this one.
-                  </div>
-                )}
+                    {/* Phase row header */}
+                    <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      aria-label={`${phase.name} — ${
+                        isCompleted ? "completed" : isCurrent ? "current" : "upcoming"
+                      }${
+                        isCompleted || isUpcoming
+                          ? isExpanded
+                            ? ", expanded"
+                            : ", collapsed"
+                          : ""
+                      }`}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        width: "100%",
+                        textAlign: "left",
+                        cursor: isCompleted || isUpcoming ? "pointer" : "default",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                      }}
+                      onClick={() => {
+                        if (isCompleted || isUpcoming) {
+                          setExpandedPhaseId(
+                            expandedPhaseId === phase.id ? null : phase.id,
+                          );
+                        }
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: 18,
+                          fontWeight: 700,
+                          width: 20,
+                          color: isCompleted
+                            ? "var(--ok)"
+                            : isCurrent
+                              ? "var(--leather)"
+                              : "var(--muted)",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {stateIcon}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: 16,
+                          fontWeight: isCurrent ? 700 : 400,
+                          color: isUpcoming ? "var(--muted)" : "var(--ink)",
+                        }}
+                      >
+                        {phase.name}
+                      </span>
+                      <span
+                        className="mono muted"
+                        style={{ fontSize: 11, marginLeft: "auto" }}
+                      >
+                        {phaseSessionCount} session{phaseSessionCount !== 1 ? "s" : ""}
+                        {phaseAvg !== null && (
+                          <> · avg{" "}
+                            <span style={{ color: avgColor(phaseAvg) }}>
+                              {formatAvg(phaseAvg, scale)}
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    </button>
 
-                {isExpanded && isCompleted && phaseSessions.length > 0 && (
-                  <div style={{ marginTop: 8, marginLeft: 30 }}>
-                    {phaseSessions.map((s) => {
-                      const pt = points.find((p) => p.sessionId === s.id);
-                      return (
-                        <Link
-                          key={s.id}
-                          to={`/sessions/${s.id}`}
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            padding: "6px 0",
-                            borderTop: "1px solid var(--line)",
-                            textDecoration: "none",
-                            color: "inherit",
-                            fontSize: 13,
-                          }}
-                        >
-                          <span>{formatHumanDate(s.occurred_at)}</span>
-                          {pt?.combinedAverage !== undefined &&
-                            pt.combinedAverage !== null && (
-                              <span
-                                className="mono"
-                                style={{
-                                  color: avgColor(pt.combinedAverage),
-                                  fontSize: 12,
-                                }}
-                              >
-                                {round1(pt.combinedAverage)}
-                              </span>
-                            )}
-                        </Link>
-                      );
-                    })}
-                    {phaseSessions.length === 0 && (
-                      <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-                        No sessions logged.
+                    {/* Expanded content */}
+                    {isExpanded && isUpcoming && (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          marginLeft: 30,
+                          padding: "10px 12px",
+                          background: "var(--paper)",
+                          border: "1px solid var(--line)",
+                          borderRadius: "var(--radius)",
+                          fontSize: 13,
+                          color: "var(--muted)",
+                        }}
+                      >
+                        Not started yet — finish{" "}
+                        {prevP ? prevP.name : "the previous phase"} and advance to
+                        reach this one.
+                      </div>
+                    )}
+
+                    {isExpanded && isCompleted && phaseSessions.length > 0 && (
+                      <div style={{ marginTop: 8, marginLeft: 30 }}>
+                        {phaseSessions.map((s) => {
+                          const pt = points.find((p) => p.sessionId === s.id);
+                          return (
+                            <Link
+                              key={s.id}
+                              to={`/sessions/${s.id}`}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "6px 0",
+                                borderTop: "1px solid var(--line)",
+                                textDecoration: "none",
+                                color: "inherit",
+                                fontSize: 13,
+                              }}
+                            >
+                              <span>{formatHumanDate(s.occurred_at)}</span>
+                              {pt?.combinedAverage !== undefined &&
+                                pt.combinedAverage !== null && (
+                                  <span
+                                    className="mono"
+                                    style={{
+                                      color: avgColor(pt.combinedAverage),
+                                      fontSize: 12,
+                                    }}
+                                  >
+                                    {formatAvg(pt.combinedAverage, scale)}
+                                  </span>
+                                )}
+                            </Link>
+                          );
+                        })}
+                        {phaseSessions.length === 0 && (
+                          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                            No sessions logged.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {isExpanded && isCompleted && phaseSessions.length === 0 && (
+                      <p
+                        className="muted"
+                        style={{ fontSize: 13, margin: "8px 0 0 30px" }}
+                      >
+                        No sessions logged for this phase.
                       </p>
                     )}
                   </div>
-                )}
-
-                {isExpanded && isCompleted && phaseSessions.length === 0 && (
-                  <p
-                    className="muted"
-                    style={{ fontSize: 13, margin: "8px 0 0 30px" }}
-                  >
-                    No sessions logged for this phase.
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── 3. Current phase card ── */}
-      {currentPhase && (
-        <div className="card" style={{ marginTop: "var(--gap)" }}>
-          <div className="card-head">
-            <h2 className="card-title">{currentPhase.name}</h2>
-            <span className="card-meta">current phase</span>
-          </div>
-
-          {/* Phase running average */}
-          {currentPhaseSessions.length > 0 ? (
-            <div style={{ marginBottom: 12 }}>
-              <span
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: 32,
-                  fontWeight: 600,
-                  color: avgColor(currentPhaseAvg),
-                  letterSpacing: "0.2px",
-                }}
-              >
-                {round1(currentPhaseAvg)}
-              </span>
-              <span
-                className="mono muted"
-                style={{ fontSize: 11, marginLeft: 8 }}
-              >
-                phase average
-              </span>
-            </div>
-          ) : (
-            <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>
-              No sessions yet
-            </p>
-          )}
-
-          {/* Session count + last date */}
-          <p className="muted" style={{ fontSize: 13, margin: "0 0 16px" }}>
-            {currentPhaseSessions.length} session
-            {currentPhaseSessions.length !== 1 ? "s" : ""} logged
-            {lastSessionDate && (
-              <> · last on {formatHumanDate(lastSessionDate)}</>
-            )}
-          </p>
-
-          {/* Primary CTA */}
-          <Link
-            to={`/horses/${id}/sessions/new`}
-            className="btn btn-leather"
-            style={{ marginBottom: 10, display: "inline-flex" }}
-          >
-            Log today's session
-          </Link>
-
-          {/* Secondary CTA: Advance */}
-          {nextP && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                marginTop: 8,
-              }}
-            >
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={handleAdvance}
-              >
-                Advance to {nextP.name}
-              </button>
-              {isAtOrAboveStandard(rolling7Average) && (
-                <span className="pill" style={{ color: "var(--ok)", borderColor: "var(--ok)" }}>
-                  Recommended
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Sessions list for current phase */}
-          {sortedCurrentPhaseSessions.length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <div
-                className="mono muted"
-                style={{
-                  fontSize: 10,
-                  letterSpacing: "1.4px",
-                  textTransform: "uppercase",
-                  marginBottom: 6,
-                }}
-              >
-                Sessions this phase
-              </div>
-              {sortedCurrentPhaseSessions.map((s) => {
-                const pt = points.find((p) => p.sessionId === s.id);
-                return (
-                  <Link
-                    key={s.id}
-                    to={`/sessions/${s.id}`}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: "7px 0",
-                      borderTop: "1px solid var(--line)",
-                      textDecoration: "none",
-                      color: "inherit",
-                      fontSize: 14,
-                    }}
-                  >
-                    <span>{formatHumanDate(s.occurred_at)}</span>
-                    {pt?.combinedAverage !== undefined &&
-                      pt.combinedAverage !== null && (
-                        <span
-                          className="mono"
-                          style={{
-                            color: avgColor(pt.combinedAverage),
-                            fontSize: 13,
-                          }}
-                        >
-                          {round1(pt.combinedAverage)}
-                        </span>
-                      )}
-                  </Link>
                 );
               })}
             </div>
+          </div>
+
+          {/* ── 3. Current phase card ── */}
+          {currentPhase && (
+            <div className="card" style={{ marginTop: "var(--gap)" }}>
+              <div className="card-head">
+                <h2 className="card-title">{currentPhase.name}</h2>
+                <span className="card-meta">current phase</span>
+              </div>
+
+              {/* Phase running average */}
+              {currentPhaseSessions.length > 0 ? (
+                <div style={{ marginBottom: 12 }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      fontSize: 32,
+                      fontWeight: 600,
+                      color: avgColor(currentPhaseAvg),
+                      letterSpacing: "0.2px",
+                    }}
+                  >
+                    {formatAvg(currentPhaseAvg, scale)}
+                  </span>
+                  <span
+                    className="mono muted"
+                    style={{ fontSize: 11, marginLeft: 8 }}
+                  >
+                    phase average
+                  </span>
+                </div>
+              ) : (
+                <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>
+                  No sessions yet
+                </p>
+              )}
+
+              {/* Session count + last date */}
+              <p className="muted" style={{ fontSize: 13, margin: "0 0 16px" }}>
+                {currentPhaseSessions.length} session
+                {currentPhaseSessions.length !== 1 ? "s" : ""} logged
+                {lastSessionDate && (
+                  <> · last on {formatHumanDate(lastSessionDate)}</>
+                )}
+              </p>
+
+              {/* Primary CTA */}
+              <Link
+                to={`/horses/${id}/sessions/new`}
+                className="btn btn-leather"
+                style={{ marginBottom: 10, display: "inline-flex" }}
+              >
+                Log today's session
+              </Link>
+
+              {/* Secondary CTA: Advance (TQA/Foundation scale only) */}
+              {canAdvance && nextP && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    marginTop: 8,
+                  }}
+                >
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={handleAdvance}
+                  >
+                    Advance to {nextP.name}
+                  </button>
+                  {isAtOrAboveStandard(rolling7Average) && (
+                    <span className="pill" style={{ color: "var(--ok)", borderColor: "var(--ok)" }}>
+                      Recommended
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Sessions list for current phase */}
+              {sortedCurrentPhaseSessions.length > 0 && (
+                <div style={{ marginTop: 20 }}>
+                  <div
+                    className="mono muted"
+                    style={{
+                      fontSize: 10,
+                      letterSpacing: "1.4px",
+                      textTransform: "uppercase",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Sessions this phase
+                  </div>
+                  {sortedCurrentPhaseSessions.map((s) => {
+                    const pt = points.find((p) => p.sessionId === s.id);
+                    return (
+                      <Link
+                        key={s.id}
+                        to={`/sessions/${s.id}`}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "7px 0",
+                          borderTop: "1px solid var(--line)",
+                          textDecoration: "none",
+                          color: "inherit",
+                          fontSize: 14,
+                        }}
+                      >
+                        <span>{formatHumanDate(s.occurred_at)}</span>
+                        {pt?.combinedAverage !== undefined &&
+                          pt.combinedAverage !== null && (
+                            <span
+                              className="mono"
+                              style={{
+                                color: avgColor(pt.combinedAverage),
+                                fontSize: 13,
+                              }}
+                            >
+                              {formatAvg(pt.combinedAverage, scale)}
+                            </span>
+                          )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
 
       {/* ── 4. Finish training button ── */}
@@ -666,6 +767,60 @@ export default function HorseDetail() {
           onSubmit={handleSubmit(onEditSubmit)}
           style={{ marginTop: 16 }}
         >
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label className="label" htmlFor="edit-training-type">
+              Type of training
+            </label>
+            <select
+              id="edit-training-type"
+              className="input"
+              {...register("training_type")}
+            >
+              {PROGRAMS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} — {p.tagline}
+                </option>
+              ))}
+            </select>
+            {editTrainingType !== horse.data.training_type && (
+              <p style={{ color: "var(--bad)", fontSize: 12, margin: "4px 0 0" }}>
+                Changing the program resets this horse to the new program's first
+                phase.
+              </p>
+            )}
+          </div>
+          {editTrainingType === "sale_horse" && (
+            <div className="field-row">
+              <div className="field">
+                <label className="label" htmlFor="edit-target-market">
+                  Target market
+                </label>
+                <input
+                  id="edit-target-market"
+                  className="input"
+                  {...register("target_market")}
+                />
+              </div>
+              <div className="field">
+                <label className="label">Target sale price</label>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="number"
+                    className="input"
+                    placeholder="Low"
+                    {...register("price_low")}
+                  />
+                  <span className="muted">–</span>
+                  <input
+                    type="number"
+                    className="input"
+                    placeholder="High"
+                    {...register("price_high")}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           <div className="field-row">
             <div className="field">
               <label className="label" htmlFor="edit-name">
@@ -779,21 +934,23 @@ export default function HorseDetail() {
             <button
               className="btn btn-ghost btn-sm"
               onClick={handleArchive}
+              disabled={archiving}
             >
-              Archive horse
+              {archiving ? "Archiving…" : "Archive horse"}
             </button>
           )}
           {horse.data.status === "complete" && (
             <button
               className="btn btn-ghost btn-sm"
               onClick={handleReopen}
+              disabled={reopening}
             >
-              Re-open training
+              {reopening ? "Re-opening…" : "Re-open training"}
             </button>
           )}
           <button
             className="btn btn-danger btn-sm"
-            onClick={handleDelete}
+            onClick={() => setDeleteDialogOpen(true)}
           >
             Delete permanently
           </button>
@@ -801,51 +958,29 @@ export default function HorseDetail() {
       </details>
 
       {/* ── Advance confirmation dialog ── */}
-      {advanceDialogOpen && nextP && (
-        <div
-          className="scrim"
-          onClick={() => {
-            if (!advancing) setAdvanceDialogOpen(false);
-          }}
-        >
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="advance-dialog-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="advance-dialog-title">Advance to {nextP.name}?</h3>
-            <p style={{ margin: "0 0 16px", color: "var(--ink-2)", fontSize: 14 }}>
-              {advanceDialogCopy}
-            </p>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: 8,
-              }}
-            >
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setAdvanceDialogOpen(false)}
-                disabled={advancing}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-leather btn-sm"
-                onClick={performAdvance}
-                disabled={advancing}
-              >
-                {advancing ? "Advancing…" : `Advance to ${nextP.name}`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={advanceDialogOpen && !!nextP}
+        title={`Advance to ${nextP?.name ?? "the next phase"}?`}
+        body={advanceDialogCopy}
+        confirmLabel={
+          advancing ? "Advancing…" : `Advance to ${nextP?.name ?? "next phase"}`
+        }
+        busy={advancing}
+        onConfirm={performAdvance}
+        onCancel={() => setAdvanceDialogOpen(false)}
+      />
+
+      {/* ── Delete confirmation dialog ── */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        danger
+        title={`Delete ${horse.data.name}?`}
+        body="This permanently removes this horse and all its sessions and ratings. This cannot be undone."
+        confirmLabel={deleting ? "Deleting…" : "Delete permanently"}
+        busy={deleting}
+        onConfirm={performDelete}
+        onCancel={() => setDeleteDialogOpen(false)}
+      />
     </div>
   );
 }

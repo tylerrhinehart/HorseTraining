@@ -1,26 +1,65 @@
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { listInTrainingHorses, listPhases } from "../supabase/queries";
+import {
+  listInTrainingHorses,
+  listPhases,
+  getHorse,
+  listSessionsForHorse,
+  listRatingsForHorse,
+} from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
+import { qk } from "../supabase/keys";
+import { prefetchQuery } from "../supabase/cache";
 import { useActiveHorseId } from "../state/activeHorse";
 import HorseAvatar, { hashTone } from "../components/HorseAvatar";
+import { SkeletonCard } from "../components/Skeleton";
+import ErrorState from "../components/ErrorState";
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import type { Horse, Phase } from "../supabase/types";
 
-export default function Today() {
-  const horses = useQuery(() => listInTrainingHorses(), []);
+// Warm the horse workspace caches on intent (hover/focus/touch) so tapping a
+// card opens instantly.
+function prefetchHorse(id: string) {
+  prefetchQuery(qk.horse(id), () => getHorse(id));
+  prefetchQuery(qk.sessions(id), () => listSessionsForHorse(id));
+  prefetchQuery(qk.ratings(id), () => listRatingsForHorse(id));
+}
 
-  if (horses.loading) {
+export default function Today() {
+  const navigate = useNavigate();
+  const horses = useQuery(qk.horses("in_training"), () =>
+    listInTrainingHorses(),
+  );
+
+  const list = horses.data ?? [];
+  const singleId = !horses.loading && list.length === 1 ? list[0].id : null;
+
+  // Single in-training horse: land directly on its workspace (no card flash).
+  useEffect(() => {
+    if (singleId) navigate(`/horses/${singleId}`, { replace: true });
+  }, [singleId, navigate]);
+
+  if (horses.error && horses.data === undefined) {
     return (
       <div className="view">
-        <div className="card">Loading…</div>
+        <ErrorState error={horses.error} onRetry={horses.refresh} />
       </div>
     );
   }
 
-  const list = horses.data ?? [];
+  // First load or redirecting to a single horse: show the card skeleton layout.
+  if (horses.loading || singleId) {
+    return (
+      <div className="view">
+        <div style={{ display: "grid", gap: 10 }}>
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+        </div>
+      </div>
+    );
+  }
+
   if (list.length === 0) return <EmptyState />;
-  if (list.length === 1) return <SingleHorseRedirect horseId={list[0].id} />;
   return <MultiHorseToday horses={list} />;
 }
 
@@ -39,20 +78,8 @@ function EmptyState() {
   );
 }
 
-function SingleHorseRedirect({ horseId }: { horseId: string }) {
-  const navigate = useNavigate();
-  useEffect(() => {
-    navigate(`/horses/${horseId}`, { replace: true });
-  }, [horseId, navigate]);
-  return (
-    <div className="view">
-      <div className="card">Loading…</div>
-    </div>
-  );
-}
-
 function MultiHorseToday({ horses }: { horses: Horse[] }) {
-  const phases = useQuery(() => listPhases(), []);
+  const phases = useQuery(qk.phases(), () => listPhases());
   const phasesById = new Map<string, Phase>(
     (phases.data ?? []).map((p) => [p.id, p]),
   );
@@ -92,9 +119,13 @@ function TodayCard({
   const phase = horse.current_phase_id ? phasesById.get(horse.current_phase_id) : null;
   const arrival = horse.arrival_date ? parseISO(horse.arrival_date) : null;
   const dayN = arrival ? differenceInCalendarDays(new Date(), arrival) + 1 : null;
+  const warm = () => prefetchHorse(horse.id);
   return (
     <div
       className="card"
+      onPointerEnter={warm}
+      onFocus={warm}
+      onTouchStart={warm}
       style={{
         display: "flex",
         alignItems: "center",

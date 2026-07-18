@@ -1,16 +1,21 @@
+import { invalidate } from "./cache";
 import { requireSupabase } from "./client";
 import type {
   Horse,
   HorseStatus,
   ID,
   Phase,
+  ProgramMeta,
   Question,
   Resource,
   Session,
   SessionWithRatings,
+  TaskCompletion,
   TqaScore,
+  TrainingType,
   TrifectaAxisDb,
   TrifectaEvaluation,
+  TrifectaEvaluationWithScores,
   TrifectaScore,
 } from "./types";
 
@@ -19,6 +24,17 @@ const sb = () => requireSupabase();
 const throwIfError = <T>(res: { data: T | null; error: { message: string } | null }) => {
   if (res.error) throw new Error(res.error.message);
   return res.data as T;
+};
+
+// PostgREST returns PGRST202 when the RPC doesn't exist (migration not yet run
+// on the live DB). Match the message defensively too so a stale code still
+// triggers the multi-step fallback rather than surfacing as a hard failure.
+const isRpcMissing = (err: { code?: string; message?: string } | null): boolean => {
+  if (!err) return false;
+  return (
+    err.code === "PGRST202" ||
+    (err.message?.includes("Could not find the function") ?? false)
+  );
 };
 
 async function currentUserId(): Promise<ID> {
@@ -33,6 +49,17 @@ export async function listPhases(): Promise<Phase[]> {
   const res = await sb()
     .from("phases")
     .select("*")
+    .order("position", { ascending: true });
+  return throwIfError(res) ?? [];
+}
+
+export async function listPhasesForProgram(
+  program: TrainingType,
+): Promise<Phase[]> {
+  const res = await sb()
+    .from("phases")
+    .select("*")
+    .eq("program", program)
     .order("position", { ascending: true });
   return throwIfError(res) ?? [];
 }
@@ -82,6 +109,8 @@ export interface HorseInput {
   dob?: string | null;
   sex?: string | null;
   color?: string | null;
+  training_type?: TrainingType;
+  program_meta?: ProgramMeta;
 }
 
 export async function listHorses(opts?: { statuses?: HorseStatus[] }): Promise<Horse[]> {
@@ -111,8 +140,11 @@ export async function getHorse(id: ID): Promise<Horse | null> {
 export async function createHorse(input: HorseInput): Promise<Horse> {
   const userId = await currentUserId();
   const today = new Date().toISOString().slice(0, 10);
-  const phases = await listPhases();
-  const groundwork = phases.find((p) => p.code === "groundwork");
+  const trainingType: TrainingType = input.training_type ?? "foundation";
+  // Start the horse on the first phase of its chosen program (Groundwork for
+  // Foundation, the Performance Horse Warm-Up for the performance programs).
+  const phases = await listPhasesForProgram(trainingType);
+  const firstPhase = phases[0] ?? null;
 
   const { data, error } = await sb()
     .from("horses")
@@ -128,11 +160,14 @@ export async function createHorse(input: HorseInput): Promise<Horse> {
       sex: input.sex ?? null,
       color: input.color ?? null,
       status: "in_training",
-      current_phase_id: groundwork?.id ?? null,
+      training_type: trainingType,
+      program_meta: input.program_meta ?? {},
+      current_phase_id: firstPhase?.id ?? null,
     })
     .select()
     .single();
   if (error) throw new Error(error.message);
+  invalidate(["horses"]);
   return data as Horse;
 }
 
@@ -152,11 +187,31 @@ export async function updateHorse(
       | "arrival_date"
       | "status"
       | "current_phase_id"
+      | "program_meta"
     >
   >,
 ): Promise<void> {
   const res = await sb().from("horses").update(patch).eq("id", id);
   if (res.error) throw new Error(res.error.message);
+  invalidate(["horses"]);
+  invalidate(["horse", id]);
+}
+
+// Switching a horse's program resets its current phase to that program's first
+// phase (different programs have entirely different score sheets).
+export async function setHorseTrainingType(
+  id: ID,
+  trainingType: TrainingType,
+): Promise<void> {
+  const phases = await listPhasesForProgram(trainingType);
+  const firstPhase = phases[0] ?? null;
+  const { error } = await sb()
+    .from("horses")
+    .update({ training_type: trainingType, current_phase_id: firstPhase?.id ?? null })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  invalidate(["horses"]);
+  invalidate(["horse", id]);
 }
 
 export async function setHorseStatus(id: ID, status: HorseStatus): Promise<void> {
@@ -165,6 +220,8 @@ export async function setHorseStatus(id: ID, status: HorseStatus): Promise<void>
     .update({ status })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  invalidate(["horses"]);
+  invalidate(["horse", id]);
 }
 
 export async function setHorseCurrentPhase(id: ID, phaseId: ID): Promise<void> {
@@ -173,6 +230,8 @@ export async function setHorseCurrentPhase(id: ID, phaseId: ID): Promise<void> {
     .update({ current_phase_id: phaseId })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  invalidate(["horses"]);
+  invalidate(["horse", id]);
 }
 
 export async function archiveHorse(id: ID): Promise<void> {
@@ -186,6 +245,11 @@ export async function unarchiveHorse(id: ID): Promise<void> {
 export async function deleteHorse(id: ID): Promise<void> {
   const res = await sb().from("horses").delete().eq("id", id);
   if (res.error) throw new Error(res.error.message);
+  invalidate(["horses"]);
+  invalidate(["horse", id]);
+  invalidate(["sessions", id]);
+  invalidate(["ratings", id]);
+  invalidate(["trifecta", id]);
 }
 
 export async function listRatingsForHorse(
@@ -238,10 +302,35 @@ export interface SessionInput {
   phase_id: ID;
   occurred_at: string; // ISO date or timestamp
   notes?: string | null;
+  rider?: string | null;
+  bit?: string | null;
+  task_completions?: TaskCompletion[];
   ratings: SessionRatingInput[];
 }
 
 export async function createSession(input: SessionInput): Promise<Session> {
+  // Atomic path: one transaction so a malformed rating can't orphan a session.
+  const { data, error } = await sb().rpc("create_session_with_ratings", {
+    p_horse_id: input.horse_id,
+    p_phase_id: input.phase_id,
+    p_occurred_at: input.occurred_at,
+    p_notes: input.notes ?? null,
+    p_rider: input.rider ?? null,
+    p_bit: input.bit ?? null,
+    p_task_completions: input.task_completions ?? [],
+    p_ratings: input.ratings,
+  });
+  const session = isRpcMissing(error)
+    ? await createSessionLegacy(input)
+    : (throwIfError({ data, error }) as Session);
+  invalidate(["sessions", input.horse_id]);
+  invalidate(["ratings", input.horse_id]);
+  return session;
+}
+
+// Pre-RPC multi-step write, kept as a fallback for databases where the
+// create_session_with_ratings migration has not been applied yet.
+async function createSessionLegacy(input: SessionInput): Promise<Session> {
   const userId = await currentUserId();
   const { data: session, error } = await sb()
     .from("sessions")
@@ -251,6 +340,9 @@ export async function createSession(input: SessionInput): Promise<Session> {
       phase_id: input.phase_id,
       occurred_at: input.occurred_at,
       notes: input.notes ?? null,
+      rider: input.rider ?? null,
+      bit: input.bit ?? null,
+      task_completions: input.task_completions ?? [],
     })
     .select()
     .single();
@@ -276,15 +368,48 @@ export async function createSession(input: SessionInput): Promise<Session> {
   return session as Session;
 }
 
+export interface SessionUpdateInput {
+  horse_id?: ID;
+  phase_id?: ID;
+  occurred_at?: string;
+  notes?: string | null;
+  rider?: string | null;
+  bit?: string | null;
+  task_completions?: TaskCompletion[];
+  ratings?: SessionRatingInput[];
+}
+
 export async function updateSession(
   id: ID,
-  input: {
-    horse_id?: ID;
-    phase_id?: ID;
-    occurred_at?: string;
-    notes?: string | null;
-    ratings?: SessionRatingInput[];
-  },
+  input: SessionUpdateInput,
+): Promise<void> {
+  // Atomic path: the session row plus its full rating set update in one
+  // transaction. notes/rider/bit are always overwritten (the edit form sends
+  // the complete current state); occurred_at/task_completions stay unchanged
+  // when omitted. horse_id/phase_id aren't editable here, so they're not sent.
+  const { error } = await sb().rpc("update_session_with_ratings", {
+    p_session_id: id,
+    p_occurred_at: input.occurred_at ?? null,
+    p_notes: input.notes?.trim() ? input.notes.trim() : null,
+    p_rider: input.rider?.trim() ? input.rider.trim() : null,
+    p_bit: input.bit || null,
+    p_task_completions: input.task_completions ?? null,
+    p_ratings: input.ratings ?? null,
+  });
+  if (isRpcMissing(error)) {
+    await updateSessionLegacy(id, input);
+  } else if (error) {
+    throw new Error(error.message);
+  }
+  invalidate(["session", id]);
+  invalidate(["sessions"]);
+  invalidate(["ratings"]);
+}
+
+// Pre-RPC multi-step edit, kept for databases without the RPC migration.
+async function updateSessionLegacy(
+  id: ID,
+  input: SessionUpdateInput,
 ): Promise<void> {
   const userId = await currentUserId();
   const patch: Record<string, unknown> = {};
@@ -293,6 +418,11 @@ export async function updateSession(
   if (input.occurred_at !== undefined) patch.occurred_at = input.occurred_at;
   if (input.notes !== undefined)
     patch.notes = input.notes?.trim() ? input.notes.trim() : null;
+  if (input.rider !== undefined)
+    patch.rider = input.rider?.trim() ? input.rider.trim() : null;
+  if (input.bit !== undefined) patch.bit = input.bit || null;
+  if (input.task_completions !== undefined)
+    patch.task_completions = input.task_completions;
   if (Object.keys(patch).length > 0) {
     const res = await sb().from("sessions").update(patch).eq("id", id);
     if (res.error) throw new Error(res.error.message);
@@ -319,6 +449,19 @@ export async function updateSession(
 export async function deleteSession(id: ID): Promise<void> {
   const res = await sb().from("sessions").delete().eq("id", id);
   if (res.error) throw new Error(res.error.message);
+  invalidate(["session", id]);
+  invalidate(["sessions"]);
+  invalidate(["ratings"]);
+}
+
+// ---------- Export helpers (all rows for the signed-in user) ----------
+
+export async function listAllSessionsWithRatings(): Promise<SessionWithRatings[]> {
+  const res = await sb()
+    .from("sessions")
+    .select("*, ratings(*)")
+    .order("occurred_at", { ascending: true });
+  return throwIfError(res) ?? [];
 }
 
 // ---------- Trifecta evaluations ----------
@@ -350,11 +493,38 @@ export interface TrifectaScoreInput {
   comment?: string;
 }
 
-export async function upsertTrifectaEvaluation(input: {
+export interface TrifectaEvaluationInput {
   horse_id: ID;
   notes?: string | null;
   scores: TrifectaScoreInput[];
-}): Promise<TrifectaEvaluation> {
+}
+
+export async function upsertTrifectaEvaluation(
+  input: TrifectaEvaluationInput,
+): Promise<TrifectaEvaluation> {
+  // Atomic path: evaluation upsert + score replacement in one transaction.
+  const { data, error } = await sb().rpc("upsert_trifecta_with_scores", {
+    p_horse_id: input.horse_id,
+    p_notes: input.notes ?? null,
+    p_scores: input.scores.map((s) => ({
+      axis: s.axis,
+      item_code: s.itemCode,
+      item_text_snapshot: s.itemTextSnapshot,
+      score: s.score,
+      comment: s.comment?.trim() || null,
+    })),
+  });
+  const evaluation = isRpcMissing(error)
+    ? await upsertTrifectaEvaluationLegacy(input)
+    : (throwIfError({ data, error }) as TrifectaEvaluation);
+  invalidate(["trifecta", input.horse_id]);
+  return evaluation;
+}
+
+// Pre-RPC multi-step upsert, kept for databases without the RPC migration.
+async function upsertTrifectaEvaluationLegacy(
+  input: TrifectaEvaluationInput,
+): Promise<TrifectaEvaluation> {
   const userId = await currentUserId();
   const { data: evaluation, error } = await sb()
     .from("trifecta_evaluations")
@@ -394,6 +564,19 @@ export async function upsertTrifectaEvaluation(input: {
 export async function deleteTrifectaEvaluation(id: ID): Promise<void> {
   const res = await sb().from("trifecta_evaluations").delete().eq("id", id);
   if (res.error) throw new Error(res.error.message);
+}
+
+export async function listAllTrifectas(): Promise<TrifectaEvaluationWithScores[]> {
+  const res = await sb()
+    .from("trifecta_evaluations")
+    .select("*, trifecta_scores(*)");
+  const rows = throwIfError(res) ?? [];
+  return (rows as (TrifectaEvaluation & { trifecta_scores: TrifectaScore[] })[]).map(
+    ({ trifecta_scores, ...evaluation }) => ({
+      ...evaluation,
+      scores: trifecta_scores ?? [],
+    }),
+  );
 }
 
 // ---------- Resources ----------
@@ -441,7 +624,9 @@ export async function createResource(input: {
     })
     .select()
     .single();
-  return throwIfError(res);
+  const resource = throwIfError(res);
+  invalidate(["resources"]);
+  return resource;
 }
 
 export async function updateResource(
@@ -450,9 +635,11 @@ export async function updateResource(
 ): Promise<void> {
   const res = await sb().from("resources").update(patch).eq("id", id);
   if (res.error) throw new Error(res.error.message);
+  invalidate(["resources"]);
 }
 
 export async function deleteResource(id: ID): Promise<void> {
   const res = await sb().from("resources").delete().eq("id", id);
   if (res.error) throw new Error(res.error.message);
+  invalidate(["resources"]);
 }

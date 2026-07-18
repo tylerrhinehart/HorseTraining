@@ -1,7 +1,9 @@
 -- TQA digitization schema. Run on a fresh Supabase project; this file
--- drops and recreates all app tables and is NOT a migration.
+-- drops and recreates all app tables and is NOT a migration. To update an
+-- EXISTING project without losing data, run supabase/migration_programs.sql.
 --
--- Mirrors src/content/tqa-template.ts and src/content/trifecta.ts.
+-- Mirrors src/content/tqa-template.ts, src/content/trifecta.ts,
+-- src/content/programs.ts, and src/content/performance-template.ts.
 
 create extension if not exists "pgcrypto";
 
@@ -34,12 +36,17 @@ create table public.profiles (
 create table public.phases (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
-  code text not null check (code in ('groundwork','phase_1','phase_2','phase_3','phase_4')),
+  -- code is now program-scoped free text (e.g. 'groundwork', 'performance_warmup').
+  code text not null,
+  program text not null default 'foundation'
+    check (program in ('foundation','foundation_to_finish','sale_horse')),
+  -- scoring scale for this phase's questions: 'tqa' (−3…+3) or 'five' (1…5).
+  scale text not null default 'tqa' check (scale in ('tqa','five')),
   position int not null,
   name text not null,
   created_at timestamptz not null default now(),
-  unique (user_id, code),
-  unique (user_id, position)
+  unique (user_id, program, code),
+  unique (user_id, program, position)
 );
 
 create table public.questions (
@@ -71,6 +78,11 @@ create table public.horses (
   owner_contact text,
   arrival_date date,
   status text not null default 'in_training' check (status in ('in_training','complete','archived')),
+  -- which program / set of score sheets this horse follows:
+  training_type text not null default 'foundation'
+    check (training_type in ('foundation','foundation_to_finish','sale_horse')),
+  -- sale-horse target framing etc.: { target_market, price_low, price_high }
+  program_meta jsonb not null default '{}'::jsonb,
   current_phase_id uuid references public.phases on delete set null,
   -- existing tail:
   archived_at timestamptz,
@@ -88,6 +100,10 @@ create table public.sessions (
   phase_id uuid not null references public.phases on delete restrict,
   occurred_at timestamptz not null default now(),
   notes text,
+  -- performance/sale programs only:
+  rider text,
+  bit text,
+  task_completions jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -102,7 +118,8 @@ create table public.ratings (
   question_id uuid not null references public.questions on delete restrict,
   axis_snapshot text not null check (axis_snapshot in ('foundation','temperament')),
   question_text_snapshot text not null,
-  score smallint not null check (score between -3 and 3),
+  -- −3…+3 on the TQA scale, or 1…5 on the performance scale.
+  score smallint not null check (score between -3 and 5),
   comment text,
   unique (session_id, question_id)
 );
@@ -198,12 +215,14 @@ create trigger touch_sessions              before update on public.sessions     
 create trigger touch_trifecta_evaluations  before update on public.trifecta_evaluations  for each row execute function public.touch_updated_at();
 
 -- ---------------------------------------------------------------------------
--- Canonical template seed: profile + 5 phases + 70 questions verbatim.
+-- Canonical template seed: profile + Foundation phases/questions, the
+-- Performance Horse Warm-Up for the two performance programs, and the
+-- Foundation phase videos.
 --
--- This block is the SQL counterpart of src/content/tqa-template.ts. Keep
--- the two in sync if either is edited. The function is idempotent — it
--- skips users who already have phases — so it can also be used to backfill
--- existing accounts after a schema reset.
+-- This block is the SQL counterpart of src/content/tqa-template.ts and
+-- src/content/performance-template.ts. Keep them in sync if either is edited.
+-- The function is idempotent — it skips users who already have phases — so it
+-- can also be used to backfill existing accounts after a schema reset.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.seed_canonical_template(p_user_id uuid)
@@ -218,6 +237,8 @@ declare
   p2_id  uuid;
   p3_id  uuid;
   p4_id  uuid;
+  f2f_id uuid;
+  sale_id uuid;
   existing_phase_count int;
 begin
   insert into public.profiles (id) values (p_user_id) on conflict do nothing;
@@ -315,6 +336,60 @@ begin
       (5, 'Reaction to social separation',                 'Calm',      'Nervous')
     ) as t(pos, txt, lo, hi);
   end loop;
+
+  -- -------------------------------------------------------------------------
+  -- Foundation phase videos (per Wade Black's email). Phase-level resources.
+  -- -------------------------------------------------------------------------
+  insert into public.resources (user_id, phase_id, title, url, kind, position) values
+    (p_user_id, gw_id, 'Groundwork video', 'https://youtu.be/QUP5XSe73oo', 'youtube', 0),
+    (p_user_id, p1_id, 'Phase 1 video',    'https://youtu.be/97rDdcw5SJQ', 'youtube', 0),
+    (p_user_id, p2_id, 'Phase 2 video',    'https://youtu.be/xvORqrG1BNY', 'youtube', 0),
+    (p_user_id, p3_id, 'Phase 3 video',    'https://youtu.be/Je5RaMkXZPE', 'youtube', 0),
+    (p_user_id, p4_id, 'Phase 4 video',    'https://www.youtube.com/watch?v=nFd0WHDvMPk', 'youtube', 0);
+
+  -- -------------------------------------------------------------------------
+  -- Performance Horse Warm-Up — one phase each for the Foundation to Finish
+  -- and Sale Horse programs. Scored 1…5. Verbatim from the TQA All-Around
+  -- Performance Horse Warm-Up sheet (mirrors src/content/performance-template.ts).
+  -- -------------------------------------------------------------------------
+  insert into public.phases (user_id, code, program, scale, position, name) values
+    (p_user_id, 'performance_warmup', 'foundation_to_finish', 'five', 0, 'Performance Horse Warm-Up'),
+    (p_user_id, 'performance_warmup', 'sale_horse',           'five', 0, 'Performance Horse Warm-Up');
+
+  select id into f2f_id  from public.phases where user_id = p_user_id and program = 'foundation_to_finish' and code = 'performance_warmup';
+  select id into sale_id from public.phases where user_id = p_user_id and program = 'sale_horse'           and code = 'performance_warmup';
+
+  insert into public.questions (user_id, phase_id, axis, position, text, low_label, high_label)
+  select p_user_id, pid, axis, pos, txt, lo, hi
+  from (select unnest(array[f2f_id, sale_id]) as pid) phases
+  cross join (values
+    ('foundation',  0, 'Ground Work & Phase 1 Review', 'Very Poor', 'Excellent'),
+    ('foundation',  1, 'HD & Stage 4 (Inside -> Outside Rein) — Snake Trails (Walk, Slow & Extended Trot, Lope)', 'Very Poor', 'Excellent'),
+    ('foundation',  2, 'Vertical & Horizontal Direction — Walking, Slow Trot, Extended Trot, Loping', 'Very Poor', 'Excellent'),
+    ('foundation',  3, 'Large Fasts and Small Slows — w/ Willing Submission and Vertical Direction', 'Very Poor', 'Excellent'),
+    ('foundation',  4, 'Stage 2 w/ Willing Submission & Vertical Direction — Standing, Walking, Jigging, Trotting, Loping', 'Very Poor', 'Excellent'),
+    ('foundation',  5, 'Stage 3 w/ Willing Submission & Vertical Direction — Standing, Walking, Jigging, Trotting, Loping', 'Very Poor', 'Excellent'),
+    ('foundation',  6, 'Stage 4 w/ Willing Submission & Vertical Direction — Standing, Walking, Trotting, Rollbacks and Spins', 'Very Poor', 'Excellent'),
+    ('foundation',  7, 'Task Completion — Pick One Job From the "Task Completion" Sheet', 'Very Poor', 'Excellent'),
+    ('temperament', 0, 'Self-preservation (fight or flight)',           'Low',       'High'),
+    ('temperament', 1, 'Confidence',                                    'Low',       'High'),
+    ('temperament', 2, 'Sensitivity (response to light pressure)',      'Dull',      'Very Responsive'),
+    ('temperament', 3, 'Energy (motivation and determination)',         'Low',       'High'),
+    ('temperament', 4, 'Willingness (response to request)',             'Resistant', 'Willing'),
+    ('temperament', 5, 'Reaction to social separation',                 'Calm',      'Nervous')
+  ) as q(axis, pos, txt, lo, hi);
+
+  -- Official source document for the performance programs (holds the score
+  -- sheet plus the warm-up videos). Titled "Foundation to Finish / Performance
+  -- Horse" per Wade's request, not "TQA Warm-Up".
+  insert into public.resources (user_id, phase_id, title, url, kind, notes, position)
+  select p_user_id, pid,
+         'Foundation to Finish — Performance Horse score sheets & warm-up videos',
+         'https://www.dropbox.com/scl/fi/4mbij1k3aj6f06wga4p8g/Sale-Horse-Ready-2024-All-Around-Performance-Horse.docx?rlkey=1iu0ofhaidt19d10k5ga4fedb&st=v603gncc&dl=0',
+         'link',
+         'Official document with the Performance Horse task-completion phases and warm-up. Warm-up video segments: Introduction, Ground Work, First Get On, Review of Vocab Words, Reining Cow Horse Warm-Up.',
+         0
+  from (select unnest(array[f2f_id, sale_id]) as pid) phases;
 end;
 $$;
 
@@ -350,3 +425,81 @@ begin
     perform public.seed_canonical_template(u.id);
   end loop;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Atomic write RPCs. Session + rating writes (and trifecta eval + scores) are
+-- multi-statement; wrapping them in a plpgsql function makes each one a single
+-- transaction so a malformed rating can never leave an orphan session behind.
+--
+-- Plain (invoker-rights) language plpgsql — NO security definer — so the
+-- caller's RLS policies still apply; auth.uid() is the signed-in user.
+-- These mirror the fallback client logic in src/supabase/queries.ts.
+-- (Duplicated verbatim in supabase/migration_programs.sql; keep in sync.)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.create_session_with_ratings(
+  p_horse_id uuid, p_phase_id uuid, p_occurred_at timestamptz, p_notes text,
+  p_rider text, p_bit text, p_task_completions jsonb, p_ratings jsonb
+) returns public.sessions language plpgsql as $$
+declare v_session public.sessions;
+begin
+  insert into public.sessions (user_id, horse_id, phase_id, occurred_at, notes, rider, bit, task_completions)
+  values (auth.uid(), p_horse_id, p_phase_id, coalesce(p_occurred_at, now()), p_notes, p_rider, p_bit, coalesce(p_task_completions, '[]'::jsonb))
+  returning * into v_session;
+  insert into public.ratings (user_id, session_id, question_id, axis_snapshot, question_text_snapshot, score, comment)
+  select auth.uid(), v_session.id, (r->>'question_id')::uuid, r->>'axis',
+         r->>'question_text_snapshot', (r->>'score')::smallint, nullif(r->>'comment','')
+  from jsonb_array_elements(coalesce(p_ratings, '[]'::jsonb)) as r;
+  return v_session;
+end $$;
+
+grant execute on function public.create_session_with_ratings(uuid, uuid, timestamptz, text, text, text, jsonb, jsonb) to authenticated;
+
+-- Session edit: notes/rider/bit are set unconditionally (the client always
+-- sends the full current form state, so null means "clear it"); occurred_at and
+-- task_completions fall back to the existing value when null. When p_ratings is
+-- non-null the whole rating set is replaced in the same transaction.
+create or replace function public.update_session_with_ratings(
+  p_session_id uuid, p_occurred_at timestamptz, p_notes text,
+  p_rider text, p_bit text, p_task_completions jsonb, p_ratings jsonb
+) returns void language plpgsql as $$
+begin
+  update public.sessions set
+    occurred_at = coalesce(p_occurred_at, occurred_at),
+    notes = p_notes,
+    rider = p_rider,
+    bit = p_bit,
+    task_completions = coalesce(p_task_completions, task_completions)
+  where id = p_session_id;
+  if p_ratings is not null then
+    delete from public.ratings where session_id = p_session_id;
+    insert into public.ratings (user_id, session_id, question_id, axis_snapshot, question_text_snapshot, score, comment)
+    select auth.uid(), p_session_id, (r->>'question_id')::uuid, r->>'axis',
+           r->>'question_text_snapshot', (r->>'score')::smallint, nullif(r->>'comment','')
+    from jsonb_array_elements(p_ratings) as r;
+  end if;
+end $$;
+
+grant execute on function public.update_session_with_ratings(uuid, timestamptz, text, text, text, jsonb, jsonb) to authenticated;
+
+-- Trifecta upsert: one evaluation per horse (unique(horse_id)); its scores are
+-- fully replaced from the passed array in the same transaction.
+create or replace function public.upsert_trifecta_with_scores(
+  p_horse_id uuid, p_notes text, p_scores jsonb
+) returns public.trifecta_evaluations language plpgsql as $$
+declare v_eval public.trifecta_evaluations;
+begin
+  insert into public.trifecta_evaluations (user_id, horse_id, notes, evaluated_at)
+  values (auth.uid(), p_horse_id, p_notes, now())
+  on conflict (horse_id) do update
+    set notes = excluded.notes, evaluated_at = excluded.evaluated_at
+  returning * into v_eval;
+  delete from public.trifecta_scores where evaluation_id = v_eval.id;
+  insert into public.trifecta_scores (user_id, evaluation_id, axis, item_code, item_text_snapshot, score, comment)
+  select auth.uid(), v_eval.id, s->>'axis', s->>'item_code',
+         s->>'item_text_snapshot', (s->>'score')::smallint, nullif(s->>'comment','')
+  from jsonb_array_elements(coalesce(p_scores, '[]'::jsonb)) as s;
+  return v_eval;
+end $$;
+
+grant execute on function public.upsert_trifecta_with_scores(uuid, text, jsonb) to authenticated;

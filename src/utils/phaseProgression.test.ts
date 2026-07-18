@@ -11,11 +11,11 @@ import {
 import type { Phase } from "../supabase/types";
 
 const phases: Phase[] = [
-  { id: "p0", user_id: "u", code: "groundwork", position: 0, name: "Groundwork", created_at: "" },
-  { id: "p1", user_id: "u", code: "phase_1", position: 1, name: "Phase 1", created_at: "" },
-  { id: "p2", user_id: "u", code: "phase_2", position: 2, name: "Phase 2", created_at: "" },
-  { id: "p3", user_id: "u", code: "phase_3", position: 3, name: "Phase 3", created_at: "" },
-  { id: "p4", user_id: "u", code: "phase_4", position: 4, name: "Phase 4", created_at: "" },
+  { id: "p0", user_id: "u", code: "groundwork", program: "foundation", scale: "tqa", position: 0, name: "Groundwork", created_at: "" },
+  { id: "p1", user_id: "u", code: "phase_1", program: "foundation", scale: "tqa", position: 1, name: "Phase 1", created_at: "" },
+  { id: "p2", user_id: "u", code: "phase_2", program: "foundation", scale: "tqa", position: 2, name: "Phase 2", created_at: "" },
+  { id: "p3", user_id: "u", code: "phase_3", program: "foundation", scale: "tqa", position: 3, name: "Phase 3", created_at: "" },
+  { id: "p4", user_id: "u", code: "phase_4", program: "foundation", scale: "tqa", position: 4, name: "Phase 4", created_at: "" },
 ];
 
 describe("phaseProgression", () => {
@@ -55,5 +55,22 @@ describe("phaseProgression", () => {
   it("prevPhase returns the phase at position-1 or null at the start", () => {
     expect(prevPhase(phases[1], phases)?.code).toBe("groundwork");
     expect(prevPhase(phases[0], phases)).toBeNull();
+  });
+
+  it("a single-phase performance program has no next/prev (no advance gate)", () => {
+    const warmup: Phase[] = [
+      {
+        id: "w0",
+        user_id: "u",
+        code: "performance_warmup",
+        program: "foundation_to_finish",
+        scale: "five",
+        position: 0,
+        name: "Performance Horse Warm-Up",
+        created_at: "",
+      },
+    ];
+    expect(nextPhase(warmup[0], warmup)).toBeNull();
+    expect(prevPhase(warmup[0], warmup)).toBeNull();
   });
 });

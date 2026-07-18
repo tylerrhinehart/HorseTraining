@@ -1,31 +1,38 @@
-import { TQA_SCORES, type TqaScore } from "../supabase/types";
+import { TQA_SCORES } from "../supabase/types";
+import { FIVE_SCALE_VALUES } from "../content/programs";
+import type { RatingScaleKind } from "../supabase/types";
 
 interface Props {
-  value: TqaScore | null;
-  onChange: (value: TqaScore) => void;
+  value: number | null;
+  onChange: (value: number) => void;
   name: string;
   label?: string;
   lowLabel?: string;
   highLabel?: string;
+  /** "tqa" = −3…+3 (default), "five" = 1…5 (performance score sheets). */
+  scale?: RatingScaleKind;
   density?: "compact" | "default" | "cozy";
   /** kept for back-compat with `size` callers */
   size?: "sm" | "md";
 }
 
-function tone(score: number): "neg" | "neutral" | "pos" {
-  if (score < 0) return "neg";
-  if (score === 0) return "neutral";
+// On the −3…+3 scale the midpoint is 0; on the 1…5 scale it is 3.
+function tone(score: number, scale: RatingScaleKind): "neg" | "neutral" | "pos" {
+  const mid = scale === "five" ? 3 : 0;
+  if (score < mid) return "neg";
+  if (score === mid) return "neutral";
   return "pos";
 }
 
-function magnitude(score: number): 1 | 2 | 3 {
-  const a = Math.abs(score);
+function magnitude(score: number, scale: RatingScaleKind): 1 | 2 | 3 {
+  const a = scale === "five" ? Math.abs(score - 3) : Math.abs(score);
   if (a >= 3) return 3;
   if (a === 2) return 2;
   return 1;
 }
 
-function formatScore(score: number): string {
+function formatScore(score: number, scale: RatingScaleKind): string {
+  if (scale === "five") return String(score);
   return score > 0 ? `+${score}` : String(score);
 }
 
@@ -36,11 +43,14 @@ export default function RatingInput({
   label,
   lowLabel,
   highLabel,
+  scale = "tqa",
   density,
   size,
 }: Props) {
   const resolvedDensity =
     density ?? (size === "sm" ? "compact" : "default");
+  const values: readonly number[] =
+    scale === "five" ? FIVE_SCALE_VALUES : TQA_SCORES;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%" }}>
       {(lowLabel || highLabel) && (
@@ -60,14 +70,14 @@ export default function RatingInput({
       )}
       <div
         role="group"
-        aria-label={label ?? name ?? "Rate -3 to +3"}
+        aria-label={label ?? name ?? (scale === "five" ? "Rate 1 to 5" : "Rate -3 to +3")}
         className={`rating rating--dots ${resolvedDensity}`}
         style={{ justifyContent: "space-between" }}
       >
-        {TQA_SCORES.map((score) => {
+        {values.map((score) => {
           const selected = value === score;
-          const t = tone(score);
-          const mag = magnitude(score);
+          const t = tone(score, scale);
+          const mag = magnitude(score, scale);
           return (
             <button
               key={score}
@@ -82,9 +92,9 @@ export default function RatingInput({
                 .join(" ")}
               onClick={() => onChange(score)}
               aria-pressed={selected}
-              aria-label={`Rate ${formatScore(score)}`}
+              aria-label={`Rate ${formatScore(score, scale)}`}
             >
-              {formatScore(score)}
+              {formatScore(score, scale)}
             </button>
           );
         })}

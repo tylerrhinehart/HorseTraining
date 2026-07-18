@@ -19,9 +19,9 @@ import type {
 } from "../../supabase/types";
 import { formatDateTime, formatHumanDate } from "../../utils/dates";
 import {
+  formatAvg,
   meetsCertificationThreshold,
   questionAverages,
-  round1,
   sessionAverage,
   sessionAverages,
   trend,
@@ -32,6 +32,11 @@ import {
   type TrifectaAxis,
 } from "../../content/trifecta";
 import { SCORE_LEGEND } from "../../content/tqa-template";
+import {
+  FIVE_FOUNDATION_LEGEND,
+  FIVE_TEMPERAMENT_LEGEND,
+} from "../../content/programs";
+import type { RatingScaleKind } from "../../supabase/types";
 
 const styles = StyleSheet.create({
   page: {
@@ -163,7 +168,10 @@ export function HorseReport({
   const fTrend = trend(points, "foundation");
   const tTrend = trend(points, "temperament");
   const latest = points.length > 0 ? points[points.length - 1] : null;
-  const certified = latest && meetsCertificationThreshold(latest);
+  const scale: RatingScaleKind =
+    horse.training_type === "foundation" ? "tqa" : "five";
+  // The +2.7 certification threshold is defined on the −3…+3 Foundation scale.
+  const certified = scale === "tqa" && latest && meetsCertificationThreshold(latest);
 
   const phaseFor = (id: string) => phases.find((p) => p.id === id)?.name ?? "—";
 
@@ -194,7 +202,7 @@ export function HorseReport({
             : "No arrival date"}
         </Text>
 
-        <ScoreLegendBlock />
+        <ScoreLegendBlock scale={scale} />
 
         <Text style={styles.h2}>Summary</Text>
         <View style={styles.metaGrid}>
@@ -217,20 +225,27 @@ export function HorseReport({
           />
           <Meta
             label="Latest Foundation"
-            value={round1(latest?.foundationAverage ?? null)}
+            value={formatAvg(latest?.foundationAverage ?? null, scale)}
           />
           <Meta
             label="Latest Temperament"
-            value={round1(latest?.temperamentAverage ?? null)}
+            value={formatAvg(latest?.temperamentAverage ?? null, scale)}
           />
           <Meta
             label="Cert threshold"
-            value={certified ? "Met (≥ +2.7 both axes)" : "Not met"}
+            value={
+              scale === "five"
+                ? "1–5 scale"
+                : certified
+                  ? "Met (≥ +2.7 both axes)"
+                  : "Not met"
+            }
           />
         </View>
 
         <Text style={styles.h2}>Per-axis progress</Text>
         <DualLineChart
+          scale={scale}
           data={points.map((p, i) => ({
             index: i + 1,
             foundation: p.foundationAverage,
@@ -246,6 +261,7 @@ export function HorseReport({
             questions={referencedQuestions}
             sessions={sorted}
             phaseFor={phaseFor}
+            scale={scale}
           />
         )}
 
@@ -296,10 +312,10 @@ export function HorseReport({
                           </Text>
                           <Text style={{ width: 160 }}>{phaseFor(s.phase_id)}</Text>
                           <Text style={{ width: 60, textAlign: "right" }}>
-                            {round1(f)}
+                            {formatAvg(f, scale)}
                           </Text>
                           <Text style={{ width: 70, textAlign: "right" }}>
-                            {round1(t)}
+                            {formatAvg(t, scale)}
                           </Text>
                         </View>
                       );
@@ -324,6 +340,7 @@ export function HorseReport({
               session={s}
               questions={questions}
               phaseFor={phaseFor}
+              scale={scale}
             />
           ))
         )}
@@ -397,11 +414,23 @@ function arrowFor(dir: "up" | "down" | "flat" | "n/a"): string {
   return "—";
 }
 
-function formatScore(n: number): string {
+function formatScore(n: number, scale: RatingScaleKind = "tqa"): string {
+  if (scale === "five") return String(n);
   return n > 0 ? `+${n}` : String(n);
 }
 
-function ScoreLegendBlock() {
+function ScoreLegendBlock({ scale }: { scale: RatingScaleKind }) {
+  if (scale === "five") {
+    return (
+      <View style={styles.scoreLegend}>
+        {([1, 2, 3, 4, 5] as const).map((s) => (
+          <Text key={`f${s}`} style={styles.legendChip}>
+            {s} = {FIVE_FOUNDATION_LEGEND[s]} (Found.) / {FIVE_TEMPERAMENT_LEGEND[s]} (Temp.)
+          </Text>
+        ))}
+      </View>
+    );
+  }
   return (
     <View style={styles.scoreLegend}>
       {([3, 2, 1, 0, -1, -2, -3] as const).map((s) => (
@@ -435,12 +464,14 @@ interface SessionScoreSheetBlockProps {
   session: SessionWithRatings;
   questions: Question[];
   phaseFor: (id: string) => string;
+  scale: RatingScaleKind;
 }
 
 function SessionScoreSheetBlock({
   session,
   questions,
   phaseFor,
+  scale,
 }: SessionScoreSheetBlockProps) {
   const phaseQuestions = questions
     .filter((q) => q.phase_id === session.phase_id)
@@ -458,7 +489,7 @@ function SessionScoreSheetBlock({
         {phaseFor(session.phase_id)} · {formatDateTime(session.occurred_at)}
       </Text>
       <Text style={styles.muted}>
-        Foundation {round1(fAvg)} · Temperament {round1(tAvg)}
+        Foundation {formatAvg(fAvg, scale)} · Temperament {formatAvg(tAvg, scale)}
       </Text>
       <View style={styles.twoCol}>
         <View style={styles.colHalf}>
@@ -471,7 +502,7 @@ function SessionScoreSheetBlock({
                   <Text style={styles.itemNum}>{i + 1}.</Text>
                   <Text style={styles.itemText}>{q.text}</Text>
                   <Text style={styles.itemScore}>
-                    {r ? formatScore(r.score) : "—"}
+                    {r ? formatScore(r.score, scale) : "—"}
                   </Text>
                 </View>
                 {r?.comment && (
@@ -494,7 +525,7 @@ function SessionScoreSheetBlock({
                     {q.low_label} / {q.high_label}
                   </Text>
                   <Text style={styles.itemScore}>
-                    {r ? formatScore(r.score) : "—"}
+                    {r ? formatScore(r.score, scale) : "—"}
                   </Text>
                 </View>
                 {r?.comment && (
@@ -518,10 +549,12 @@ function QuestionAveragesTable({
   questions,
   sessions,
   phaseFor,
+  scale,
 }: {
   questions: Question[];
   sessions: SessionWithRatings[];
   phaseFor: (id: string) => string;
+  scale: RatingScaleKind;
 }) {
   const grouped = new Map<string, Question[]>();
   for (const q of questions) {
@@ -545,7 +578,7 @@ function QuestionAveragesTable({
                 <Text style={{ width: 40, textAlign: "right", fontSize: 8 }}>
                   {q.count}×
                 </Text>
-                <Text style={styles.itemScore}>{round1(q.average)}</Text>
+                <Text style={styles.itemScore}>{formatAvg(q.average, scale)}</Text>
               </View>
             ))}
           </View>
@@ -557,9 +590,10 @@ function QuestionAveragesTable({
 
 interface DualChartProps {
   data: { index: number; foundation: number | null; temperament: number | null }[];
+  scale?: RatingScaleKind;
 }
 
-function DualLineChart({ data }: DualChartProps) {
+function DualLineChart({ data, scale = "tqa" }: DualChartProps) {
   const width = 540;
   const height = 200;
   const padL = 36;
@@ -568,8 +602,11 @@ function DualLineChart({ data }: DualChartProps) {
   const padB = 24;
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
-  const yMin = -3;
-  const yMax = 3;
+  // Axis spans the active scale: −3…+3 (Foundation) or 1…5 (performance).
+  const yMin = scale === "five" ? 1 : -3;
+  const yMax = scale === "five" ? 5 : 3;
+  const ticks = scale === "five" ? [1, 2, 3, 4, 5] : [-3, -2, -1, 0, 1, 2, 3];
+  const midline = scale === "five" ? 3 : 0;
   const n = Math.max(data.length, 1);
   const xFor = (idx: number) =>
     padL + ((idx - 1) / Math.max(n - 1, 1)) * innerW;
@@ -600,16 +637,16 @@ function DualLineChart({ data }: DualChartProps) {
   return (
     <Svg width={width} height={height}>
       <G>
-        {[-3, -2, -1, 0, 1, 2, 3].map((y) => (
+        {ticks.map((y) => (
           <G key={y}>
             <Line
               x1={padL}
               y1={yFor(y)}
               x2={padL + innerW}
               y2={yFor(y)}
-              stroke={y === 0 ? "#94a3b8" : "#e2e8f0"}
-              strokeWidth={y === 0 ? 0.8 : 0.5}
-              strokeDasharray={y === 0 ? undefined : "2,2"}
+              stroke={y === midline ? "#94a3b8" : "#e2e8f0"}
+              strokeWidth={y === midline ? 0.8 : 0.5}
+              strokeDasharray={y === midline ? undefined : "2,2"}
             />
             <Path
               d={`M${padL - 16},${yFor(y)} L${padL},${yFor(y)}`}

@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getHorse, getTrifectaForHorse, setHorseStatus } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
+import { qk } from "../supabase/keys";
 import TrifectaEvaluation from "../components/TrifectaEvaluation";
+import { SkeletonCard } from "../components/Skeleton";
+import ErrorState from "../components/ErrorState";
+import { useToast } from "../components/Toast";
 
 export default function HorseFinish() {
   const { id } = useParams<{ id: string }>();
@@ -21,15 +25,13 @@ export default function HorseFinish() {
     );
   };
   const [marking, setMarking] = useState(false);
+  const toast = useToast();
 
-  const horse = useQuery(
-    () => (id ? getHorse(id) : Promise.resolve(null)),
-    [id],
-  );
+  const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
 
   const trifectaQ = useQuery(
-    () => (id ? getTrifectaForHorse(id) : Promise.resolve(null)),
-    [id],
+    id ? qk.trifecta(id) : null,
+    () => getTrifectaForHorse(id!),
   );
 
   const autoRedirectedRef = useRef(false);
@@ -44,10 +46,17 @@ export default function HorseFinish() {
 
   if (!id) return null;
 
-  if (horse.loading) {
+  if (horse.error && horse.data === undefined) {
     return (
       <div className="view">
-        <div className="card">Loading…</div>
+        <ErrorState error={horse.error} onRetry={horse.refresh} />
+      </div>
+    );
+  }
+  if (horse.data === undefined && horse.loading) {
+    return (
+      <div className="view">
+        <SkeletonCard lines={4} />
       </div>
     );
   }
@@ -116,7 +125,10 @@ export default function HorseFinish() {
               setMarking(true);
               try {
                 await setHorseStatus(id, "complete");
+                toast.success("Training complete");
                 setStep(3);
+              } catch (e) {
+                toast.error((e as Error).message);
               } finally {
                 setMarking(false);
               }

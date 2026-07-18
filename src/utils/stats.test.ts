@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Question, SessionWithRatings, TqaScore } from "../supabase/types";
 import {
+  formatAvg,
   meetsCertificationThreshold,
   questionAverages,
   round1,
@@ -26,6 +27,9 @@ const mkSession = (
   phase_id: "p",
   occurred_at: occurredAt,
   notes: null,
+  rider: null,
+  bit: null,
+  task_completions: [],
   created_at: occurredAt,
   updated_at: occurredAt,
   ratings: ratings.map((r, i) => ({
@@ -155,6 +159,13 @@ describe("stats", () => {
     expect(round1(0)).toBe("0.0");
     expect(round1(-1.46)).toBe("-1.5");
     expect(round1(2.7)).toBe("+2.7");
+  });
+
+  it("formatAvg is unsigned on the 1–5 scale and signed on TQA", () => {
+    expect(formatAvg(4, "five")).toBe("4.0");
+    expect(formatAvg(2.04)).toBe("+2.0");
+    expect(formatAvg(null)).toBe("—");
+    expect(formatAvg(-1.5, "tqa")).toBe("-1.5");
   });
 
   it("meetsCertificationThreshold requires 2.7+ on both axes", () => {

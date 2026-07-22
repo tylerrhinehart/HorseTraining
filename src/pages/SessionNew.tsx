@@ -220,9 +220,12 @@ export default function SessionNew() {
       >
         <div className="field">
           <label className="label">Phase</label>
-          <p style={{ margin: "4px 0 0", fontSize: 14, fontWeight: 500 }}>
-            {currentPhaseName}
-          </p>
+          <div>
+            <span className="pill pill-leather">{currentPhaseName}</span>
+          </div>
+          <span className="muted" style={{ fontSize: 11 }}>
+            Logged against the current phase
+          </span>
         </div>
         <div className="field">
           <label className="label" htmlFor="session-when">
@@ -317,12 +320,12 @@ export default function SessionNew() {
       </div>
 
       {error && (
-        <p
-          role="alert"
-          style={{ color: "var(--bad)", fontSize: 13, margin: 0 }}
-        >
-          {error}
-        </p>
+        <div role="alert" className="alert-error" style={{ marginTop: 10 }}>
+          <span className="alert-error-icon" aria-hidden>
+            ⚠
+          </span>
+          <span className="alert-error-body">{error}</span>
+        </div>
       )}
 
       <div

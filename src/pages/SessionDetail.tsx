@@ -209,9 +209,16 @@ export default function SessionDetail() {
       <p className="muted" style={{ margin: "4px 0 4px", fontSize: 14 }}>
         {formatDateTime(session.data.occurred_at)}
       </p>
-      <p className="mono" style={{ margin: "0 0 14px", fontSize: 13 }}>
-        Foundation {formatAvg(fAvg, scale)} · Temperament {formatAvg(tAvg, scale)}
-      </p>
+      <div className="horse-stats" style={{ margin: "6px 0 14px", borderTop: "none", paddingTop: 0 }}>
+        <div className="stat">
+          <span className="k">Foundation</span>
+          <span className="v">{formatAvg(fAvg, scale)}</span>
+        </div>
+        <div className="stat">
+          <span className="k">Temperament</span>
+          <span className="v">{formatAvg(tAvg, scale)}</span>
+        </div>
+      </div>
 
       <div
         style={{
@@ -241,13 +248,8 @@ export default function SessionDetail() {
           </button>
         )}
         <button
-          className="btn btn-sm"
+          className="btn btn-danger btn-sm"
           onClick={() => setConfirmDelete(true)}
-          style={{
-            color: "var(--bad)",
-            borderColor: "var(--bad)",
-            background: "transparent",
-          }}
         >
           Delete
         </button>

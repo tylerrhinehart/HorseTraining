@@ -24,13 +24,6 @@ function tone(score: number, scale: RatingScaleKind): "neg" | "neutral" | "pos" 
   return "pos";
 }
 
-function magnitude(score: number, scale: RatingScaleKind): 1 | 2 | 3 {
-  const a = scale === "five" ? Math.abs(score - 3) : Math.abs(score);
-  if (a >= 3) return 3;
-  if (a === 2) return 2;
-  return 1;
-}
-
 function formatScore(score: number, scale: RatingScaleKind): string {
   if (scale === "five") return String(score);
   return score > 0 ? `+${score}` : String(score);
@@ -77,7 +70,6 @@ export default function RatingInput({
         {values.map((score) => {
           const selected = value === score;
           const t = tone(score, scale);
-          const mag = magnitude(score, scale);
           return (
             <button
               key={score}
@@ -85,7 +77,6 @@ export default function RatingInput({
               className={[
                 "dot",
                 `dot--${t}`,
-                `mag-${mag}`,
                 selected ? "is-active" : "",
               ]
                 .filter(Boolean)

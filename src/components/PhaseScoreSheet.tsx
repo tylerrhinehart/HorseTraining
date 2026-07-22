@@ -255,6 +255,10 @@ function QuestionRow({
   const [helpOpen, setHelpOpen] = useState(false);
   const [resources, setResources] = useState<Resource[] | null>(null);
   const [loadingResources, setLoadingResources] = useState(false);
+  // Comments are rare per-row; keep the form short by collapsing the textarea
+  // behind an affordance until it's wanted (or already has content).
+  const [noteOpen, setNoteOpen] = useState(false);
+  const showNote = noteOpen || !!draft.comment;
 
   const toggleHelp = async () => {
     const next = !helpOpen;
@@ -374,12 +378,23 @@ function QuestionRow({
         </div>
       )}
 
-      {!readOnly && (
+      {!readOnly && !showNote && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{ alignSelf: "flex-start", color: "var(--muted)" }}
+          onClick={() => setNoteOpen(true)}
+        >
+          + Add note
+        </button>
+      )}
+      {!readOnly && showNote && (
         <textarea
           rows={2}
           className="input text-xs"
           placeholder="Optional comment…"
           value={draft.comment ?? ""}
+          autoFocus={noteOpen && !draft.comment}
           onChange={(e) => onComment(q.id, e.target.value)}
         />
       )}

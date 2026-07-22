@@ -248,6 +248,7 @@ export async function deleteHorse(id: ID): Promise<void> {
   invalidate(["horses"]);
   invalidate(["horse", id]);
   invalidate(["sessions", id]);
+  invalidate(["sessions", "dates"]);
   invalidate(["ratings", id]);
   invalidate(["trifecta", id]);
 }
@@ -277,6 +278,18 @@ export async function listSessionsForHorse(
     .select("*, ratings(*)")
     .eq("horse_id", horseId)
     .order("occurred_at", { ascending: true });
+  return throwIfError(res) ?? [];
+}
+
+// Lightweight feed for the Today dashboard: dates only, newest first.
+export async function listSessionDates(): Promise<
+  { id: ID; horse_id: ID; occurred_at: string }[]
+> {
+  const res = await sb()
+    .from("sessions")
+    .select("id, horse_id, occurred_at")
+    .order("occurred_at", { ascending: false })
+    .limit(500);
   return throwIfError(res) ?? [];
 }
 
@@ -324,6 +337,7 @@ export async function createSession(input: SessionInput): Promise<Session> {
     ? await createSessionLegacy(input)
     : (throwIfError({ data, error }) as Session);
   invalidate(["sessions", input.horse_id]);
+  invalidate(["sessions", "dates"]);
   invalidate(["ratings", input.horse_id]);
   return session;
 }

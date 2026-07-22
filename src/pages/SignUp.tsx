@@ -15,6 +15,7 @@ export default function SignUp() {
   const navigate = useNavigate();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const {
     register,
     handleSubmit,
@@ -79,20 +80,45 @@ export default function SignUp() {
           <label htmlFor="password" className="label">
             Password
           </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            className="input"
-            aria-invalid={errors.password ? true : undefined}
-            {...register("password", {
-              required: "Password is required",
-              minLength: {
-                value: 8,
-                message: "Password must be at least 8 characters",
-              },
-            })}
-          />
+          <div style={{ position: "relative" }}>
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              className="input"
+              style={{ paddingRight: 58 }}
+              aria-invalid={errors.password ? true : undefined}
+              {...register("password", {
+                required: "Password is required",
+                minLength: {
+                  value: 8,
+                  message: "Password must be at least 8 characters",
+                },
+              })}
+            />
+            <button
+              type="button"
+              className="mono muted"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-pressed={showPassword}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              style={{
+                position: "absolute",
+                right: 6,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: 0,
+                fontSize: 10,
+                letterSpacing: 1.2,
+                textTransform: "uppercase",
+                padding: "6px 6px",
+                cursor: "pointer",
+              }}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
           {errors.password ? (
             <p style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}>
               {errors.password.message}

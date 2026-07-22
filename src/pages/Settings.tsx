@@ -10,6 +10,13 @@ import {
   listPhases,
 } from "../supabase/queries";
 import ConfirmDialog from "../components/ConfirmDialog";
+import {
+  DENSITIES,
+  THEMES,
+  setDensity,
+  setTheme,
+  useAppearance,
+} from "../state/appearance";
 
 type InstallEvent = Event & {
   prompt: () => Promise<void>;
@@ -106,6 +113,8 @@ export default function Settings() {
         </div>
       </div>
 
+      <AppearanceCard />
+
       <div className="card">
         <div className="card-head">
           <h2 className="card-title">Manage</h2>
@@ -189,6 +198,59 @@ export default function Settings() {
         }}
         onCancel={() => setConfirmSignOut(false)}
       />
+    </div>
+  );
+}
+
+function AppearanceCard() {
+  const { theme, density } = useAppearance();
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2 className="card-title">Appearance</h2>
+        <span className="card-meta">theme &amp; density</span>
+      </div>
+      <div className="label" style={{ marginBottom: 8 }}>
+        Theme
+      </div>
+      <div className="theme-grid">
+        {THEMES.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={`theme-swatch${theme === t.id ? " is-active" : ""}`}
+            data-theme={t.id === "ranch" ? undefined : t.id}
+            aria-pressed={theme === t.id}
+            onClick={() => setTheme(t.id)}
+          >
+            <span className="theme-swatch-preview">
+              <span className="sw sw-paper" />
+              <span className="sw sw-leather" />
+              <span className="sw sw-sage" />
+              <span className="sw sw-gold" />
+            </span>
+            <span className="theme-swatch-name">{t.label}</span>
+            <span className="theme-swatch-note">{t.note}</span>
+          </button>
+        ))}
+      </div>
+      <div className="label" style={{ margin: "16px 0 8px" }}>
+        Density
+      </div>
+      <div className="pill-row">
+        {DENSITIES.map((d) => (
+          <button
+            key={d.id}
+            type="button"
+            className={`btn btn-sm${density === d.id ? " btn-primary" : ""}`}
+            aria-pressed={density === d.id}
+            title={d.note}
+            onClick={() => setDensity(d.id)}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

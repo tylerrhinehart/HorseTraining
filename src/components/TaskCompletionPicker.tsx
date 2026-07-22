@@ -60,6 +60,10 @@ export default function TaskCompletionPicker({
         <h2 className="card-title">Task completion</h2>
         <span className="card-meta">pick the job(s) + phase worked today</span>
       </div>
+      <p className="muted" style={{ fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>
+        Each job is worked through Phases 1–4 — tap the phase worked today
+        (tap it again to unselect).
+      </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {TASK_COMPLETION_JOBS.map((job) => {
           const selected = value.find((t) => t.job === job.code);
@@ -81,11 +85,13 @@ export default function TaskCompletionPicker({
                   fontSize: 14,
                   fontWeight: selected ? 600 : 400,
                   color: selected ? "var(--ink)" : "var(--ink-2)",
+                  flex: "1 1 180px",
+                  minWidth: 0,
                 }}
               >
                 {job.name}
               </span>
-              <div style={{ display: "flex", gap: 4 }}>
+              <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                 {TASK_PHASES.map((p) => {
                   const on = selected?.phase === p;
                   return (

@@ -8,6 +8,7 @@ export const qk = {
   phases: () => ["phases"] as const,
   questions: (phaseId: string) => ["questions", phaseId] as const,
   sessions: (horseId: string) => ["sessions", horseId] as const,
+  sessionDates: () => ["sessions", "dates"] as const,
   session: (id: string) => ["session", id] as const,
   ratings: (horseId: string) => ["ratings", horseId] as const,
   resourcesForPhase: (phaseId: string) => ["resources", "phase", phaseId] as const,

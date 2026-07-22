@@ -81,6 +81,9 @@ export default function HorseNew() {
       <h1 className="h-display">Add a horse</h1>
 
       <form className="card" onSubmit={handleSubmit(onSubmit)}>
+        <h3 className="form-section-title" style={{ marginTop: 0 }}>
+          Program
+        </h3>
         <div className="field" style={{ marginBottom: 14 }}>
           <label className="label">Type of training *</label>
           <div
@@ -128,7 +131,9 @@ export default function HorseNew() {
         </div>
 
         {trainingType === "sale_horse" && (
-          <div className="field-row">
+          <>
+            <h3 className="form-section-title">Sale details</h3>
+            <div className="field-row">
             <div className="field">
               <label htmlFor="target_market" className="label">
                 Target market
@@ -158,9 +163,11 @@ export default function HorseNew() {
                 />
               </div>
             </div>
-          </div>
+            </div>
+          </>
         )}
 
+        <h3 className="form-section-title">Horse &amp; owner</h3>
         <div className="field-row">
           <div className="field">
             <label htmlFor="name" className="label">
@@ -229,6 +236,7 @@ export default function HorseNew() {
           </div>
         </div>
 
+        <h3 className="form-section-title">Notes</h3>
         <div className="field" style={{ marginBottom: 12 }}>
           <label htmlFor="notes" className="label">
             Notes

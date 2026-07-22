@@ -4,6 +4,9 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 import { AuthProvider } from "./auth/AuthProvider";
+import { initAppearance } from "./state/appearance";
+
+initAppearance();
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "");
 

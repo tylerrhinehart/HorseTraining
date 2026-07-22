@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { differenceInCalendarDays } from "date-fns";
 import {
@@ -33,6 +33,7 @@ export default function HorsesList() {
   );
   const phasesQuery = useQuery(qk.phases(), () => listPhases());
   const [activeId, setActiveId] = useActiveHorseId();
+  const [search, setSearch] = useState("");
 
   const phasesById = useMemo(() => {
     const map = new Map<string, Phase>();
@@ -48,19 +49,58 @@ export default function HorsesList() {
     );
   }
 
-  const horses = horsesQuery.data ?? [];
+  const allHorses = horsesQuery.data ?? [];
+  const q = search.trim().toLowerCase();
+  const horses = q
+    ? allHorses.filter(
+        (h) =>
+          h.name.toLowerCase().includes(q) ||
+          (h.owner_name ?? "").toLowerCase().includes(q),
+      )
+    : allHorses;
   const inTraining = horses.filter((h) => h.status === "in_training");
   const completed = horses.filter((h) => h.status === "complete");
   const archived = horses.filter((h) => h.status === "archived");
 
   return (
     <div className="view">
-      <div className="eyebrow">Roster · {horses.length} horses</div>
+      <div className="eyebrow">Roster · {allHorses.length} horses</div>
       <h1 className="h-display">Horses</h1>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
-        <Link to="/horses/new" className="btn btn-leather">+ New horse</Link>
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          alignItems: "center",
+          marginBottom: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        {allHorses.length > 3 && (
+          <input
+            type="search"
+            className="input"
+            placeholder="Search by horse or owner…"
+            aria-label="Search horses"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ flex: "1 1 200px", maxWidth: 320 }}
+          />
+        )}
+        <Link
+          to="/horses/new"
+          className="btn btn-leather"
+          style={{ marginLeft: "auto" }}
+        >
+          + New horse
+        </Link>
       </div>
+
+      {q && horses.length === 0 && !horsesQuery.loading && (
+        <div className="card muted" style={{ textAlign: "center" }}>
+          No horses match “{search.trim()}”.
+        </div>
+      )}
 
       {horsesQuery.loading && (
         <div style={{ display: "grid", gap: 10 }}>
@@ -182,6 +222,14 @@ function HorseCard({
         <span className="horse-initials">{initialsOf(horse.name)}</span>
         {isActive && horse.status === "in_training" && (
           <span className="horse-active-flag">In session</span>
+        )}
+        {horse.status === "archived" && (
+          <span className="horse-archived-flag">Archived</span>
+        )}
+        {horse.status === "complete" && (
+          <span className="horse-archived-flag" style={{ color: "var(--ok)" }}>
+            Complete
+          </span>
         )}
       </div>
       <div className="horse-body">

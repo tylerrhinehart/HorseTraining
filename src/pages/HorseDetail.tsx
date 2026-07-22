@@ -27,6 +27,8 @@ import {
 import { sessionAverages, formatAvg } from "../utils/stats";
 import { formatHumanDate } from "../utils/dates";
 import HorseAvatar, { hashTone } from "../components/HorseAvatar";
+import Sparkline from "../components/Sparkline";
+import { IconRibbon } from "../components/Icons";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { SkeletonCard } from "../components/Skeleton";
@@ -411,141 +413,127 @@ export default function HorseDetail() {
         </>
       ) : (
         <>
-          {/* ── 2. Phase progression strip ── */}
+          {/* ── 2. Phase progression ribbon ── */}
           <div className="card" style={{ marginTop: 20 }}>
             <div className="card-head">
               <h2 className="card-title">Phase progression</h2>
+              {currentPhase && (
+                <span className="card-meta">
+                  {allPhases.filter((p) => p.position < currentPhase.position).length}
+                  /{allPhases.length} complete
+                </span>
+              )}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              {allPhases.map((phase, idx) => {
+            <div className="phase-ribbon">
+              {allPhases.map((phase) => {
                 const isCurrent =
                   currentPhase != null && phase.id === currentPhase.id;
                 const isCompleted =
                   currentPhase != null && phase.position < currentPhase.position;
-                const isUpcoming =
-                  currentPhase != null && phase.position > currentPhase.position;
+                const isSelected = expandedPhaseId === phase.id;
+                return (
+                  <button
+                    key={phase.id}
+                    type="button"
+                    className={`phase-pip${isCompleted ? " is-done" : ""}${isCurrent ? " is-current" : ""}`}
+                    aria-pressed={isSelected}
+                    aria-label={`${phase.name} — ${
+                      isCompleted ? "completed" : isCurrent ? "current" : "upcoming"
+                    }`}
+                    onClick={() =>
+                      setExpandedPhaseId(isSelected ? null : phase.id)
+                    }
+                  >
+                    <span className="phase-pip-n">
+                      {isCompleted ? "✓" : (phase.name.match(/(\d+)\s*$/)?.[1] ?? phase.name.charAt(0).toUpperCase())}
+                    </span>
+                    <span className="phase-pip-l">{phase.name}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-                const phaseSessionCount = allSessions.filter(
-                  (s) => s.phase_id === phase.id,
-                ).length;
-                const phaseAvg = phaseAvgFromRatings(phase.id);
-
-                const isExpanded =
-                  isCurrent || expandedPhaseId === phase.id;
-
-                const stateIcon = isCompleted ? "✓" : isCurrent ? "●" : "·";
-
+            {/* Tapped-phase detail panel */}
+            {expandedPhaseId &&
+              (() => {
+                const phase = allPhases.find((p) => p.id === expandedPhaseId);
+                if (!phase || !currentPhase) return null;
+                const isCurrent = phase.id === currentPhase.id;
+                const isUpcoming = phase.position > currentPhase.position;
                 const phaseSessions = [...allSessions]
                   .filter((s) => s.phase_id === phase.id)
                   .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
-
+                const phaseAvg = phaseAvgFromRatings(phase.id);
                 const prevP =
-                  idx > 0 ? allPhases[idx - 1] : null;
-
+                  allPhases[allPhases.findIndex((p) => p.id === phase.id) - 1] ??
+                  null;
                 return (
                   <div
-                    key={phase.id}
                     style={{
-                      borderTop: idx === 0 ? "none" : "1px solid var(--line)",
-                      paddingTop: idx === 0 ? 0 : 12,
-                      paddingBottom: 12,
+                      marginTop: 12,
+                      padding: "12px 14px",
+                      background: "var(--paper)",
+                      border: "1px solid var(--line)",
+                      borderRadius: "var(--radius)",
+                      animation: "rise-in var(--dur-2) var(--ease-out)",
                     }}
                   >
-                    {/* Phase row header */}
-                    <button
-                      type="button"
-                      aria-expanded={isExpanded}
-                      aria-label={`${phase.name} — ${
-                        isCompleted ? "completed" : isCurrent ? "current" : "upcoming"
-                      }${
-                        isCompleted || isUpcoming
-                          ? isExpanded
-                            ? ", expanded"
-                            : ", collapsed"
-                          : ""
-                      }`}
+                    <div
                       style={{
-                        background: "none",
-                        border: "none",
-                        padding: 0,
-                        width: "100%",
-                        textAlign: "left",
-                        cursor: isCompleted || isUpcoming ? "pointer" : "default",
                         display: "flex",
-                        alignItems: "center",
+                        justifyContent: "space-between",
+                        alignItems: "baseline",
                         gap: 10,
-                      }}
-                      onClick={() => {
-                        if (isCompleted || isUpcoming) {
-                          setExpandedPhaseId(
-                            expandedPhaseId === phase.id ? null : phase.id,
-                          );
-                        }
+                        flexWrap: "wrap",
                       }}
                     >
-                      <span
+                      <strong
                         style={{
                           fontFamily: "var(--font-display)",
-                          fontSize: 18,
-                          fontWeight: 700,
-                          width: 20,
-                          color: isCompleted
-                            ? "var(--ok)"
-                            : isCurrent
-                              ? "var(--leather)"
-                              : "var(--muted)",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {stateIcon}
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: "var(--font-display)",
-                          fontSize: 16,
-                          fontWeight: isCurrent ? 700 : 400,
-                          color: isUpcoming ? "var(--muted)" : "var(--ink)",
+                          fontSize: 15,
                         }}
                       >
                         {phase.name}
-                      </span>
-                      <span
-                        className="mono muted"
-                        style={{ fontSize: 11, marginLeft: "auto" }}
-                      >
-                        {phaseSessionCount} session{phaseSessionCount !== 1 ? "s" : ""}
+                      </strong>
+                      <span className="mono muted" style={{ fontSize: 11 }}>
+                        {phaseSessions.length} session
+                        {phaseSessions.length !== 1 ? "s" : ""}
                         {phaseAvg !== null && (
-                          <> · avg{" "}
+                          <>
+                            {" "}
+                            · avg{" "}
                             <span style={{ color: avgColor(phaseAvg) }}>
                               {formatAvg(phaseAvg, scale)}
                             </span>
                           </>
                         )}
                       </span>
-                    </button>
-
-                    {/* Expanded content */}
-                    {isExpanded && isUpcoming && (
-                      <div
-                        style={{
-                          marginTop: 8,
-                          marginLeft: 30,
-                          padding: "10px 12px",
-                          background: "var(--paper)",
-                          border: "1px solid var(--line)",
-                          borderRadius: "var(--radius)",
-                          fontSize: 13,
-                          color: "var(--muted)",
-                        }}
+                    </div>
+                    {isUpcoming ? (
+                      <p
+                        className="muted"
+                        style={{ fontSize: 13, margin: "8px 0 0" }}
                       >
                         Not started yet — finish{" "}
-                        {prevP ? prevP.name : "the previous phase"} and advance to
-                        reach this one.
-                      </div>
-                    )}
-
-                    {isExpanded && isCompleted && phaseSessions.length > 0 && (
-                      <div style={{ marginTop: 8, marginLeft: 30 }}>
+                        {prevP ? prevP.name : "the previous phase"} and advance
+                        to reach this one.
+                      </p>
+                    ) : isCurrent ? (
+                      <p
+                        className="muted"
+                        style={{ fontSize: 13, margin: "8px 0 0" }}
+                      >
+                        The current phase — full detail below.
+                      </p>
+                    ) : phaseSessions.length === 0 ? (
+                      <p
+                        className="muted"
+                        style={{ fontSize: 13, margin: "8px 0 0" }}
+                      >
+                        No sessions logged for this phase.
+                      </p>
+                    ) : (
+                      <div style={{ marginTop: 4 }}>
                         {phaseSessions.map((s) => {
                           const pt = points.find((p) => p.sessionId === s.id);
                           return (
@@ -579,26 +567,11 @@ export default function HorseDetail() {
                             </Link>
                           );
                         })}
-                        {phaseSessions.length === 0 && (
-                          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-                            No sessions logged.
-                          </p>
-                        )}
                       </div>
-                    )}
-
-                    {isExpanded && isCompleted && phaseSessions.length === 0 && (
-                      <p
-                        className="muted"
-                        style={{ fontSize: 13, margin: "8px 0 0 30px" }}
-                      >
-                        No sessions logged for this phase.
-                      </p>
                     )}
                   </div>
                 );
-              })}
-            </div>
+              })()}
           </div>
 
           {/* ── 3. Current phase card ── */}
@@ -609,26 +582,54 @@ export default function HorseDetail() {
                 <span className="card-meta">current phase</span>
               </div>
 
-              {/* Phase running average */}
+              {/* Phase running average + trend */}
               {currentPhaseSessions.length > 0 ? (
-                <div style={{ marginBottom: 12 }}>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      fontSize: 32,
-                      fontWeight: 600,
-                      color: avgColor(currentPhaseAvg),
-                      letterSpacing: "0.2px",
-                    }}
-                  >
-                    {formatAvg(currentPhaseAvg, scale)}
-                  </span>
-                  <span
-                    className="mono muted"
-                    style={{ fontSize: 11, marginLeft: 8 }}
-                  >
-                    phase average
-                  </span>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-end",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    flexWrap: "wrap",
+                    marginBottom: 12,
+                  }}
+                >
+                  <div>
+                    <span
+                      style={{
+                        fontFamily: "var(--font-display)",
+                        fontSize: 32,
+                        fontWeight: 600,
+                        color: avgColor(currentPhaseAvg),
+                        letterSpacing: "0.2px",
+                      }}
+                    >
+                      {formatAvg(currentPhaseAvg, scale)}
+                    </span>
+                    <span
+                      className="mono muted"
+                      style={{ fontSize: 11, marginLeft: 8 }}
+                    >
+                      phase average
+                    </span>
+                  </div>
+                  {currentPhaseAvgs.length >= 2 && (
+                    <div style={{ flex: "1 1 160px", maxWidth: 260 }}>
+                      <Sparkline values={currentPhaseAvgs} scale={scale} />
+                      <div
+                        className="mono muted"
+                        style={{
+                          fontSize: 9,
+                          letterSpacing: 1.2,
+                          textTransform: "uppercase",
+                          marginTop: 2,
+                          textAlign: "right",
+                        }}
+                      >
+                        trend · {currentPhaseAvgs.length} sessions
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>
@@ -636,14 +637,19 @@ export default function HorseDetail() {
                 </p>
               )}
 
-              {/* Session count + last date */}
-              <p className="muted" style={{ fontSize: 13, margin: "0 0 16px" }}>
-                {currentPhaseSessions.length} session
-                {currentPhaseSessions.length !== 1 ? "s" : ""} logged
-                {lastSessionDate && (
-                  <> · last on {formatHumanDate(lastSessionDate)}</>
-                )}
-              </p>
+              {/* Session count + last date as stat tiles */}
+              <div className="horse-stats" style={{ margin: "0 0 16px" }}>
+                <div className="stat">
+                  <span className="k">Sessions</span>
+                  <span className="v">{currentPhaseSessions.length}</span>
+                </div>
+                <div className="stat">
+                  <span className="k">Last session</span>
+                  <span className="v">
+                    {lastSessionDate ? formatHumanDate(lastSessionDate) : "—"}
+                  </span>
+                </div>
+              </div>
 
               {/* Primary CTA */}
               <Link
@@ -732,7 +738,7 @@ export default function HorseDetail() {
         </>
       )}
 
-      {/* ── 4. Finish training button ── */}
+      {/* ── 4. Finish training button — a milestone, styled like one ── */}
       <div style={{ marginTop: "var(--gap)" }}>
         <Link
           to={`/horses/${id}/finish`}
@@ -740,9 +746,12 @@ export default function HorseDetail() {
           style={{
             width: "100%",
             justifyContent: "center",
-            background: "transparent",
+            borderColor: "var(--leather)",
+            color: "var(--leather)",
+            borderWidth: 1.5,
           }}
         >
+          <IconRibbon size={16} />
           Finish training
         </Link>
       </div>

@@ -259,7 +259,7 @@ export default function SessionDetail() {
         <p className="mono muted" style={{ margin: "0 0 12px", fontSize: 13 }}>
           {session.data.rider && <>Rider: {session.data.rider}</>}
           {session.data.rider && session.data.bit && " · "}
-          {session.data.bit && <>Bit: {bitLabel(session.data.bit)}</>}
+          {session.data.bit && <>Bit: {bitLabel(session.data.bit, phase?.program)}</>}
         </p>
       )}
 
@@ -275,6 +275,7 @@ export default function SessionDetail() {
         <ScoreSheetSkeleton />
       ) : (
         <PhaseScoreSheet
+          phaseCode={phase?.code}
           questions={questions.data ?? []}
           drafts={drafts}
           onScore={setScore}

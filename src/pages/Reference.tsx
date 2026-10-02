@@ -9,40 +9,28 @@ import { fetchQuery } from "../supabase/cache";
 import { qk } from "../supabase/keys";
 import type { Resource } from "../supabase/types";
 import {
-  IconBook,
-  IconCoins,
-  IconCompass,
   IconLayers,
   IconPlay,
 } from "../components/Icons";
-import OverviewTab from "./reference/OverviewTab";
-import StandardsTab from "./reference/StandardsTab";
 import PhasesTab from "./reference/PhasesTab";
 import ResourcesTab from "./reference/ResourcesTab";
-import PhilosophyTab from "./reference/PhilosophyTab";
 
-type TabId = "overview" | "standards" | "phases" | "resources" | "philosophy";
+type TabId = "phases" | "resources";
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: "overview", label: "What is TQA?", icon: <IconCompass size={16} /> },
-  { id: "standards", label: "Standards", icon: <IconCoins size={16} /> },
-  { id: "phases", label: "Phases", icon: <IconLayers size={16} /> },
-  { id: "resources", label: "Videos", icon: <IconPlay size={16} /> },
-  { id: "philosophy", label: "Philosophy", icon: <IconBook size={16} /> },
+  { id: "resources", label: "Videos & Resources", icon: <IconPlay size={16} /> },
+  { id: "phases", label: "Phases & Questions", icon: <IconLayers size={16} /> },
 ];
 
 // Legacy anchor ids (pre-tabs) → tab ids, so old links keep working.
 const LEGACY_ANCHORS: Record<string, TabId> = {
-  "what-is-tqa": "overview",
-  standards: "standards",
   phases: "phases",
   resources: "resources",
-  philosophy: "philosophy",
 };
 
 function tabFromHash(): TabId {
   const h = window.location.hash.replace("#", "");
-  return LEGACY_ANCHORS[h] ?? "overview";
+  return LEGACY_ANCHORS[h] ?? "resources";
 }
 
 export default function Reference() {
@@ -152,8 +140,6 @@ export default function Reference() {
         id={`ref-panel-${tab}`}
         aria-labelledby={`ref-tab-${tab}`}
       >
-        {tab === "overview" && <OverviewTab />}
-        {tab === "standards" && <StandardsTab />}
         {tab === "phases" && (
           <PhasesTab
             phases={phases.data ?? []}
@@ -171,7 +157,6 @@ export default function Reference() {
             loading={phases.loading}
           />
         )}
-        {tab === "philosophy" && <PhilosophyTab />}
       </div>
     </div>
   );

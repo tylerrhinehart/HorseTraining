@@ -27,6 +27,9 @@ export function useQuery<T>(
 
   const active = !!user && key !== null;
   const keyStr = active ? JSON.stringify(key) : null;
+  const scope = `${user?.id ?? ""}:${keyStr}`;
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
 
   const [, setTick] = useState(0);
   const rerender = useCallback(() => setTick((t) => (t + 1) | 0), []);
@@ -35,10 +38,12 @@ export function useQuery<T>(
 
   const doFetch = useCallback((k: QueryKey) => {
     setFetching(true);
-    fetchQuery(k, () => fnRef.current())
-      .then(() => setError(null))
-      .catch((e) => setError(e instanceof Error ? e : new Error(String(e))))
-      .finally(() => setFetching(false));
+    const requestScope = scopeRef.current;
+    // Capture the fetcher: a retry for horse A must not call horse B's newer fn.
+    fetchQuery(k, fnRef.current)
+      .then(() => { if (scopeRef.current === requestScope) setError(null); })
+      .catch((e) => { if (scopeRef.current === requestScope) setError(e instanceof Error ? e : new Error(String(e))); })
+      .finally(() => { if (scopeRef.current === requestScope) setFetching(false); });
   }, []);
 
   useEffect(() => {
@@ -48,17 +53,17 @@ export function useQuery<T>(
       return;
     }
     setError(null);
-    const unsub = subscribe(key, () => fnRef.current(), rerender);
+    const unsub = subscribe(key, fnRef.current, rerender);
     if (isStale(key)) doFetch(key);
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyStr, active]);
+  }, [scope, active]);
 
   const refresh = useCallback(() => {
     if (!active || key === null) return;
     doFetch(key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyStr, active, doFetch]);
+  }, [scope, active, doFetch]);
 
   const data = active && key !== null ? getCached<T>(key) : undefined;
   const loading =

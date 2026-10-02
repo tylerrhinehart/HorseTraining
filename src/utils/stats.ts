@@ -116,13 +116,3 @@ export function formatAvg(n: number | null | undefined, scale: RatingScaleKind =
   const v = n.toFixed(1);
   return scale === "five" ? v : n > 0 ? `+${v}` : v;
 }
-
-/**
- * 90% certification threshold per the published TQA criteria — the horse must
- * average 2.7+ on a +3 max on BOTH the Foundation and Temperament axes.
- */
-export function meetsCertificationThreshold(point: SessionPoint): boolean {
-  const f = point.foundationAverage;
-  const t = point.temperamentAverage;
-  return f !== null && t !== null && f >= 2.7 && t >= 2.7;
-}

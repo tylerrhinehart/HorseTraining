@@ -1,5 +1,9 @@
 import { format, parseISO } from "date-fns";
 
+export function localDateTimeInput(date = new Date()): string {
+  return format(date, "yyyy-MM-dd'T'HH:mm");
+}
+
 export function todayLocal(): string {
   return format(new Date(), "yyyy-MM-dd");
 }

@@ -11,17 +11,16 @@ import {
   listSessionsForHorse,
   setHorseCurrentPhase,
   setHorseStatus,
-  setHorseTrainingType,
   updateHorse,
 } from "../supabase/queries";
 import { qk } from "../supabase/keys";
 import { PROGRAMS, programLabel } from "../content/programs";
-import type { ProgramMeta, TrainingType } from "../supabase/types";
+import HorseProgramFields, { programFormDefaults, programMetaFromForm, type HorseProgramForm } from "../components/HorseProgramFields";
+import WeeklyComments from "../components/WeeklyComments";
+import type { TrainingType } from "../supabase/types";
 import { useQuery } from "../supabase/useQuery";
 import { useActiveHorseId } from "../state/activeHorse";
 import {
-  computeRollingAverage,
-  isAtOrAboveStandard,
   nextPhase,
 } from "../utils/phaseProgression";
 import { sessionAverages, formatAvg } from "../utils/stats";
@@ -35,7 +34,7 @@ import { SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import type { Phase } from "../supabase/types";
 
-interface EditFormValues {
+interface EditFormValues extends HorseProgramForm {
   name: string;
   owner_name: string;
   owner_contact: string;
@@ -94,6 +93,7 @@ export default function HorseDetail() {
   useEffect(() => {
     if (horse.data) {
       reset({
+        ...programFormDefaults(horse.data.program_meta),
         name: horse.data.name,
         owner_name: horse.data.owner_name ?? "",
         owner_contact: horse.data.owner_contact ?? "",
@@ -179,9 +179,6 @@ export default function HorseDetail() {
       ? currentPhaseAvgs.reduce((s, n) => s + n, 0) / currentPhaseAvgs.length
       : null;
 
-  // Rolling 7-session average for advance gate
-  const rolling7Average = computeRollingAverage(currentPhaseAvgs);
-
   const nextP = currentPhase ? nextPhase(currentPhase, allPhases) : null;
   // Advancing is a TQA-scale (Foundation) concept — gate it on the phase scale.
   const canAdvance = !!nextP && currentPhase?.scale === "tqa";
@@ -228,11 +225,6 @@ export default function HorseDetail() {
 
   const handleAdvance = () => {
     if (!currentPhase || !canAdvance) return;
-    if (isAtOrAboveStandard(rolling7Average)) {
-      // Recommended — advance immediately without confirm
-      void performAdvance();
-      return;
-    }
     setAdvanceDialogOpen(true);
   };
 
@@ -250,10 +242,7 @@ export default function HorseDetail() {
     }
   };
 
-  const advanceDialogCopy =
-    rolling7Average == null
-      ? `No sessions logged in this phase yet. Advance to ${nextP?.name ?? "the next phase"} anyway?`
-      : `This phase's average is ${formatAvg(rolling7Average, scale)}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP?.name ?? "the next phase"}?`;
+  const advanceDialogCopy = `Move to ${nextP?.name ?? "the next phase"}? Phase changes are the trainer’s decision. Scores do not certify readiness or safety.`;
 
   const handleArchive = async () => {
     setArchiving(true);
@@ -296,14 +285,11 @@ export default function HorseDetail() {
   };
 
   const onEditSubmit = async (values: EditFormValues) => {
-    const program_meta: ProgramMeta = {};
-    if (values.training_type === "sale_horse") {
-      if (values.target_market?.trim())
-        program_meta.target_market = values.target_market.trim();
-      if (values.price_low) program_meta.price_low = Number(values.price_low);
-      if (values.price_high) program_meta.price_high = Number(values.price_high);
-    }
     try {
+      const program_meta = programMetaFromForm(values, horse.data!.program_meta);
+      const changingProgram = values.training_type !== horse.data!.training_type;
+      const firstPhase = phases.data?.filter((p) => p.program === values.training_type).sort((a, b) => a.position - b.position)[0];
+      if (changingProgram && !firstPhase) throw new Error("The new program’s score sheets are unavailable. Retry after phases load.");
       await updateHorse(id, {
         name: values.name,
         owner_name: values.owner_name || null,
@@ -311,11 +297,8 @@ export default function HorseDetail() {
         arrival_date: values.arrival_date || null,
         notes: values.notes || null,
         program_meta,
+        ...(changingProgram ? { training_type: values.training_type, current_phase_id: firstPhase!.id } : {}),
       });
-      // Switching program resets the current phase to the new program's first.
-      if (values.training_type !== horse.data!.training_type) {
-        await setHorseTrainingType(id, values.training_type);
-      }
       toast.success("Saved");
       setEditSavedAt(Date.now());
     } catch (e) {
@@ -676,11 +659,6 @@ export default function HorseDetail() {
                   >
                     Advance to {nextP.name}
                   </button>
-                  {isAtOrAboveStandard(rolling7Average) && (
-                    <span className="pill" style={{ color: "var(--ok)", borderColor: "var(--ok)" }}>
-                      Recommended
-                    </span>
-                  )}
                 </div>
               )}
 
@@ -757,6 +735,7 @@ export default function HorseDetail() {
       </div>
 
       {/* ── 5. Edit details (collapsible) ── */}
+      <WeeklyComments horse={horse.data} />
       <details className="card" style={{ marginTop: "var(--gap)" }}>
         <summary
           style={{
@@ -798,6 +777,7 @@ export default function HorseDetail() {
               </p>
             )}
           </div>
+          <HorseProgramFields register={register as unknown as import("react-hook-form").UseFormRegister<HorseProgramForm>} trainingType={editTrainingType} prefix="edit" />
           {editTrainingType === "sale_horse" && (
             <div className="field-row">
               <div className="field">

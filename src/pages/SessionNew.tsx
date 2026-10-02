@@ -14,7 +14,8 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
-import { BIT_OPTIONS } from "../content/programs";
+import { bitOptions } from "../content/programs";
+import { localDateTimeInput } from "../utils/dates";
 import type { TaskCompletion } from "../supabase/types";
 
 /** Two-column ghost of the score sheet (8 Foundation + 6 Temperament rows). */
@@ -48,7 +49,7 @@ export default function SessionNew() {
 
   const [phaseId, setPhaseId] = useState<string>("");
   const [occurredAt, setOccurredAt] = useState<string>(
-    new Date().toISOString().slice(0, 16),
+    localDateTimeInput(),
   );
   const [drafts, setDrafts] = useState<Record<string, DraftRating>>({});
   const [notes, setNotes] = useState("");
@@ -59,18 +60,28 @@ export default function SessionNew() {
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
+  // React Router reuses this page when switching horses. Never carry a draft
+  // (or the previous horse's phase) into another horse's ride.
+  useEffect(() => {
+    setPhaseId("");
+    setDrafts({});
+    setNotes("");
+    setRider("");
+    setBit("");
+    setTasks([]);
+    setOccurredAt(localDateTimeInput());
+    setError(null);
+  }, [id]);
+
   // Sessions are always logged against the horse's current phase. Advancing
   // through phases happens via the workspace's "Advance to <next>" gate.
   useEffect(() => {
     if (phaseId) return;
     if (horse.loading || !phases.data) return;
-    if (horse.data?.current_phase_id) {
-      setPhaseId(horse.data.current_phase_id);
-      return;
-    }
-    if (phases.data.length > 0) {
-      setPhaseId(phases.data[0].id);
-    }
+    if (!horse.data) return;
+    const programPhases = phases.data.filter((phase) => phase.program === horse.data!.training_type).sort((a, b) => a.position - b.position);
+    const current = programPhases.find((phase) => phase.id === horse.data!.current_phase_id);
+    setPhaseId(current?.id ?? programPhases[0]?.id ?? "");
   }, [horse.data, horse.loading, phases.data, phaseId]);
 
   const questions = useQuery(
@@ -186,7 +197,7 @@ export default function SessionNew() {
         phase_id: phaseId,
         occurred_at: new Date(occurredAt).toISOString(),
         notes: notes || null,
-        rider: isPerformance ? rider || null : null,
+        rider: rider || null,
         bit: isPerformance ? bit || null : null,
         task_completions: isPerformance ? tasks : [],
         ratings,
@@ -239,8 +250,7 @@ export default function SessionNew() {
             onChange={(e) => setOccurredAt(e.target.value)}
           />
         </div>
-        {isPerformance && (
-          <>
+        <>
             <div className="field">
               <label className="label" htmlFor="session-rider">
                 Rider
@@ -253,7 +263,7 @@ export default function SessionNew() {
                 onChange={(e) => setRider(e.target.value)}
               />
             </div>
-            <div className="field">
+            {isPerformance && <div className="field">
               <label className="label" htmlFor="session-bit">
                 Bit (this week)
               </label>
@@ -264,15 +274,14 @@ export default function SessionNew() {
                 onChange={(e) => setBit(e.target.value)}
               >
                 <option value="">—</option>
-                {BIT_OPTIONS.map((b) => (
+                {bitOptions(horse.data.training_type).map((b) => (
                   <option key={b.code} value={b.code}>
                     {b.label}
                   </option>
                 ))}
               </select>
-            </div>
+            </div>}
           </>
-        )}
       </div>
 
       {isPerformance && (
@@ -298,6 +307,7 @@ export default function SessionNew() {
         <ScoreSheetSkeleton />
       ) : (
         <PhaseScoreSheet
+          phaseCode={currentPhase?.code}
           questions={questions.data ?? []}
           drafts={drafts}
           onScore={setScore}

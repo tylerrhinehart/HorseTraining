@@ -30,7 +30,7 @@ export const PROGRAMS: ProgramDef[] = [
   },
   {
     id: "foundation_to_finish",
-    label: "Foundation to Finish",
+    label: "Foundation to Finish / Performance Horse",
     tagline: "Performance Horse · Outside Horse",
     description:
       "The Performance Horse Warm-Up score sheet, logged daily and scored 1…5. After the warm-up the trainer picks a Task Completion job (Reining, Fence Work, Rope Horse, Barrels, and more) for the day. For a client's horse trained toward a performance discipline.",
@@ -88,21 +88,39 @@ export interface TaskJob {
   name: string;
 }
 
-export const TASK_COMPLETION_JOBS: TaskJob[] = [
+export const TASK_COMPLETION_GROUPS = [
+  { name: "Ranch", jobs: [
+    { code: "daywork", name: "Daywork" },
+    { code: "ranch_roping", name: "Ranch Roping" },
+    { code: "feed_lot", name: "Feedlot" },
+  ] },
+  { name: "Reining Cow Horse", jobs: [
+    { code: "reining", name: "Reining" },
+    { code: "fence_work", name: "Fence Work" },
+  ] },
+  { name: "Rodeo", jobs: [
+    { code: "heading", name: "Heading" },
+    { code: "heeling", name: "Heeling" },
+    { code: "breakaway", name: "Breakaway" },
+    { code: "calf_roping", name: "Calf Roping" },
+    { code: "barrels", name: "Barrels" },
+  ] },
+];
+
+export const TASK_COMPLETION_JOBS: TaskJob[] = TASK_COMPLETION_GROUPS.flatMap((group) => group.jobs);
+
+// Keep prior stored codes readable; never reinterpret a combined historical job.
+export const LEGACY_TASK_JOBS: TaskJob[] = [
   { code: "outside_riding", name: "Outside Riding (Straight Lines)" },
-  { code: "reining", name: "TQA Reining Cow Horse Foundation (Reining)" },
-  { code: "fence_work", name: "Fence Work" },
-  { code: "feed_lot", name: "Feed Lot" },
   { code: "branding_pasture", name: "Branding & Pasture Doctoring (Competitions)" },
   { code: "rope_heading_heeling", name: "Rope Horse (Heading & Heeling)" },
   { code: "rope_breakaway_calf", name: "Rope Horse (Breakaway & Calf Roping)" },
-  { code: "barrels", name: "Barrels" },
 ];
 
 export const TASK_PHASES = [1, 2, 3, 4] as const;
 
 export function taskJobName(code: string): string {
-  return TASK_COMPLETION_JOBS.find((j) => j.code === code)?.name ?? code;
+  return [...TASK_COMPLETION_JOBS, ...LEGACY_TASK_JOBS].find((j) => j.code === code)?.name ?? code;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,14 +135,18 @@ export interface BitOption {
 
 export const BIT_OPTIONS: BitOption[] = [
   { code: "bit_1", label: "Bit 1 (Snaffle)" },
-  { code: "bit_2", label: "Bit 2 (Chain)" },
-  { code: "bit_3", label: "Bit 3 (2 Rein / High Port)" },
+  { code: "bit_2", label: "Bit 2 (Chain/Hack)" },
+  { code: "bit_3", label: "Bit 3 (2 Rein/Weaver)" },
   { code: "bit_4", label: "Bit 4 (Half Breed)" },
 ];
 
-export function bitLabel(code: string | null | undefined): string | null {
+export function bitOptions(program?: string): BitOption[] {
+  return program === "foundation_to_finish" ? BIT_OPTIONS.map((bit) => ({ ...bit, label: bit.code === "bit_2" ? "Bit 2 (Chain)" : bit.code === "bit_3" ? "Bit 3 (2 Rein/High Port)" : bit.label })) : BIT_OPTIONS;
+}
+
+export function bitLabel(code: string | null | undefined, program?: string): string | null {
   if (!code) return null;
-  return BIT_OPTIONS.find((b) => b.code === code)?.label ?? code;
+  return bitOptions(program).find((b) => b.code === code)?.label ?? code;
 }
 
 // The five warm-up video segments Wade lists for the performance programs.

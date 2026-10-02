@@ -1,6 +1,5 @@
 import type { Phase } from "../supabase/types";
 
-export const ADVANCE_THRESHOLD = 2; // TQA "industry standard" baseline.
 export const WINDOW_SIZE = 7;       // 7-session rolling average.
 
 export function computePhaseAverage(scores: number[]): number | null {
@@ -12,10 +11,6 @@ export function computePhaseAverage(scores: number[]): number | null {
 export function computeRollingAverage(sessionAverages: number[]): number | null {
   const window = sessionAverages.slice(-WINDOW_SIZE);
   return computePhaseAverage(window);
-}
-
-export function isAtOrAboveStandard(avg: number | null): boolean {
-  return avg != null && avg >= ADVANCE_THRESHOLD;
 }
 
 export function nextPhase(current: Phase, phases: Phase[]): Phase | null {

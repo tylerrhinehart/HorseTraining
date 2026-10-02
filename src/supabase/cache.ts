@@ -11,6 +11,8 @@ interface Entry {
   updatedAt: number;
 } // updatedAt=0 ⇒ stale
 
+let generation = 0; // Invalidates requests still pending when an account signs out.
+
 const cache = new Map<string, Entry>();
 const inflight = new Map<string, Promise<unknown>>();
 const fetchers = new Map<string, () => Promise<unknown>>(); // last registered fetcher per key
@@ -81,13 +83,16 @@ export function fetchQuery<T>(
   const retries = opts?.retries ?? 2;
   const delays = opts?.delays ?? RETRY_DELAYS;
 
+  const requestGeneration = generation;
   const p = (async () => {
     let lastErr: unknown;
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const data = await fn();
-        cache.set(k, { data, updatedAt: Date.now() });
-        notify(k);
+        if (requestGeneration === generation) {
+          cache.set(k, { data, updatedAt: Date.now() });
+          notify(k);
+        }
         return data;
       } catch (e) {
         lastErr = e;
@@ -101,7 +106,9 @@ export function fetchQuery<T>(
   })();
 
   inflight.set(k, p);
-  const cleanup = () => inflight.delete(k);
+  const cleanup = () => {
+    if (inflight.get(k) === p) inflight.delete(k);
+  };
   p.then(cleanup, cleanup);
   return p as Promise<T>;
 }
@@ -142,6 +149,7 @@ export function prefetchQuery<T>(key: QueryKey, fn: () => Promise<T>): void {
 
 /** Wipe all four maps (called on sign-out). */
 export function clearCache(): void {
+  generation++;
   cache.clear();
   inflight.clear();
   fetchers.clear();

@@ -31,14 +31,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    let disposed = false;
+    let authEventSeen = false;
+    let accountId: string | null = null;
+    const applySession = (next: Session | null) => {
+      if (disposed) return;
+      const nextId = next?.user.id ?? null;
+      if (accountId !== nextId) clearCache();
+      accountId = nextId;
+      setSession(next);
       setLoading(false);
-    });
+    };
+    supabase.auth.getSession().then(({ data }) => {
+      if (!authEventSeen) applySession(data.session);
+    }).catch(() => { if (!disposed) setLoading(false); });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
+      authEventSeen = true;
+      applySession(s);
     });
-    return () => sub.subscription.unsubscribe();
+    return () => { disposed = true; sub.subscription.unsubscribe(); };
   }, []);
 
   const value = useMemo<AuthContextValue>(

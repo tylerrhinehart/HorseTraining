@@ -5,9 +5,10 @@ import { createHorse } from "../supabase/queries";
 import { useActiveHorseId } from "../state/activeHorse";
 import { useToast } from "../components/Toast";
 import { PROGRAMS } from "../content/programs";
-import type { ProgramMeta, TrainingType } from "../supabase/types";
+import HorseProgramFields, { programMetaFromForm, type HorseProgramForm } from "../components/HorseProgramFields";
+import type { TrainingType } from "../supabase/types";
 
-interface FormValues {
+interface FormValues extends HorseProgramForm {
   name: string;
   owner_name: string;
   owner_contact?: string;
@@ -48,14 +49,7 @@ export default function HorseNew() {
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null);
     try {
-      const program_meta: ProgramMeta = {};
-      if (values.training_type === "sale_horse") {
-        if (values.target_market?.trim())
-          program_meta.target_market = values.target_market.trim();
-        if (values.price_low) program_meta.price_low = Number(values.price_low);
-        if (values.price_high)
-          program_meta.price_high = Number(values.price_high);
-      }
+      const program_meta = programMetaFromForm(values);
       const horse = await createHorse({
         name: values.name,
         owner_name: values.owner_name,
@@ -167,6 +161,8 @@ export default function HorseNew() {
           </>
         )}
 
+        <HorseProgramFields register={register as unknown as import("react-hook-form").UseFormRegister<HorseProgramForm>} trainingType={trainingType} prefix="new" />
+
         <h3 className="form-section-title">Horse &amp; owner</h3>
         <div className="field-row">
           <div className="field">
@@ -178,7 +174,7 @@ export default function HorseNew() {
               className="input"
               placeholder="e.g. Whiskey Pete"
               aria-invalid={errors.name ? true : undefined}
-              {...register("name", { required: "Name is required" })}
+              {...register("name", { required: "Name is required", validate: (value) => value.trim().length > 0 || "Name is required" })}
             />
             {errors.name && (
               <p

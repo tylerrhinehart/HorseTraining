@@ -20,7 +20,6 @@ import type {
 import { formatDateTime, formatHumanDate } from "../../utils/dates";
 import {
   formatAvg,
-  meetsCertificationThreshold,
   questionAverages,
   sessionAverage,
   sessionAverages,
@@ -33,6 +32,8 @@ import {
 } from "../../content/trifecta";
 import { SCORE_LEGEND } from "../../content/tqa-template";
 import {
+  bitLabel,
+  taskJobName,
   FIVE_FOUNDATION_LEGEND,
   FIVE_TEMPERAMENT_LEGEND,
 } from "../../content/programs";
@@ -170,9 +171,7 @@ export function HorseReport({
   const latest = points.length > 0 ? points[points.length - 1] : null;
   const scale: RatingScaleKind =
     horse.training_type === "foundation" ? "tqa" : "five";
-  // The +2.7 certification threshold is defined on the −3…+3 Foundation scale.
-  const certified = scale === "tqa" && latest && meetsCertificationThreshold(latest);
-
+  const reportPhases = phases.filter((phase) => phase.user_id === horse.user_id && (phase.program === horse.training_type || sorted.some((session) => session.phase_id === phase.id)));
   const phaseFor = (id: string) => phases.find((p) => p.id === id)?.name ?? "—";
 
   const referencedQuestionIds = new Set<string>();
@@ -231,16 +230,7 @@ export function HorseReport({
             label="Latest Temperament"
             value={formatAvg(latest?.temperamentAverage ?? null, scale)}
           />
-          <Meta
-            label="Cert threshold"
-            value={
-              scale === "five"
-                ? "1–5 scale"
-                : certified
-                  ? "Met (≥ +2.7 both axes)"
-                  : "Not met"
-            }
-          />
+          <Meta label="Trainer review" value="No automatic certification" />
         </View>
 
         <Text style={styles.h2}>Per-axis progress</Text>
@@ -275,10 +265,10 @@ export function HorseReport({
           {horse.name}
           {horse.owner_name ? ` · Owner: ${horse.owner_name}` : ""}
         </Text>
-        {phases.length === 0 ? (
+        {reportPhases.length === 0 ? (
           <Text style={styles.muted}>No phases defined.</Text>
         ) : (
-          [...phases]
+          [...reportPhases]
             .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
             .map((phase) => {
               const phaseSessions = sorted
@@ -341,6 +331,7 @@ export function HorseReport({
               questions={questions}
               phaseFor={phaseFor}
               scale={scale}
+              program={phases.find((phase) => phase.id === s.phase_id)?.program}
             />
           ))
         )}
@@ -461,6 +452,7 @@ function Footer({ generatedAt }: { generatedAt: string }) {
 }
 
 interface SessionScoreSheetBlockProps {
+  program?: string;
   session: SessionWithRatings;
   questions: Question[];
   phaseFor: (id: string) => string;
@@ -472,6 +464,7 @@ function SessionScoreSheetBlock({
   questions,
   phaseFor,
   scale,
+  program,
 }: SessionScoreSheetBlockProps) {
   const phaseQuestions = questions
     .filter((q) => q.phase_id === session.phase_id)
@@ -491,6 +484,9 @@ function SessionScoreSheetBlock({
       <Text style={styles.muted}>
         Foundation {formatAvg(fAvg, scale)} · Temperament {formatAvg(tAvg, scale)}
       </Text>
+      {session.rider ? <Text style={styles.muted}>Rider: {session.rider}</Text> : null}
+      {session.bit ? <Text style={styles.muted}>{bitLabel(session.bit, program)}</Text> : null}
+      {session.task_completions?.length ? <Text style={styles.muted}>Tasks: {session.task_completions.map((task) => `${taskJobName(task.job)} · Phase ${task.phase}`).join("; ")}</Text> : null}
       <View style={styles.twoCol}>
         <View style={styles.colHalf}>
           <Text style={styles.muted}>Foundation / Task Completion</Text>
@@ -520,9 +516,9 @@ function SessionScoreSheetBlock({
               <View key={q.id}>
                 <View style={styles.itemRow}>
                   <Text style={styles.itemNum}>{i + 1}.</Text>
-                  <Text style={styles.itemText}>{q.text}</Text>
-                  <Text style={styles.itemPolars}>
-                    {q.low_label} / {q.high_label}
+                  <Text style={styles.itemText}>
+                    {q.text}{"\n"}
+                    <Text style={{ fontSize: 8, color: "#64748b" }}>{q.low_label} / {q.high_label}</Text>
                   </Text>
                   <Text style={styles.itemScore}>
                     {r ? formatScore(r.score, scale) : "—"}
@@ -670,10 +666,10 @@ function DualLineChart({ data, scale = "tqa" }: DualChartProps) {
           stroke="#94a3b8"
           strokeWidth={0.5}
         />
-        {fPath && (
+        {Boolean(fPath) && (
           <Path d={fPath} stroke="#7c3aed" strokeWidth={1.5} fill="none" />
         )}
-        {tPath && (
+        {Boolean(tPath) && (
           <Path d={tPath} stroke="#0d9488" strokeWidth={1.5} fill="none" />
         )}
         {data.map((p) =>

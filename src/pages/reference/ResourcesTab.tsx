@@ -1,7 +1,7 @@
+import { SOURCE_VIDEO_GROUPS } from "../../content/source-videos";
 import type { Phase, Resource } from "../../supabase/types";
 import { SkeletonCard } from "../../components/Skeleton";
 import { LinkRow, VideoCard, youtubeId } from "./shared";
-import { FFP_WALKTHROUGH_URL } from "./content";
 
 // Videos & Resources — a real media library: video cards with thumbnails in a
 // grid, plain links as rows, grouped by phase.
@@ -14,35 +14,24 @@ export default function ResourcesTab({
   resourcesFor: (phaseId: string) => Resource[];
   loading: boolean;
 }) {
+  const resourceKey = (url: string) => youtubeId(url) ?? url.replace(/([?&])dl=[01]/, "");
+  const seen = new Set(SOURCE_VIDEO_GROUPS.flatMap((group) => group.videos.map((video) => resourceKey(video.url))));
   const groups = phases
-    .map((p) => ({ phase: p, resources: resourcesFor(p.id) }))
+    .map((p) => ({ phase: p, resources: resourcesFor(p.id).filter((resource) => { const key = resourceKey(resource.url); if (seen.has(key)) return false; seen.add(key); return true; }) }))
     .filter((g) => g.resources.length > 0);
 
   return (
     <div className="ref-section">
-      <div>
-        <h3 className="h-section" style={{ marginTop: 4 }}>
-          TQA essentials
-        </h3>
-        <div className="video-grid">
-          <VideoCard
-            title="Wade Black walks through the Foundation for Perfection"
-            url={FFP_WALKTHROUGH_URL}
-            sub="The doctrine behind every score sheet"
-          />
-        </div>
-      </div>
-
       {loading && groups.length === 0 && <SkeletonCard lines={3} />}
 
-      {!loading && groups.length === 0 && (
-        <div className="card muted" style={{ textAlign: "center" }}>
-          <p style={{ margin: 0 }}>
-            No resources attached to phases yet. Add videos and links from a
-            phase's score sheet, and they'll be collected here.
-          </p>
-        </div>
-      )}
+      {SOURCE_VIDEO_GROUPS.map((group) => (
+        <section key={group.title}>
+          <h3 className="h-section">{group.title}</h3>
+          <div className="video-grid">
+            {group.videos.map((video) => <VideoCard key={video.url} title={video.title} url={video.url} />)}
+          </div>
+        </section>
+      ))}
 
       {groups.map(({ phase, resources }) => {
         const videos = resources.filter((r) => youtubeId(r.url) != null);

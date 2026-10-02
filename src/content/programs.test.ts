@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BIT_OPTIONS,
+  bitLabel,
   FIVE_FOUNDATION_LEGEND,
   FIVE_TEMPERAMENT_LEGEND,
   PROGRAMS,
@@ -27,10 +28,10 @@ describe("programs content", () => {
     expect(programLabel("nope")).toBe("Foundation");
   });
 
-  it("has the 8 Task Completion jobs from the sale-horse sheet", () => {
-    expect(TASK_COMPLETION_JOBS).toHaveLength(8);
+  it("keeps every requested discipline independently selectable", () => {
+    expect(TASK_COMPLETION_JOBS).toHaveLength(10);
     expect(TASK_COMPLETION_JOBS.map((j) => j.code)).toContain("fence_work");
-    expect(TASK_COMPLETION_JOBS.map((j) => j.code)).toContain("barrels");
+    expect(TASK_COMPLETION_JOBS.map((j) => j.code)).toEqual(expect.arrayContaining(["heading", "heeling", "breakaway", "calf_roping", "daywork", "ranch_roping"]));
   });
 
   it("has four bit options", () => {
@@ -61,4 +62,10 @@ describe("performance warm-up template", () => {
     const last = PERFORMANCE_QUESTIONS.filter((q) => q.axis === "foundation").at(-1);
     expect(last?.text).toContain("Task Completion");
   });
+});
+
+it("uses each original program log bit wording without changing codes", () => {
+ expect(bitLabel("bit_2", "foundation_to_finish")).toBe("Bit 2 (Chain)");
+ expect(bitLabel("bit_3", "foundation_to_finish")).toBe("Bit 3 (2 Rein/High Port)");
+ expect(bitLabel("bit_2", "sale_horse")).toBe("Bit 2 (Chain/Hack)");
 });

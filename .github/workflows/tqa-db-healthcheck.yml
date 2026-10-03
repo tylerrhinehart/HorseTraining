@@ -1,0 +1,37 @@
+name: TQA database read check
+
+on:
+  schedule:
+    - cron: '37 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tqa-db-healthcheck
+  cancel-in-progress: false
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      TQA_INTERVAL_DAYS: '1'
+      TQA_INTERVAL_ANCHOR: '2026-10-03'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check anchor-relative cadence
+        id: cadence
+        run: node scripts/tqa-healthcheck-cadence.mjs >> "$GITHUB_OUTPUT"
+      - name: Read TQA database with anonymous RLS
+        if: github.event_name != 'schedule' || steps.cadence.outputs.due == 'true'
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: node scripts/tqa-db-healthcheck.mjs

@@ -76,7 +76,7 @@ export default function HorsesList() {
           flexWrap: "wrap",
         }}
       >
-        {allHorses.length > 3 && (
+        {allHorses.length > 0 && (
           <input
             type="search"
             className="input"
@@ -109,7 +109,7 @@ export default function HorsesList() {
           <SkeletonCard lines={2} />
         </div>
       )}
-      {!horsesQuery.loading && horses.length === 0 && (
+      {!horsesQuery.loading && allHorses.length === 0 && (
         <div style={{ textAlign: "center", padding: "24px 0" }}>
           <div className="eyebrow">Roster</div>
           <h1 className="h-display">No horses yet</h1>
@@ -203,7 +203,7 @@ function HorseCard({
   const arrival = horse.arrival_date
     ? new Date(horse.arrival_date + "T12:00:00")
     : null;
-  const days = arrival ? differenceInCalendarDays(new Date(), arrival) : null;
+  const days = arrival ? Math.max(1, differenceInCalendarDays(new Date(), arrival) + 1) : null;
   const phase = horse.current_phase_id
     ? phasesById.get(horse.current_phase_id)
     : null;
@@ -221,7 +221,7 @@ function HorseCard({
       <div className="horse-photo" style={{ background: photoBg }}>
         <span className="horse-initials">{initialsOf(horse.name)}</span>
         {isActive && horse.status === "in_training" && (
-          <span className="horse-active-flag">In session</span>
+          <span className="horse-active-flag">Selected horse</span>
         )}
         {horse.status === "archived" && (
           <span className="horse-archived-flag">Archived</span>

@@ -242,12 +242,11 @@ export default function PhasesTab({
           <Accordion
             icon={<IconTasks size={18} />}
             title="Task Completion menu"
-            meta={`pick one job per day · phases ${TASK_PHASES.join("–")}`}
+            meta={`one or more jobs per ride · phases ${TASK_PHASES.join("–")}`}
           >
             <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>
-              After the warm-up, the trainer picks a job from this menu for the
-              day's task completion. Advancement through each job's phases is
-              not tracked in the daily log.
+              After the warm-up, choose one or more jobs and the phase worked for
+              each. Each job has its own phases; advancing is the trainer’s decision.
             </p>
             <ol
               style={{

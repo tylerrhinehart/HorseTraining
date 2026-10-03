@@ -1,5 +1,6 @@
 import {
-  TASK_COMPLETION_JOBS,
+  TASK_COMPLETION_GROUPS,
+  LEGACY_TASK_JOBS,
   TASK_PHASES,
   taskJobName,
 } from "../content/programs";
@@ -60,12 +61,16 @@ export default function TaskCompletionPicker({
         <h2 className="card-title">Task completion</h2>
         <span className="card-meta">pick the job(s) + phase worked today</span>
       </div>
+      <a className="btn btn-ghost btn-sm" style={{ minHeight: 44, marginBottom: 8 }} href="https://youtu.be/B7lJWXfj4vY" target="_blank" rel="noopener noreferrer">▶ Performance warm-up reference video ↗</a>
       <p className="muted" style={{ fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>
         Each job is worked through Phases 1–4 — tap the phase worked today
         (tap it again to unselect).
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {TASK_COMPLETION_JOBS.map((job) => {
+        {[...TASK_COMPLETION_GROUPS, { name: "Previously recorded tasks", jobs: LEGACY_TASK_JOBS.filter((job) => value.some((task) => task.job === job.code)) }].filter((group) => group.jobs.length > 0).map((group) => (
+          <fieldset key={group.name} style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend style={{ fontWeight: 600, paddingTop: 12 }}>{group.name}</legend>
+            {group.jobs.map((job) => {
           const selected = value.find((t) => t.job === job.code);
           return (
             <div
@@ -99,9 +104,10 @@ export default function TaskCompletionPicker({
                       key={p}
                       type="button"
                       className={`btn btn-sm ${on ? "btn-leather" : "btn-ghost"}`}
+                      aria-label={`${job.name}, Phase ${p}`}
                       aria-pressed={on}
                       onClick={() => toggle(job.code, p)}
-                      style={{ minWidth: 38 }}
+                      style={{ minWidth: 44, minHeight: 44 }}
                     >
                       P{p}
                     </button>
@@ -110,7 +116,9 @@ export default function TaskCompletionPicker({
               </div>
             </div>
           );
-        })}
+            })}
+          </fieldset>
+        ))}
       </div>
     </div>
   );

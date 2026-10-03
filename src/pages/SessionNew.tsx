@@ -1,3 +1,4 @@
+import useUnsavedChanges from "../hooks/useUnsavedChanges";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -14,7 +15,8 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
-import { BIT_OPTIONS } from "../content/programs";
+import { bitOptions } from "../content/programs";
+import { localDateTimeInput } from "../utils/dates";
 import type { TaskCompletion } from "../supabase/types";
 
 /** Two-column ghost of the score sheet (8 Foundation + 6 Temperament rows). */
@@ -47,9 +49,8 @@ export default function SessionNew() {
   const phases = useQuery(qk.phases(), () => listPhases());
 
   const [phaseId, setPhaseId] = useState<string>("");
-  const [occurredAt, setOccurredAt] = useState<string>(
-    new Date().toISOString().slice(0, 16),
-  );
+  const [initialOccurredAt, setInitialOccurredAt] = useState(localDateTimeInput);
+  const [occurredAt, setOccurredAt] = useState(initialOccurredAt);
   const [drafts, setDrafts] = useState<Record<string, DraftRating>>({});
   const [notes, setNotes] = useState("");
   const [rider, setRider] = useState("");
@@ -59,18 +60,30 @@ export default function SessionNew() {
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
+  // React Router reuses this page when switching horses. Never carry a draft
+  // (or the previous horse's phase) into another horse's ride.
+  useEffect(() => {
+    setPhaseId("");
+    setDrafts({});
+    setNotes("");
+    setRider("");
+    setBit("");
+    setTasks([]);
+    const initialDate = localDateTimeInput();
+    setInitialOccurredAt(initialDate);
+    setOccurredAt(initialDate);
+    setError(null);
+  }, [id]);
+
   // Sessions are always logged against the horse's current phase. Advancing
   // through phases happens via the workspace's "Advance to <next>" gate.
   useEffect(() => {
     if (phaseId) return;
     if (horse.loading || !phases.data) return;
-    if (horse.data?.current_phase_id) {
-      setPhaseId(horse.data.current_phase_id);
-      return;
-    }
-    if (phases.data.length > 0) {
-      setPhaseId(phases.data[0].id);
-    }
+    if (!horse.data) return;
+    const programPhases = phases.data.filter((phase) => phase.program === horse.data!.training_type).sort((a, b) => a.position - b.position);
+    const current = programPhases.find((phase) => phase.id === horse.data!.current_phase_id);
+    setPhaseId(current?.id ?? programPhases[0]?.id ?? "");
   }, [horse.data, horse.loading, phases.data, phaseId]);
 
   const questions = useQuery(
@@ -91,17 +104,9 @@ export default function SessionNew() {
     notes.trim() !== "" ||
     rider.trim() !== "" ||
     bit !== "" ||
-    tasks.length > 0;
+    tasks.length > 0 || occurredAt !== initialOccurredAt;
 
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
+  const { dialog: unsavedDialog, allowLeave } = useUnsavedChanges(dirty && !saving);
 
   if (!id) return null;
 
@@ -123,8 +128,9 @@ export default function SessionNew() {
   if (horse.data === undefined || phases.data === undefined) {
     return (
       <div className="view">
-        <div className="eyebrow">New session</div>
-        <h1 className="h-display">Score sheet</h1>
+        {unsavedDialog}
+      <div className="eyebrow">New ride</div>
+        <h1 className="h-display">Log a ride</h1>
         <SkeletonCard lines={2} />
         <div style={{ height: 12 }} />
         <ScoreSheetSkeleton />
@@ -162,6 +168,8 @@ export default function SessionNew() {
 
   const submit = async () => {
     setError(null);
+    if (questions.error || !questions.data?.length) { setError("The score sheet is unavailable. Retry before saving; your entries are still here."); return; }
+    if (!occurredAt || Number.isNaN(new Date(occurredAt).getTime())) { setError("Enter a valid ride date and time."); return; }
     if (!phaseId) {
       setError("Pick a phase first.");
       return;
@@ -186,12 +194,12 @@ export default function SessionNew() {
         phase_id: phaseId,
         occurred_at: new Date(occurredAt).toISOString(),
         notes: notes || null,
-        rider: isPerformance ? rider || null : null,
+        rider: rider || null,
         bit: isPerformance ? bit || null : null,
         task_completions: isPerformance ? tasks : [],
         ratings,
       });
-      toast.success("Session saved");
+      toast.success("Ride saved");
       navigate(`/horses/${id}`);
     } catch (err) {
       const message = (err as Error).message;
@@ -204,8 +212,9 @@ export default function SessionNew() {
 
   return (
     <div className="view">
-      <div className="eyebrow">New session</div>
-      <h1 className="h-display">Score sheet</h1>
+      {unsavedDialog}
+      <div className="eyebrow">New ride</div>
+      <h1 className="h-display">Log a ride</h1>
       <p className="muted" style={{ margin: "4px 0 14px", fontSize: 14 }}>
         {horse.data.name}
       </p>
@@ -239,8 +248,7 @@ export default function SessionNew() {
             onChange={(e) => setOccurredAt(e.target.value)}
           />
         </div>
-        {isPerformance && (
-          <>
+        <>
             <div className="field">
               <label className="label" htmlFor="session-rider">
                 Rider
@@ -253,7 +261,7 @@ export default function SessionNew() {
                 onChange={(e) => setRider(e.target.value)}
               />
             </div>
-            <div className="field">
+            {isPerformance && <div className="field">
               <label className="label" htmlFor="session-bit">
                 Bit (this week)
               </label>
@@ -264,15 +272,14 @@ export default function SessionNew() {
                 onChange={(e) => setBit(e.target.value)}
               >
                 <option value="">—</option>
-                {BIT_OPTIONS.map((b) => (
+                {bitOptions(horse.data.training_type).map((b) => (
                   <option key={b.code} value={b.code}>
                     {b.label}
                   </option>
                 ))}
               </select>
-            </div>
+            </div>}
           </>
-        )}
       </div>
 
       {isPerformance && (
@@ -294,10 +301,11 @@ export default function SessionNew() {
         </span>
       </div>
 
-      {questions.loading || !phaseId ? (
+      {questions.error ? <ErrorState error={questions.error} onRetry={questions.refresh} /> : questions.loading || !phaseId ? (
         <ScoreSheetSkeleton />
       ) : (
         <PhaseScoreSheet
+          phaseCode={currentPhase?.code}
           questions={questions.data ?? []}
           drafts={drafts}
           onScore={setScore}
@@ -308,7 +316,7 @@ export default function SessionNew() {
 
       <div className="card">
         <label className="label" htmlFor="session-notes">
-          Session notes
+          Ride notes
         </label>
         <textarea
           id="session-notes"
@@ -350,10 +358,10 @@ export default function SessionNew() {
         </button>
         <button
           className="btn btn-leather"
-          disabled={saving}
+          disabled={saving || questions.loading || !!questions.error || !questions.data?.length}
           onClick={submit}
         >
-          {saving ? "Saving…" : "Save session"}
+          {saving ? "Saving…" : "Save ride"}
         </button>
       </div>
 
@@ -364,7 +372,7 @@ export default function SessionNew() {
         confirmLabel="Discard"
         cancelLabel="Keep editing"
         danger
-        onConfirm={() => navigate(`/horses/${id}`)}
+        onConfirm={() => { allowLeave(); navigate(`/horses/${id}`); }}
         onCancel={() => setConfirmDiscard(false)}
       />
     </div>

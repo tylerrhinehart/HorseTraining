@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  ADVANCE_THRESHOLD,
   WINDOW_SIZE,
   computePhaseAverage,
   computeRollingAverage,
-  isAtOrAboveStandard,
   nextPhase,
   prevPhase,
 } from "./phaseProgression";
@@ -19,10 +17,6 @@ const phases: Phase[] = [
 ];
 
 describe("phaseProgression", () => {
-  it("ADVANCE_THRESHOLD is +2.0 (TQA industry standard)", () => {
-    expect(ADVANCE_THRESHOLD).toBe(2);
-  });
-
   it("WINDOW_SIZE rolls over the last 7 sessions", () => {
     expect(WINDOW_SIZE).toBe(7);
   });
@@ -39,12 +33,6 @@ describe("phaseProgression", () => {
   it("computeRollingAverage uses only the last WINDOW_SIZE session averages", () => {
     const sessionAverages = [-3, -3, 0, 1, 2, 3, 3, 3, 3]; // last 7 = [0,1,2,3,3,3,3] sum=15 avg=15/7
     expect(computeRollingAverage(sessionAverages)).toBeCloseTo(15 / 7, 5);
-  });
-
-  it("isAtOrAboveStandard returns true at exactly +2.0", () => {
-    expect(isAtOrAboveStandard(2)).toBe(true);
-    expect(isAtOrAboveStandard(1.999)).toBe(false);
-    expect(isAtOrAboveStandard(null)).toBe(false);
   });
 
   it("nextPhase returns the phase at position+1 or null at the end", () => {

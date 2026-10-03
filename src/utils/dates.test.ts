@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatHumanDate, formatShortDate } from "./dates";
+import { formatHumanDate, formatShortDate, localDateTimeInput } from "./dates";
 
 describe("dates", () => {
   it("formats short YYYY-MM-DD as a human date", () => {
@@ -10,3 +10,7 @@ describe("dates", () => {
     expect(formatShortDate("2025-01-10")).toBe("Jan 10");
   });
 });
+
+ it("initializes ride time with local wall-clock fields", () => {
+   expect(localDateTimeInput(new Date(2026, 9, 2, 8, 35))).toBe("2026-10-02T08:35");
+ });

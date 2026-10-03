@@ -10,7 +10,7 @@ export default function ErrorState({
     : error?.message ?? "The request failed.";
 
   return (
-    <div className="card">
+    <div className="card" role="alert">
       <h3 style={{ fontFamily: "var(--font-display)", margin: "0 0 8px" }}>
         Something went wrong
       </h3>

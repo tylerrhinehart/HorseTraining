@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import useUnsavedChanges from "../hooks/useUnsavedChanges";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { differenceInDays, parseISO } from "date-fns";
 import { useForm } from "react-hook-form";
@@ -11,31 +12,29 @@ import {
   listSessionsForHorse,
   setHorseCurrentPhase,
   setHorseStatus,
-  setHorseTrainingType,
   updateHorse,
 } from "../supabase/queries";
 import { qk } from "../supabase/keys";
-import { PROGRAMS, programLabel } from "../content/programs";
-import type { ProgramMeta, TrainingType } from "../supabase/types";
+import { PROGRAMS, programLabel, taskJobName } from "../content/programs";
+import HorseProgramFields, { programFormDefaults, programMetaFromForm, type HorseProgramForm } from "../components/HorseProgramFields";
+import WeeklyComments from "../components/WeeklyComments";
+import type { TrainingType } from "../supabase/types";
 import { useQuery } from "../supabase/useQuery";
 import { useActiveHorseId } from "../state/activeHorse";
 import {
-  computeRollingAverage,
-  isAtOrAboveStandard,
   nextPhase,
 } from "../utils/phaseProgression";
 import { sessionAverages, formatAvg } from "../utils/stats";
 import { formatHumanDate } from "../utils/dates";
 import HorseAvatar, { hashTone } from "../components/HorseAvatar";
 import Sparkline from "../components/Sparkline";
-import { IconRibbon } from "../components/Icons";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import type { Phase } from "../supabase/types";
 
-interface EditFormValues {
+interface EditFormValues extends HorseProgramForm {
   name: string;
   owner_name: string;
   owner_contact: string;
@@ -85,15 +84,20 @@ export default function HorseDetail() {
     handleSubmit,
     reset,
     watch,
-    formState: { isSubmitting: isEditSubmitting },
+    formState: { isSubmitting: isEditSubmitting, isDirty: isEditDirty, errors: editErrors },
   } = useForm<EditFormValues>();
 
+  const [weeklyDirty, setWeeklyDirty] = useState(false);
+  const { dialog: unsavedDialog } = useUnsavedChanges((isEditDirty || weeklyDirty) && !isEditSubmitting);
   const editTrainingType = watch("training_type");
 
+  const formHorseId = useRef<string>();
   // Sync edit form defaults when horse data loads
   useEffect(() => {
-    if (horse.data) {
+    if (horse.data && (!isEditDirty || formHorseId.current !== horse.data.id)) {
+      formHorseId.current = horse.data.id;
       reset({
+        ...programFormDefaults(horse.data.program_meta),
         name: horse.data.name,
         owner_name: horse.data.owner_name ?? "",
         owner_contact: horse.data.owner_contact ?? "",
@@ -105,7 +109,7 @@ export default function HorseDetail() {
         price_high: horse.data.program_meta?.price_high?.toString() ?? "",
       });
     }
-  }, [horse.data, reset]);
+  }, [horse.data, reset, isEditDirty]);
 
   if (!id) return null;
 
@@ -172,15 +176,12 @@ export default function HorseDetail() {
     (p) => currentPhase && p.phaseId === currentPhase.id,
   );
   const currentPhaseAvgs = currentPhasePoints
-    .map((p) => p.combinedAverage)
+    .map((p) => p.foundationAverage)
     .filter((v): v is number => v !== null);
   const currentPhaseAvg =
     currentPhaseAvgs.length > 0
       ? currentPhaseAvgs.reduce((s, n) => s + n, 0) / currentPhaseAvgs.length
       : null;
-
-  // Rolling 7-session average for advance gate
-  const rolling7Average = computeRollingAverage(currentPhaseAvgs);
 
   const nextP = currentPhase ? nextPhase(currentPhase, allPhases) : null;
   // Advancing is a TQA-scale (Foundation) concept — gate it on the phase scale.
@@ -198,41 +199,16 @@ export default function HorseDetail() {
   // Scale-aware display: signed ±3 for Foundation, unsigned 1–5 otherwise.
   const scale = horse.data.training_type === "foundation" ? "tqa" : "five";
 
-  // Day label — "Day X of 60"/"Day 60+" is a Foundation-only framing (Wade A1).
-  let dayLabel: string | null = null;
-  if (horse.data.arrival_date) {
-    const today = new Date();
-    const arrival = parseISO(horse.data.arrival_date);
-    const dayNum = differenceInDays(today, arrival) + 1;
-    if (horse.data.training_type === "foundation") {
-      if (dayNum >= 1 && dayNum <= 60) {
-        dayLabel = `Day ${dayNum} of 60`;
-      } else if (dayNum > 60) {
-        dayLabel = "Day 60+";
-      }
-    } else if (dayNum >= 1) {
-      dayLabel = `Day ${dayNum}`;
-    }
-  }
+  const dayLabel = horse.data.arrival_date ? `Day ${Math.max(1, differenceInDays(new Date(), parseISO(horse.data.arrival_date)) + 1)}` : null;
 
   // Phase average from ratings for a given phase id
   const phaseAvgFromRatings = (phaseId: string): number | null => {
-    const phaseRatings = (ratings.data ?? []).filter(
-      (r) => r.phase_id === phaseId,
-    );
-    if (phaseRatings.length === 0) return null;
-    return (
-      phaseRatings.reduce((s, r) => s + r.score, 0) / phaseRatings.length
-    );
+    const averages = points.filter(point => point.phaseId === phaseId).map(point => point.foundationAverage).filter((average): average is number => average !== null);
+    return averages.length ? averages.reduce((sum, average) => sum + average, 0) / averages.length : null;
   };
 
   const handleAdvance = () => {
     if (!currentPhase || !canAdvance) return;
-    if (isAtOrAboveStandard(rolling7Average)) {
-      // Recommended — advance immediately without confirm
-      void performAdvance();
-      return;
-    }
     setAdvanceDialogOpen(true);
   };
 
@@ -250,10 +226,7 @@ export default function HorseDetail() {
     }
   };
 
-  const advanceDialogCopy =
-    rolling7Average == null
-      ? `No sessions logged in this phase yet. Advance to ${nextP?.name ?? "the next phase"} anyway?`
-      : `This phase's average is ${formatAvg(rolling7Average, scale)}, below the +2.0 TQA industry standard. Some horses need more time — that's a recordable outcome. Continue to ${nextP?.name ?? "the next phase"}?`;
+  const advanceDialogCopy = `Move to ${nextP?.name ?? "the next phase"}? Phase changes are the trainer’s decision. Scores do not certify readiness or safety.`;
 
   const handleArchive = async () => {
     setArchiving(true);
@@ -296,26 +269,21 @@ export default function HorseDetail() {
   };
 
   const onEditSubmit = async (values: EditFormValues) => {
-    const program_meta: ProgramMeta = {};
-    if (values.training_type === "sale_horse") {
-      if (values.target_market?.trim())
-        program_meta.target_market = values.target_market.trim();
-      if (values.price_low) program_meta.price_low = Number(values.price_low);
-      if (values.price_high) program_meta.price_high = Number(values.price_high);
-    }
     try {
+      const program_meta = programMetaFromForm(values, horse.data!.program_meta);
+      const changingProgram = values.training_type !== horse.data!.training_type;
+      const firstPhase = phases.data?.filter((p) => p.program === values.training_type).sort((a, b) => a.position - b.position)[0];
+      if (changingProgram && !firstPhase) throw new Error("The new program’s score sheets are unavailable. Retry after phases load.");
       await updateHorse(id, {
-        name: values.name,
+        name: values.name.trim(),
         owner_name: values.owner_name || null,
         owner_contact: values.owner_contact || null,
         arrival_date: values.arrival_date || null,
         notes: values.notes || null,
         program_meta,
+        ...(changingProgram ? { training_type: values.training_type, current_phase_id: firstPhase!.id } : {}),
       });
-      // Switching program resets the current phase to the new program's first.
-      if (values.training_type !== horse.data!.training_type) {
-        await setHorseTrainingType(id, values.training_type);
-      }
+      reset(values);
       toast.success("Saved");
       setEditSavedAt(Date.now());
     } catch (e) {
@@ -340,6 +308,7 @@ export default function HorseDetail() {
   return (
     <div className="view" style={{ maxWidth: 720 }}>
       {/* ── 1. Header ── */}
+      {unsavedDialog}
       <div className="eyebrow">Horse workspace</div>
 
       <div
@@ -402,6 +371,16 @@ export default function HorseDetail() {
         )}
       </div>
 
+      <div className="card" style={{marginTop:16}}>
+        {horse.data.status === "in_training" && <Link className="btn btn-leather" to={`/horses/${id}/sessions/new`}>Log a ride for {horse.data.name}</Link>}
+        <Link className="btn btn-ghost" to={`/horses/${id}/report`}>View / download report</Link>
+        <p className="muted">Last ride: {allSessions.length ? formatHumanDate([...allSessions].sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at))[0].occurred_at) : sessions.error ? "Unavailable — retry below" : sessions.loading ? "Loading…" : "No rides yet"}</p>
+        {horse.data.program_meta?.training_goals?.length ? <p>Goals: {horse.data.program_meta.training_goals.map(taskJobName).join(", ")}</p> : null}
+      </div>
+      {[phases,sessions,ratings].filter(query=>query.error).map((query,index)=><ErrorState key={index} error={query.error!} onRetry={query.refresh} />)}
+      <details className="card" style={{marginTop:12}}><summary>All ride history ({allSessions.length})</summary>
+        {allSessions.length ? [...allSessions].sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at)).map(session=><Link key={session.id} className="btn btn-ghost" style={{display:"flex",justifyContent:"space-between"}} to={`/sessions/${session.id}`}>{formatHumanDate(session.occurred_at)} · {phases.data?.find(phase=>phase.id===session.phase_id)?.name ?? "Ride"}</Link>) : <p className="muted">Saved rides will appear here.</p>}
+      </details>
       {!detailsReady ? (
         <>
           <div style={{ marginTop: 20 }}>
@@ -552,16 +531,16 @@ export default function HorseDetail() {
                               }}
                             >
                               <span>{formatHumanDate(s.occurred_at)}</span>
-                              {pt?.combinedAverage !== undefined &&
-                                pt.combinedAverage !== null && (
+                              {pt?.foundationAverage !== undefined &&
+                                pt.foundationAverage !== null && (
                                   <span
                                     className="mono"
                                     style={{
-                                      color: avgColor(pt.combinedAverage),
+                                      color: avgColor(pt.foundationAverage),
                                       fontSize: 12,
                                     }}
                                   >
-                                    {formatAvg(pt.combinedAverage, scale)}
+                                    {formatAvg(pt.foundationAverage, scale)}
                                   </span>
                                 )}
                             </Link>
@@ -610,7 +589,7 @@ export default function HorseDetail() {
                       className="mono muted"
                       style={{ fontSize: 11, marginLeft: 8 }}
                     >
-                      phase average
+                      Foundation average
                     </span>
                   </div>
                   {currentPhaseAvgs.length >= 2 && (
@@ -654,10 +633,10 @@ export default function HorseDetail() {
               {/* Primary CTA */}
               <Link
                 to={`/horses/${id}/sessions/new`}
-                className="btn btn-leather"
+                className="btn btn-ghost"
                 style={{ marginBottom: 10, display: "inline-flex" }}
               >
-                Log today's session
+                Log another ride
               </Link>
 
               {/* Secondary CTA: Advance (TQA/Foundation scale only) */}
@@ -676,11 +655,6 @@ export default function HorseDetail() {
                   >
                     Advance to {nextP.name}
                   </button>
-                  {isAtOrAboveStandard(rolling7Average) && (
-                    <span className="pill" style={{ color: "var(--ok)", borderColor: "var(--ok)" }}>
-                      Recommended
-                    </span>
-                  )}
                 </div>
               )}
 
@@ -716,16 +690,16 @@ export default function HorseDetail() {
                         }}
                       >
                         <span>{formatHumanDate(s.occurred_at)}</span>
-                        {pt?.combinedAverage !== undefined &&
-                          pt.combinedAverage !== null && (
+                        {pt?.foundationAverage !== undefined &&
+                          pt.foundationAverage !== null && (
                             <span
                               className="mono"
                               style={{
-                                color: avgColor(pt.combinedAverage),
+                                color: avgColor(pt.foundationAverage),
                                 fontSize: 13,
                               }}
                             >
-                              {formatAvg(pt.combinedAverage, scale)}
+                              {formatAvg(pt.foundationAverage, scale)}
                             </span>
                           )}
                       </Link>
@@ -738,25 +712,13 @@ export default function HorseDetail() {
         </>
       )}
 
-      {/* ── 4. Finish training button — a milestone, styled like one ── */}
-      <div style={{ marginTop: "var(--gap)" }}>
-        <Link
-          to={`/horses/${id}/finish`}
-          className="btn"
-          style={{
-            width: "100%",
-            justifyContent: "center",
-            borderColor: "var(--leather)",
-            color: "var(--leather)",
-            borderWidth: 1.5,
-          }}
-        >
-          <IconRibbon size={16} />
-          Finish training
-        </Link>
-      </div>
+      <details className="card" style={{marginTop:12}}><summary>Finish or review training</summary>
+        <p className="muted">Review the final evaluation when you are ready to finish this horse’s training. Your ride history remains available.</p>
+        <Link to={`/horses/${id}/finish`} className="btn">{horse.data.status === "in_training" ? "Finish training" : "Review final evaluation"}</Link>
+      </details>
 
       {/* ── 5. Edit details (collapsible) ── */}
+      <WeeklyComments horse={horse.data} onDirtyChange={setWeeklyDirty} />
       <details className="card" style={{ marginTop: "var(--gap)" }}>
         <summary
           style={{
@@ -798,6 +760,7 @@ export default function HorseDetail() {
               </p>
             )}
           </div>
+          <HorseProgramFields register={register as unknown as import("react-hook-form").UseFormRegister<HorseProgramForm>} trainingType={editTrainingType} prefix="edit" />
           {editTrainingType === "sale_horse" && (
             <div className="field-row">
               <div className="field">
@@ -816,14 +779,14 @@ export default function HorseDetail() {
                   <input
                     type="number"
                     className="input"
-                    placeholder="Low"
+                    aria-label="Low target sale price" min="0" step="0.01" placeholder="Low"
                     {...register("price_low")}
                   />
                   <span className="muted">–</span>
                   <input
                     type="number"
                     className="input"
-                    placeholder="High"
+                    aria-label="High target sale price" min="0" step="0.01" placeholder="High"
                     {...register("price_high")}
                   />
                 </div>
@@ -838,8 +801,9 @@ export default function HorseDetail() {
               <input
                 id="edit-name"
                 className="input"
-                {...register("name", { required: true })}
+                {...register("name", { required: "Horse name is required", validate: value => !!value.trim() || "Horse name is required" })}
               />
+              {editErrors.name && <p role="alert">{editErrors.name.message}</p>}
             </div>
             <div className="field">
               <label className="label" htmlFor="edit-owner-name">
@@ -948,13 +912,13 @@ export default function HorseDetail() {
               {archiving ? "Archiving…" : "Archive horse"}
             </button>
           )}
-          {horse.data.status === "complete" && (
+          {horse.data.status !== "in_training" && (
             <button
               className="btn btn-ghost btn-sm"
               onClick={handleReopen}
               disabled={reopening}
             >
-              {reopening ? "Re-opening…" : "Re-open training"}
+              {reopening ? "Re-opening…" : horse.data.status === "archived" ? "Resume training" : "Re-open training"}
             </button>
           )}
           <button

@@ -220,7 +220,9 @@ export async function setHorseStatus(id: ID, status: HorseStatus): Promise<void>
   const { error } = await sb()
     .from("horses")
     .update({ status })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .single();
   if (error) throw new Error(error.message);
   invalidate(["horses"]);
   invalidate(["horse", id]);

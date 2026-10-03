@@ -313,8 +313,8 @@ function QuestionRow({
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              width: 18,
-              height: 18,
+              width: 44,
+              height: 44,
               borderRadius: "50%",
               border: "1px solid var(--ink-3, #ccc)",
               background: helpOpen ? "var(--leather)" : "transparent",
@@ -336,6 +336,7 @@ function QuestionRow({
           aria-label={`${referenceVideo.title} phase reference video for ${q.text} (opens in a new tab)`}
         >▶ {referenceVideo.title} — phase reference video ↗</a>}
         <RatingInput
+          readOnly={readOnly}
           name={`q-${q.id}`}
           value={draft.score ?? null}
           onChange={(s) => onScore(q.id, s)}

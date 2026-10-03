@@ -1,3 +1,5 @@
+import useUnsavedChanges from "../hooks/useUnsavedChanges";
+import ErrorState from "./ErrorState";
 import { useEffect, useMemo, useRef, useState } from "react";
 import RatingInput from "./RatingInput";
 import {
@@ -7,7 +9,6 @@ import {
 } from "../content/trifecta";
 import {
   getTrifectaForHorse,
-  listSessionsForHorse,
   upsertTrifectaEvaluation,
   type TrifectaScoreInput,
 } from "../supabase/queries";
@@ -16,7 +17,6 @@ import { qk } from "../supabase/keys";
 import { useToast } from "./Toast";
 import { SkeletonCard } from "./Skeleton";
 import type {
-  SessionWithRatings,
   TqaScore,
   TrifectaEvaluationWithScores,
 } from "../supabase/types";
@@ -31,57 +31,9 @@ interface DraftScore {
   comment?: string;
 }
 
-/** Map per-session ratings into suggested Trifecta score defaults. */
-function suggestionFromSessions(
-  sessions: SessionWithRatings[],
-): Record<string, TqaScore | undefined> {
-  // No sessions → no suggestions; items render unscored so the trainer
-  // explicitly scores each one rather than confirming a misleading default.
-  if (sessions.length === 0) return {};
-  const ratings = sessions.flatMap((s) => s.ratings ?? []);
-  const tempByText = new Map<string, number[]>();
-  const foundationScores: number[] = [];
-  for (const r of ratings) {
-    if (r.axis_snapshot === "temperament") {
-      const key = r.question_text_snapshot.toLowerCase();
-      const arr = tempByText.get(key) ?? [];
-      arr.push(r.score);
-      tempByText.set(key, arr);
-    } else {
-      foundationScores.push(r.score);
-    }
-  }
-  const avg = (xs: number[]): TqaScore | undefined => {
-    if (xs.length === 0) return undefined;
-    const m = xs.reduce((s, n) => s + n, 0) / xs.length;
-    return Math.max(-3, Math.min(3, Math.round(m))) as TqaScore;
-  };
-  const out: Record<string, TqaScore | undefined> = {};
-  // Foundation + Task Completion items default to the same overall foundation avg.
-  for (const item of TRIFECTA_ITEMS) {
-    if (item.axis === "temperament") continue;
-    out[item.code] = avg(foundationScores);
-  }
-  // Temperament dimensions match by case-insensitive prefix.
-  for (const item of TRIFECTA_ITEMS) {
-    if (item.axis !== "temperament") continue;
-    let scores: number[] = [];
-    for (const [text, arr] of tempByText) {
-      if (text.startsWith(item.text.toLowerCase())) {
-        scores = scores.concat(arr);
-      }
-    }
-    out[item.code] = avg(scores);
-  }
-  return out;
-}
-
 export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   const trifecta = useQuery(qk.trifecta(horseId), () =>
     getTrifectaForHorse(horseId),
-  );
-  const sessions = useQuery(qk.sessions(horseId), () =>
-    listSessionsForHorse(horseId),
   );
   const toast = useToast();
 
@@ -116,8 +68,6 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   }, []);
 
   useEffect(() => {
-    const sessionList = sessions.data ?? [];
-    const suggestion = suggestionFromSessions(sessionList);
     const next: Record<string, DraftScore> = {};
     for (const item of TRIFECTA_ITEMS) {
       const stored = evaluation?.scores.find(
@@ -125,11 +75,17 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
       );
       next[item.code] = stored
         ? { score: stored.score, comment: stored.comment ?? undefined }
-        : { score: suggestion[item.code] };
+        : {};
     }
     setDrafts(next);
     setNotes(evaluation?.notes ?? "");
-  }, [trifecta.data, sessions.data]);
+  }, [horseId, trifecta.data?.evaluation.id]);
+
+  const dirty = notes !== (evaluation?.notes ?? "") || TRIFECTA_ITEMS.some(item => {
+    const stored = evaluation?.scores.find(score => score.item_code === item.code && score.axis === item.axis);
+    return drafts[item.code]?.score !== stored?.score || (drafts[item.code]?.comment ?? "") !== (stored?.comment ?? "");
+  });
+  const {dialog: unsavedDialog} = useUnsavedChanges(dirty && !saving && savedAt === null);
 
   const grouped = useMemo(() => {
     const map: Record<string, TrifectaItem[]> = {
@@ -148,6 +104,7 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
 
   const save = async () => {
     setError(null);
+    if (trifecta.error || trifecta.data === undefined) { setError("The saved evaluation could not be loaded. Retry before saving."); return; }
     const scores: TrifectaScoreInput[] = TRIFECTA_ITEMS.filter(
       (item) => typeof drafts[item.code]?.score === "number",
     ).map((item) => ({
@@ -189,21 +146,14 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
     }
   };
 
-  const sessionCount = (sessions.data ?? []).length;
-
-  if (
-    (trifecta.data === undefined && trifecta.loading) ||
-    (sessions.data === undefined && sessions.loading)
-  ) {
-    return <SkeletonCard lines={4} />;
-  }
+  if (trifecta.error) return <ErrorState error={trifecta.error} onRetry={trifecta.refresh} />;
+  if (trifecta.data === undefined) return <SkeletonCard lines={4} />;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {unsavedDialog}
       <p className="muted" style={{ fontSize: 14, margin: 0 }}>
-        {sessionCount === 0
-          ? "No session data yet — score each item manually per the TQA Training Trifecta."
-          : "Final evaluation per the TQA Training Trifecta. Initial suggestions come from this horse's session ratings — adjust as needed before sharing with the owner."}
+        Score only the items you have evaluated. New scores start blank; saved scores remain available to review. Ride averages do not fill this evaluation.
       </p>
       {(["foundation", "task_completion", "temperament"] as const).map(
         (axis) => (
@@ -287,6 +237,7 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
                       rows={1}
                       className="input"
                       style={{ fontSize: 12, marginTop: 8 }}
+                      aria-label={`Comment for ${item.text}`}
                       placeholder="Optional comment…"
                       value={draft.comment ?? ""}
                       onChange={(e) =>

@@ -12,6 +12,10 @@ describe("horse log metadata", () => {
     const result = programMetaFromForm({ training_type: "sale_horse", purchase_price: "0", estimated_rides: "0", training_goals: ["heading", "heading", "heeling"] }, existing);
     expect(result).toEqual({ ...existing, purchase_price: 0, estimated_rides: 0, training_goals: ["heading", "heeling"] });
   });
+  it("accepts an untouched checkbox group with no optional goals", () => {
+    const values = { training_type: "sale_horse", training_goals: false } as unknown as import("./HorseProgramFields").HorseProgramForm;
+    expect(programMetaFromForm(values).training_goals).toEqual([]);
+  });
   it("rejects inverted prices and invalid quantities before a write", () => {
     expect(() => programMetaFromForm({ training_type: "sale_horse", price_low: "100", price_high: "50" })).toThrow("low target price");
     expect(() => programMetaFromForm({ training_type: "sale_horse", estimated_rides: "2.5" })).toThrow("whole number");

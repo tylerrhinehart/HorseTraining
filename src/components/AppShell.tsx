@@ -58,7 +58,7 @@ export default function AppShell({ children }: Props) {
 
   const path = location.pathname;
   const isToday = path === "/";
-  const isHorses = path === "/horses" || path === "/horses/new";
+  const isHorses = path.startsWith("/horses") || path.startsWith("/sessions");
   const isReference =
     path.startsWith("/phases") ||
     path.startsWith("/reference") ||
@@ -84,7 +84,7 @@ export default function AppShell({ children }: Props) {
                   className="topbar-horse"
                 >
                   <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                    <span className="topbar-horse-eyebrow">Active</span>
+                    <span className="topbar-horse-eyebrow">Selected horse</span>
                     <strong className="topbar-horse-name" title={activeHorse.name}>
                       {activeHorse.name}
                     </strong>

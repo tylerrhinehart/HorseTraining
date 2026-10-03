@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 import { AuthProvider } from "./auth/AuthProvider";
@@ -10,12 +10,7 @@ initAppearance();
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+const router = createBrowserRouter([{ path: "*", element: <AuthProvider><App /></AuthProvider> }], { basename });
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <BrowserRouter basename={basename}>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
-  </React.StrictMode>,
+  <React.StrictMode><RouterProvider router={router} /></React.StrictMode>,
 );

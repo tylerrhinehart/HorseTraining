@@ -107,7 +107,7 @@ export default function TaskCompletionPicker({
                       aria-label={`${job.name}, Phase ${p}`}
                       aria-pressed={on}
                       onClick={() => toggle(job.code, p)}
-                      style={{ minWidth: 38 }}
+                      style={{ minWidth: 44, minHeight: 44 }}
                     >
                       P{p}
                     </button>

@@ -1,0 +1,4 @@
+Weekly draft survives week-change cancellation via Escape and saves.
+Question failure disables save; Retry and failed atomic save preserve draft; retry saves.
+Ride deletion requires confirmation, cancel keeps ride, confirmed synthetic deletion updates history.
+Evaluation blank/no normalization; draft protected; save, browser PDF download, explicit completion, reopen, archive and resume preserve history.

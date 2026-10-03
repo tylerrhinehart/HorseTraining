@@ -1,0 +1,8 @@
+desktop: empty account onboarding distinguishes empty training list and roster
+desktop/foundation: add validation, owner/goals/metadata, blank scores, navigation/back discard guard, video-return draft, save/edit/reload rider+date+bit+tasks+rating+notes, weekly comments, independent report, search empty state PASS
+desktop/foundation_to_finish: add validation, owner/goals/metadata, blank scores, navigation/back discard guard, video-return draft, save/edit/reload rider+date+bit+tasks+rating+notes, weekly comments, independent report, search empty state PASS
+desktop/sale_horse: add validation, owner/goals/metadata, blank scores, navigation/back discard guard, video-return draft, save/edit/reload rider+date+bit+tasks+rating+notes, weekly comments, independent report, search empty state PASS
+mobile: empty account onboarding distinguishes empty training list and roster
+mobile/foundation: add validation, owner/goals/metadata, blank scores, navigation/back discard guard, video-return draft, save/edit/reload rider+date+bit+tasks+rating+notes, weekly comments, independent report, search empty state PASS
+mobile/foundation_to_finish: add validation, owner/goals/metadata, blank scores, navigation/back discard guard, video-return draft, save/edit/reload rider+date+bit+tasks+rating+notes, weekly comments, independent report, search empty state PASS
+mobile/sale_horse: add validation, owner/goals/metadata, blank scores, navigation/back discard guard, video-return draft, save/edit/reload rider+date+bit+tasks+rating+notes, weekly comments, independent report, search empty state PASS

@@ -20,7 +20,7 @@ Cache/account-switch and horse-route isolation fixes prevent stale responses cro
 
 ### Verification completed
 
-- **48 unit/component tests**, production TypeScript/Vite build and `git diff --check` pass.
+- **53 unit/component tests**, production TypeScript/Vite build and `git diff --check` pass.
 - Disposable PostgreSQL 16.15 at localhost **56432**, separate from existing BeReminded services: `tests/database/run.sh` passed twice. Asserts two-horse separation, persisted Foundation rider and Performance Fence Work P2 + Heading P3, atomic create/edit rollback, rating integrity, cross-account read isolation and foreign-owner write rejection.
 - Actual browser app against local PostgREST/PostgreSQL with synthetic authentication, clearly marked fixture at **4174**: mobile 390×844 Foundation ride entry/save/reload, rider and notes persistence; opening phase video retained unsaved draft. Weekly comments saved/reloaded. Sale horse creation/reloaded form preserved estimated rides 30, purchase price 5000, sale date and Fence Work/Heading goals. Sale ride saved/reloaded with Fence Work P2 + Heading P3 and rider/rating/notes. Switching trainer A→B hid all A horses; switching B→A restored the 3-horse roster without reload after fixing a missing account dependency in `useQuery`.
 - This is **synthetic auth**, not a claim that production signup/signin has been tested. Direct rendering of the actual report component from persisted local fixture data produced `synthetic-sale-report.pdf`. PDFKit read all 3 pages and asserted horse, rider, Fence Work Phase 2, Heading Phase 3, rating 4.0 and exact notes. The rendered page was visually inspected. Fixed unrelated-program phase rows, omitted rider/tasks and cramped temperament labels. IAB embedded viewer/download capture remains a browser-specific unverified path; no repeated capture attempts. Reproduce with `node tests/pdf/verify.mjs` then `swift -module-cache-path /tmp/tqa-swift-cache tests/pdf/inspect.swift docs/pilot/synthetic-sale-report.pdf`.
@@ -63,7 +63,7 @@ May 26 supersedes May 24’s four program choices; Aug 26 prioritizes ride track
 
 ## Concrete review / acceptance gate
 
-Current branch `codex/tqa-pilot-baseline`, HEAD **d8a5174e6a03f7c85098350d5c321d9c496079d9**. Implementation is committed locally on the isolated branch after explicit closeout authorization; see the final response/git log for exact SHA. No push/merge/deployment. The original checkout is still clean at `c937fcc`. `.env.local` is gitignored. Tests include synthetic-auth code only under a separate fixture config, excluded from normal build.
+Current branch `codex/tqa-pilot-baseline`, base **d8a5174e6a03f7c85098350d5c321d9c496079d9**. Implementation is committed locally on the isolated branch after explicit closeout authorization; see the final response/git log for exact SHA. No push/merge/deployment. The original checkout is still clean at `c937fcc`. `.env.local` is gitignored. Tests include synthetic-auth code only under a separate fixture config, excluded from normal build.
 
 | Source / acceptance row | Evidence / remaining decision |
 | --- | --- |
@@ -85,3 +85,7 @@ Current branch `codex/tqa-pilot-baseline`, HEAD **d8a5174e6a03f7c85098350d5c321d
 **Production migration review:** `migration_integrity.sql` is the new minimal integrity/RPC-update migration when program columns and atomic RPCs already exist. `migration_programs.sql` is required only if the existing DB lacks program columns/phases/questions/create/update/finish RPCs; it also includes the integrity additions, swaps constraints and seeds absent resources. Review existing schema first—authenticated reads alone do not prove RPC/migration state. Never run destructive `schema.sql` on existing records, never apply `tests/database/browser-auth.sql` or fixture grants/actors to production. Later read-only live schema inventory verified program columns and atomic RPCs already exist, integrity validators absent, RLS enabled, and no scheduled Free-plan backup. **Only migration_integrity.sql is selected**; see `production-approval.md` for exact scope/rollback/preflight. No live migration was performed. Preserve old question IDs/history and review trigger compatibility against existing data before approval.
 
 Read-only production inspection and bounded approval proposal: [production-approval.md](production-approval.md); [preflight SQL](live-preflight.sql) (validated on local fixture, not run live).
+
+## Trainer UX follow-up
+
+See [ux-audit.md](ux-audit.md) for the prioritized independent review, fixes, repeatable desktop/mobile task journeys, error recovery and remaining limits. Current test count is 53; the final response/git log identifies the additional local commit.

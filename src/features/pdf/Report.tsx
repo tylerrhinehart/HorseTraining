@@ -165,7 +165,8 @@ export function HorseReport({
   const sorted = [...sessions].sort((a, b) =>
     a.occurred_at.localeCompare(b.occurred_at),
   );
-  const points = sessionAverages(sorted);
+  const currentProgramSessions = sorted.filter(session => phases.find(phase => phase.id === session.phase_id)?.program === horse.training_type);
+  const points = sessionAverages(currentProgramSessions);
   const fTrend = trend(points, "foundation");
   const tTrend = trend(points, "temperament");
   const latest = points.length > 0 ? points[points.length - 1] : null;
@@ -175,7 +176,7 @@ export function HorseReport({
   const phaseFor = (id: string) => phases.find((p) => p.id === id)?.name ?? "—";
 
   const referencedQuestionIds = new Set<string>();
-  for (const s of sorted) {
+  for (const s of currentProgramSessions) {
     for (const r of s.ratings ?? []) referencedQuestionIds.add(r.question_id);
   }
   const referencedQuestions = questions
@@ -233,7 +234,7 @@ export function HorseReport({
           <Meta label="Trainer review" value="No automatic certification" />
         </View>
 
-        <Text style={styles.h2}>Per-axis progress</Text>
+        <Text style={styles.h2}>Per-axis progress (current program)</Text>
         <DualLineChart
           scale={scale}
           data={points.map((p, i) => ({
@@ -249,7 +250,7 @@ export function HorseReport({
         ) : (
           <QuestionAveragesTable
             questions={referencedQuestions}
-            sessions={sorted}
+            sessions={currentProgramSessions}
             phaseFor={phaseFor}
             scale={scale}
           />
@@ -302,10 +303,10 @@ export function HorseReport({
                           </Text>
                           <Text style={{ width: 160 }}>{phaseFor(s.phase_id)}</Text>
                           <Text style={{ width: 60, textAlign: "right" }}>
-                            {formatAvg(f, scale)}
+                            {formatAvg(f, phase.scale)}
                           </Text>
                           <Text style={{ width: 70, textAlign: "right" }}>
-                            {formatAvg(t, scale)}
+                            {formatAvg(t, phase.scale)}
                           </Text>
                         </View>
                       );
@@ -330,7 +331,7 @@ export function HorseReport({
               session={s}
               questions={questions}
               phaseFor={phaseFor}
-              scale={scale}
+              scale={phases.find(phase => phase.id === s.phase_id)?.scale ?? scale}
               program={phases.find((phase) => phase.id === s.phase_id)?.program}
             />
           ))

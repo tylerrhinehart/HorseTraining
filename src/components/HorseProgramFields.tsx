@@ -50,7 +50,7 @@ export function programMetaFromForm(values: HorseProgramForm, existing: ProgramM
     if (!Number.isFinite(value) || value < 0 || (key === "estimated_rides" && !Number.isInteger(value))) throw new Error("Enter valid non-negative amounts and a whole number of estimated rides.");
     meta[key] = value;
   }
-  if (values.training_goals !== undefined) meta.training_goals = [...new Set(values.training_goals)];
+  if (values.training_goals !== undefined) meta.training_goals = [...new Set(Array.isArray(values.training_goals) ? values.training_goals : [])];
   if (meta.price_low !== undefined && meta.price_high !== undefined && meta.price_low > meta.price_high) throw new Error("The low target price must not exceed the high price.");
   return meta;
 }
@@ -71,6 +71,7 @@ export default function HorseProgramFields({ register, trainingType, prefix }: {
         <option value="">Not specified</option><option value="colt_starting">Colt Starting</option><option value="tune_up">Foundation Tune-Up</option>
       </select>
     </div>}
+    <details className="card"><summary>Training goals (optional)</summary>
     <fieldset style={{ border: "1px solid var(--line)", padding: 12, borderRadius: 8, margin: "12px 0" }}>
       <legend className="label">Owner / client training goals</legend>
       <p className="muted" style={{ fontSize: 12 }}>Select any combination. Goals guide the work; each ride can record different tasks and phases.</p>
@@ -80,14 +81,16 @@ export default function HorseProgramFields({ register, trainingType, prefix }: {
           <input type="checkbox" value={job.code} {...register("training_goals")} />{job.name}
         </label>)}
       </div>)}</div>
-    </fieldset>
+    </fieldset></details>
+    <details className="card"><summary>Dates and payment details (optional)</summary>
     <div className="field-row">{field("departure_date", "Departure date", "date")}</div>
     {trainingType === "sale_horse" ? <>
       <p className="muted" style={{ fontSize: 12 }}>Sale Horse: training toward a future buyer. The owner pays feed and board.</p>
-      <div className="field-row">{field("sale_date", "Sale / sale date", "date")}{field("estimated_rides", "Estimated rides needed", "number")}{field("purchase_price", "Purchase price", "number")}</div>
+      <div className="field-row">{field("sale_date", "Expected sale date", "date")}{field("estimated_rides", "Estimated rides needed", "number")}{field("purchase_price", "Purchase price", "number")}</div>
     </> : <>
       <p className="muted" style={{ fontSize: 12 }}>Client-owned training: monthly training fee plus feed and board.</p>
       <div className="field-row">{field("payment_method", "Payment method")}{field("payment_amount", "Payment amount", "number")}</div>
     </>}
+    </details>
   </>;
 }

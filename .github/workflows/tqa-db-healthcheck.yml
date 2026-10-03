@@ -1,8 +1,8 @@
 name: TQA database read check
 
-# HOLD: no recurring trigger until the user chooses daily or every five days.
-# Once approved, add schedule with cron '37 9 * * *' and select interval below.
 on:
+  schedule:
+    - cron: '37 9 * * *'
   workflow_dispatch:
 
 permissions:
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
-      TQA_INTERVAL_DAYS: '5'
+      TQA_INTERVAL_DAYS: '1'
       TQA_INTERVAL_ANCHOR: '2026-10-03'
     steps:
       - uses: actions/checkout@v4

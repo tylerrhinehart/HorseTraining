@@ -1,27 +1,27 @@
-# TQA read-only database health check — prepared, scheduling on hold
+# TQA read-only database health check — daily external read check
 
 Project `jdoypblyvhrljqiadzgq`, repository `tylerrhinehart/HorseTraining`.
 
 Inspection 2026-10-03: existing Supabase CLI access reported `ACTIVE_HEALTHY`. A genuine PostgREST GET of `horses?select=id&limit=1`, using the existing public anon key, returned HTTP 200 and an empty JSON array under RLS. No records, policies, functions, extensions or credentials were changed. No horse identifiers/names/owner data or response bodies are logged. This confirms anonymous database read availability, not authenticated trainer sign-in/write readiness.
 
-GitHub repository is public, Actions enabled, default branch `main` (`d8a5174e6a03f7c85098350d5c321d9c496079d9`). Existing secrets `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` already support this check. Only existing workflow is Deploy to GitHub Pages, triggered by `stage` pushes/manual dispatch. No recurring health check is configured. Neither secret value was retrieved from GitHub; the first local check used only the already authorized public `.env.local` values from the pilot checkout.
+GitHub repository is public, Actions enabled, default branch `main` (`d8a5174e6a03f7c85098350d5c321d9c496079d9`). Existing secrets `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` already support this check. Only existing workflow is Deploy to GitHub Pages, triggered by `stage` pushes/manual dispatch. The daily workflow in this change runs at 09:37 UTC, subject to GitHub scheduling delays. Neither secret value was retrieved from GitHub; the first local check used only the already authorized public `.env.local` values from the pilot checkout.
 
 ## Prepared implementation
 
 This isolated branch `codex/tqa-healthcheck` is based directly on verified GitHub main; it does not contain the unreviewed pilot UX commits or pending database migrations.
 
 - `scripts/tqa-db-healthcheck.mjs`: one bounded GET; 20-second timeout; fixed TQA project; anon role/RLS retained; unexpected row visibility fails without printing values; HTTP/network/invalid responses fail visibly. No packages to install, no service-role key or user session.
-- `.github/workflows/tqa-db-healthcheck.yml`: manual dispatch only while cadence is pending. Read-only repository permissions, no persisted checkout credential, existing public app secrets, two-minute job limit. No deployment steps or application build.
+- `.github/workflows/tqa-db-healthcheck.yml`: daily at 09:37 UTC and manual dispatch. Read-only repository permissions, no persisted checkout credential, existing public app secrets, two-minute job limit. No deployment steps or application build.
 - `scripts/tqa-healthcheck-cadence.mjs`: daily or anchor-relative every five UTC days, starting 2026-10-03. Five-day intervals are tested across month/year/leap-year boundaries. `*/5` in day-of-month is deliberately avoided because it resets at the month boundary.
 - Six Node tests pass: read-only bounded request, HTTP failure, no data in errors, fixed-project key transmission guard and cadence transitions.
 
-## Activation gate
+## Approved daily activation
 
-Parent requested **hold all recurring configuration until the user answers daily versus every five days**. No job ID, live trigger, push, merge or deployment exists yet.
+Tyler approved daily checks on 2026-10-03. Publication is restricted to this isolated scheduling change; pilot UX work and database migrations remain separate.
 
-After that decision, add a daily UTC scheduler trigger (e.g. `37 9 * * *`) and set `TQA_INTERVAL_DAYS` to the selected `1` or `5`. Manual dispatch bypasses the gate for an immediate verification. This is a prepared example time, not an agreed delivery time. For five-day cadence, the daily dispatcher performs the database read only when anchor-relative UTC day count is divisible by five; runtime is still subject to GitHub delays/dropouts.
+The configured trigger is `37 9 * * *` (09:37 UTC daily), with `TQA_INTERVAL_DAYS=1`. This is 03:37 in America/Boise during daylight saving time and 02:37 during standard time. Manual dispatch provides an immediate verification, distinct from the first future cron-triggered execution. The retained five-day helper/tests are unused by the daily configuration. Runtime remains subject to GitHub delays/dropouts.
 
-To activate on GitHub, publish **only this scheduling change** on default `main`, then run `gh workflow run tqa-db-healthcheck.yml --ref main`; verify run result/logs and the new workflow's active schedule. Default-branch modification must be authorized before doing it; do not push or merge the entire pilot branch. The current deployment workflow only responds to `stage` pushes; do not assume external Cloudflare settings are known. A different cloud scheduler can invoke the same lightweight read, but do not create duplicate tasks.
+To activate on GitHub, publish **only this scheduling change** on default `main`, then run `gh workflow run tqa-db-healthcheck.yml --ref main`; verify run result/logs and the new workflow's active schedule. Default-branch publication of this minimal check is authorized; do not push or merge the entire pilot branch. The current deployment workflow only responds to `stage` pushes; do not assume external Cloudflare settings are known. A different cloud scheduler can invoke the same lightweight read, but do not create duplicate tasks.
 
 GitHub uses existing secrets. No new credentials, app authorization, database access grants or paid services are required by this prepared workflow. Public repositories receive free standard runners under GitHub's normal policy. It remains important to monitor task failures and Supabase pause-warning emails.
 

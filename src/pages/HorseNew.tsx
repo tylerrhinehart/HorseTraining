@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import useUnsavedChanges from "../hooks/useUnsavedChanges";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { createHorse } from "../supabase/queries";
 import { useActiveHorseId } from "../state/activeHorse";
 import { useToast } from "../components/Toast";
 import { PROGRAMS } from "../content/programs";
-import type { ProgramMeta, TrainingType } from "../supabase/types";
+import HorseProgramFields, { programMetaFromForm, type HorseProgramForm } from "../components/HorseProgramFields";
+import type { TrainingType } from "../supabase/types";
 
-interface FormValues {
+interface FormValues extends HorseProgramForm {
   name: string;
   owner_name: string;
   owner_contact?: string;
@@ -29,33 +31,16 @@ export default function HorseNew() {
     handleSubmit,
     watch,
     formState: { errors, isSubmitting, isDirty },
-  } = useForm<FormValues>({ defaultValues: { training_type: "foundation" } });
+  } = useForm<FormValues>({ defaultValues: { training_type: "foundation", training_goals: [] } });
 
   const trainingType = watch("training_type");
 
-  // Warn before leaving with unsaved edits (browser/OS-level navigation only;
-  // in-app Cancel is an explicit discard).
-  useEffect(() => {
-    if (!isDirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [isDirty]);
+  const { dialog: unsavedDialog } = useUnsavedChanges(isDirty && !isSubmitting);
 
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null);
     try {
-      const program_meta: ProgramMeta = {};
-      if (values.training_type === "sale_horse") {
-        if (values.target_market?.trim())
-          program_meta.target_market = values.target_market.trim();
-        if (values.price_low) program_meta.price_low = Number(values.price_low);
-        if (values.price_high)
-          program_meta.price_high = Number(values.price_high);
-      }
+      const program_meta = programMetaFromForm(values);
       const horse = await createHorse({
         name: values.name,
         owner_name: values.owner_name,
@@ -77,15 +62,85 @@ export default function HorseNew() {
 
   return (
     <div className="view" style={{ maxWidth: 720 }}>
+      {unsavedDialog}
       <div className="eyebrow">new horse</div>
       <h1 className="h-display">Add a horse</h1>
 
       <form className="card" onSubmit={handleSubmit(onSubmit)}>
+        <h3 className="form-section-title">Horse &amp; owner</h3>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="name" className="label">
+              Horse name *
+            </label>
+            <input
+              id="name"
+              className="input"
+              placeholder="e.g. Whiskey Pete"
+              aria-invalid={errors.name ? true : undefined}
+              {...register("name", { required: "Name is required", validate: (value) => value.trim().length > 0 || "Name is required" })}
+            />
+            {errors.name && (
+              <p
+                role="alert"
+                style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}
+              >
+                {errors.name.message}
+              </p>
+            )}
+          </div>
+          <div className="field">
+            <label htmlFor="owner_name" className="label">
+              Owner name *
+            </label>
+            <input
+              id="owner_name"
+              className="input"
+              placeholder="e.g. Jane Smith"
+              aria-invalid={errors.owner_name ? true : undefined}
+              {...register("owner_name", { required: "Owner name is required", validate: value => !!value.trim() || "Owner name is required" })}
+            />
+            {errors.owner_name && (
+              <p
+                role="alert"
+                style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}
+              >
+                {errors.owner_name.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="owner_contact" className="label">
+              Owner contact
+            </label>
+            <input
+              id="owner_contact"
+              className="input"
+              placeholder="Phone, email, or address"
+              {...register("owner_contact")}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="arrival_date" className="label">
+              Arrival date
+            </label>
+            <input
+              id="arrival_date"
+              type="date"
+              className="input"
+              {...register("arrival_date")}
+            />
+          </div>
+        </div>
+
         <h3 className="form-section-title" style={{ marginTop: 0 }}>
           Program
         </h3>
         <div className="field" style={{ marginBottom: 14 }}>
-          <label className="label">Type of training *</label>
+          <span className="label">Type of training *</span>
           <div
             style={{
               display: "grid",
@@ -151,6 +206,8 @@ export default function HorseNew() {
                 <input
                   type="number"
                   className="input"
+                  aria-label="Low target sale price"
+                  min="0" step="0.01"
                   placeholder="Low"
                   {...register("price_low")}
                 />
@@ -158,6 +215,8 @@ export default function HorseNew() {
                 <input
                   type="number"
                   className="input"
+                  aria-label="High target sale price"
+                  min="0" step="0.01"
                   placeholder="High"
                   {...register("price_high")}
                 />
@@ -167,74 +226,7 @@ export default function HorseNew() {
           </>
         )}
 
-        <h3 className="form-section-title">Horse &amp; owner</h3>
-        <div className="field-row">
-          <div className="field">
-            <label htmlFor="name" className="label">
-              Horse name *
-            </label>
-            <input
-              id="name"
-              className="input"
-              placeholder="e.g. Whiskey Pete"
-              aria-invalid={errors.name ? true : undefined}
-              {...register("name", { required: "Name is required" })}
-            />
-            {errors.name && (
-              <p
-                role="alert"
-                style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}
-              >
-                {errors.name.message}
-              </p>
-            )}
-          </div>
-          <div className="field">
-            <label htmlFor="owner_name" className="label">
-              Owner name *
-            </label>
-            <input
-              id="owner_name"
-              className="input"
-              placeholder="e.g. Jane Smith"
-              aria-invalid={errors.owner_name ? true : undefined}
-              {...register("owner_name", { required: "Owner name is required" })}
-            />
-            {errors.owner_name && (
-              <p
-                role="alert"
-                style={{ color: "var(--bad)", fontSize: 12, marginTop: 4 }}
-              >
-                {errors.owner_name.message}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="field-row">
-          <div className="field">
-            <label htmlFor="owner_contact" className="label">
-              Owner contact
-            </label>
-            <input
-              id="owner_contact"
-              className="input"
-              placeholder="Phone, email, or address"
-              {...register("owner_contact")}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="arrival_date" className="label">
-              Arrival date
-            </label>
-            <input
-              id="arrival_date"
-              type="date"
-              className="input"
-              {...register("arrival_date")}
-            />
-          </div>
-        </div>
+        <HorseProgramFields register={register as unknown as import("react-hook-form").UseFormRegister<HorseProgramForm>} trainingType={trainingType} prefix="new" />
 
         <h3 className="form-section-title">Notes</h3>
         <div className="field" style={{ marginBottom: 12 }}>

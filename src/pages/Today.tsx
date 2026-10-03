@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   listInTrainingHorses,
@@ -27,19 +26,11 @@ function prefetchHorse(id: string) {
 }
 
 export default function Today() {
-  const navigate = useNavigate();
   const horses = useQuery(qk.horses("in_training"), () =>
     listInTrainingHorses(),
   );
 
   const list = horses.data ?? [];
-  const singleId = !horses.loading && list.length === 1 ? list[0].id : null;
-
-  // Single in-training horse: land directly on its workspace (no card flash).
-  useEffect(() => {
-    if (singleId) navigate(`/horses/${singleId}`, { replace: true });
-  }, [singleId, navigate]);
-
   if (horses.error && horses.data === undefined) {
     return (
       <div className="view">
@@ -48,8 +39,8 @@ export default function Today() {
     );
   }
 
-  // First load or redirecting to a single horse: show the card skeleton layout.
-  if (horses.loading || singleId) {
+  // Keep the same Today workspace for one or several horses.
+  if (horses.loading) {
     return (
       <div className="view">
         <div style={{ display: "grid", gap: 10 }}>
@@ -68,13 +59,14 @@ function EmptyState() {
   return (
     <div className="view" style={{ textAlign: "center" }}>
       <div className="eyebrow">Today</div>
-      <h1 className="h-display">No horses yet</h1>
+      <h1 className="h-display">No horses in training</h1>
       <p className="muted" style={{ marginBottom: 16 }}>
-        Add a horse to start tracking training.
+        Add a horse, or open your roster to resume training.
       </p>
       <Link to="/horses/new" className="btn btn-leather">
-        Add your first horse
+        Add a horse
       </Link>
+      <Link to="/horses" className="btn btn-ghost">View all horses</Link>
     </div>
   );
 }
@@ -92,12 +84,12 @@ function MultiHorseToday({ horses }: { horses: Horse[] }) {
   const prevWeekAgo = format(subDays(new Date(), 13), "yyyy-MM-dd");
 
   const allDates = sessionDates.data ?? [];
-  const day = (d: string) => d.slice(0, 10);
+  const day = (d: string) => format(parseISO(d), "yyyy-MM-dd");
   const inTrainingIds = new Set(horses.map((h) => h.id));
 
-  const thisWeek = allDates.filter((s) => day(s.occurred_at) >= weekAgo).length;
+  const thisWeek = allDates.filter((s) => inTrainingIds.has(s.horse_id) && day(s.occurred_at) >= weekAgo && day(s.occurred_at) <= today).length;
   const prevWeek = allDates.filter(
-    (s) => day(s.occurred_at) >= prevWeekAgo && day(s.occurred_at) < weekAgo,
+    (s) => inTrainingIds.has(s.horse_id) && day(s.occurred_at) >= prevWeekAgo && day(s.occurred_at) < weekAgo,
   ).length;
   const weekDelta = thisWeek - prevWeek;
 
@@ -119,6 +111,7 @@ function MultiHorseToday({ horses }: { horses: Horse[] }) {
       <div className="eyebrow">Today · {format(new Date(), "EEEE, MMM d")}</div>
       <h1 className="h-display">In training</h1>
 
+      {sessionDates.error && <ErrorState error={sessionDates.error} onRetry={sessionDates.refresh} />}
       <div className="today-summary">
         <div className="summary-tile">
           <span className="lab">Worked today</span>
@@ -131,8 +124,8 @@ function MultiHorseToday({ horses }: { horses: Horse[] }) {
           </span>
           <span className="delta">
             {workedTodayIds.size === horses.length
-              ? "Every horse logged — nice."
-              : `${horses.length - workedTodayIds.size} still to go`}
+              ? "A ride logged for every horse today."
+              : `${horses.length - workedTodayIds.size} without a ride logged today`}
           </span>
         </div>
         <div className="summary-tile">
@@ -168,7 +161,7 @@ function MultiHorseToday({ horses }: { horses: Horse[] }) {
             isActive={h.id === activeId}
             workedToday={workedTodayIds.has(h.id)}
             lastSession={lastByHorse.get(h.id) ?? null}
-            datesReady={!sessionDates.loading || sessionDates.data !== undefined}
+            datesReady={sessionDates.data !== undefined && !sessionDates.error}
           />
         ))}
       </div>
@@ -213,7 +206,7 @@ function TodayCard({
     } else {
       workedLine = {
         text: `${sinceDays} days since last session`,
-        tone: sinceDays >= 3 ? "var(--rust)" : "var(--muted)",
+        tone: "var(--muted)",
       };
     }
   }
@@ -229,7 +222,7 @@ function TodayCard({
     >
       <div className="horse-photo" style={{ background: gradientFor(hashTone(horse.name)) }}>
         <span className="horse-initials">{initialsOf(horse.name)}</span>
-        {isActive && <span className="horse-active-flag">In session</span>}
+        {isActive && <span className="horse-active-flag">Selected horse</span>}
       </div>
       <div className="horse-body">
         <h3 className="horse-name">
@@ -263,7 +256,7 @@ function TodayCard({
           style={{ marginTop: 6, justifyContent: "center" }}
           onClick={(e) => e.stopPropagation()}
         >
-          Log session
+          Log a ride
         </Link>
       </div>
     </div>

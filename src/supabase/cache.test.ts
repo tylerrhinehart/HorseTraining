@@ -95,3 +95,32 @@ describe("mutateCache", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe("account cache isolation", () => {
+  it("does not restore a signed-out account's pending response", async () => {
+    let finish!: (value: string) => void;
+    const pending = fetchQuery(["horses"], () => new Promise<string>((resolve) => { finish = resolve; }));
+    clearCache();
+    mutateCache(["horses"], "new account");
+    finish("old account");
+    await pending;
+    expect(getCached(["horses"])).toBe("new account");
+  });
+
+  it("old request cleanup does not remove the new account's in-flight request", async () => {
+    let finishOld!: (value: string) => void;
+    let finishNew!: (value: string) => void;
+    const oldRequest = fetchQuery(["horses"], () => new Promise<string>((resolve) => { finishOld = resolve; }));
+    clearCache();
+    const newFetcher = vi.fn(() => new Promise<string>((resolve) => { finishNew = resolve; }));
+    const newRequest = fetchQuery(["horses"], newFetcher);
+    finishOld("old account");
+    await oldRequest;
+    const duplicate = fetchQuery(["horses"], newFetcher);
+    expect(newFetcher).toHaveBeenCalledTimes(1);
+    finishNew("new account");
+    await Promise.all([newRequest, duplicate]);
+    expect(getCached(["horses"])).toBe("new account");
+  });
+});

@@ -1,13 +1,16 @@
+import useUnsavedChanges from "../hooks/useUnsavedChanges";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   deleteSession,
   getSession,
+  getHorse,
   listPhases,
   listQuestionsForPhase,
   updateSession,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
+import type { TaskCompletion } from "../supabase/types";
 import { qk } from "../supabase/keys";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
 import TaskCompletionPicker from "../components/TaskCompletionPicker";
@@ -15,9 +18,9 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
-import { bitLabel } from "../content/programs";
+import { bitLabel, bitOptions } from "../content/programs";
 import { formatAvg, sessionAverage } from "../utils/stats";
-import { formatDateTime } from "../utils/dates";
+import { formatDateTime, localDateTimeInput } from "../utils/dates";
 
 /** Two-column ghost of the score sheet (8 Foundation + 6 Temperament rows). */
 function ScoreSheetSkeleton() {
@@ -46,6 +49,7 @@ export default function SessionDetail() {
   const toast = useToast();
 
   const session = useQuery(id ? qk.session(id) : null, () => getSession(id!));
+  const horse = useQuery(session.data ? qk.horse(session.data.horse_id) : null, () => getHorse(session.data!.horse_id));
   const phaseId = session.data?.phase_id;
   const phases = useQuery(qk.phases(), () => listPhases());
   const phase = phases.data?.find((p) => p.id === phaseId) ?? null;
@@ -56,6 +60,11 @@ export default function SessionDetail() {
 
   const [drafts, setDrafts] = useState<Record<string, DraftRating>>({});
   const [notes, setNotes] = useState("");
+  const [rider, setRider] = useState("");
+  const [bit, setBit] = useState("");
+  const [when, setWhen] = useState("");
+  const [tasks, setTasks] = useState<TaskCompletion[]>([]);
+  const [saveError, setSaveError] = useState("");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -73,6 +82,9 @@ export default function SessionDetail() {
     }
     setDrafts(next);
     setNotes(session.data.notes ?? "");
+    setRider(session.data.rider ?? ""); setBit(session.data.bit ?? "");
+    setWhen(localDateTimeInput(new Date(session.data.occurred_at))); setTasks(session.data.task_completions ?? []);
+    setEditing(false); setSaveError("");
   }, [session.data?.id]);
 
   // Dirty only matters while editing: compare local drafts/notes to the saved
@@ -81,6 +93,7 @@ export default function SessionDetail() {
     editing &&
     !!session.data &&
     ((): boolean => {
+      if (rider !== (session.data!.rider ?? "") || bit !== (session.data!.bit ?? "") || when !== localDateTimeInput(new Date(session.data!.occurred_at)) || JSON.stringify(tasks) !== JSON.stringify(session.data!.task_completions ?? [])) return true;
       if (notes !== (session.data!.notes ?? "")) return true;
       for (const q of questions.data ?? []) {
         const orig = session.data!.ratings.find(
@@ -93,15 +106,7 @@ export default function SessionDetail() {
       return false;
     })();
 
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
+  const { dialog: unsavedDialog } = useUnsavedChanges(dirty && !saving);
 
   if (!id) return null;
 
@@ -116,7 +121,8 @@ export default function SessionDetail() {
   if (session.data === undefined) {
     return (
       <div className="view">
-        <div className="eyebrow">Session</div>
+        {unsavedDialog}
+      <div className="eyebrow">Saved ride · {horse.data?.name ?? "Horse"}</div>
         <h1 className="h-display">Session</h1>
         <SkeletonCard lines={2} />
         <div style={{ height: 12 }} />
@@ -155,6 +161,7 @@ export default function SessionDetail() {
       }
       setDrafts(next);
       setNotes(s.notes ?? "");
+      setRider(s.rider ?? ""); setBit(s.bit ?? ""); setWhen(localDateTimeInput(new Date(s.occurred_at))); setTasks(s.task_completions ?? []);
     }
     setEditing(false);
     setConfirmDiscard(false);
@@ -166,7 +173,9 @@ export default function SessionDetail() {
   };
 
   const save = async () => {
-    setSaving(true);
+    if (questions.error || !questions.data?.length) { setSaveError("The score sheet is unavailable. Retry before saving."); return; }
+    if (!when || Number.isNaN(new Date(when).getTime())) { setSaveError("Enter a valid ride date and time."); return; }
+    setSaving(true); setSaveError("");
     try {
       const ratings = (questions.data ?? [])
         .filter((q) => typeof drafts[q.id]?.score === "number")
@@ -177,11 +186,11 @@ export default function SessionDetail() {
           score: drafts[q.id]!.score!,
           comment: drafts[q.id]?.comment ?? null,
         }));
-      await updateSession(session.data!.id, { notes, ratings });
+      await updateSession(session.data!.id, { notes, ratings, rider: rider || null, bit: bit || null, occurred_at: new Date(when).toISOString(), task_completions: tasks });
       setEditing(false);
       toast.success("Session updated");
     } catch (err) {
-      toast.error((err as Error).message);
+      setSaveError((err as Error).message); toast.error((err as Error).message);
     } finally {
       setSaving(false);
     }
@@ -193,7 +202,7 @@ export default function SessionDetail() {
       await deleteSession(session.data!.id);
       navigate(`/horses/${session.data!.horse_id}`);
     } catch (err) {
-      toast.error((err as Error).message);
+      setSaveError((err as Error).message); toast.error((err as Error).message);
       setDeleting(false);
       setConfirmDelete(false);
     }
@@ -204,7 +213,8 @@ export default function SessionDetail() {
 
   return (
     <div className="view">
-      <div className="eyebrow">Session</div>
+      {unsavedDialog}
+      <div className="eyebrow">Saved ride · {horse.data?.name ?? "Horse"}</div>
       <h1 className="h-display">{phase?.name ?? "Session"}</h1>
       <p className="muted" style={{ margin: "4px 0 4px", fontSize: 14 }}>
         {formatDateTime(session.data.occurred_at)}
@@ -240,7 +250,7 @@ export default function SessionDetail() {
             className="btn btn-leather btn-sm"
             onClick={() => setEditing(true)}
           >
-            Edit
+            Edit ride
           </button>
         ) : (
           <button className="btn btn-ghost btn-sm" onClick={cancelEdit}>
@@ -251,30 +261,23 @@ export default function SessionDetail() {
           className="btn btn-danger btn-sm"
           onClick={() => setConfirmDelete(true)}
         >
-          Delete
+          Delete ride
         </button>
       </div>
 
-      {(session.data.rider || session.data.bit) && (
-        <p className="mono muted" style={{ margin: "0 0 12px", fontSize: 13 }}>
-          {session.data.rider && <>Rider: {session.data.rider}</>}
-          {session.data.rider && session.data.bit && " · "}
-          {session.data.bit && <>Bit: {bitLabel(session.data.bit)}</>}
-        </p>
-      )}
+      {editing ? <div className="card field-row">
+        <div className="field"><label className="label" htmlFor="edit-ride-when">When</label><input id="edit-ride-when" className="input" type="datetime-local" value={when} onChange={e=>setWhen(e.target.value)} /></div>
+        <div className="field"><label className="label" htmlFor="edit-ride-rider">Rider</label><input id="edit-ride-rider" className="input" value={rider} onChange={e=>setRider(e.target.value)} /></div>
+        {phase?.scale === "five" && <div className="field"><label className="label" htmlFor="edit-ride-bit">Bit</label><select id="edit-ride-bit" className="input" value={bit} onChange={e=>setBit(e.target.value)}><option value="">Not recorded</option>{bitOptions(phase.program).map(option=><option key={option.code} value={option.code}>{option.label}</option>)}</select></div>}
+      </div> : <p className="muted">Rider: {session.data.rider || "Not recorded"}{session.data.bit && <> · {bitLabel(session.data.bit, phase?.program)}</>}</p>}
+      {(phase?.scale === "five" || tasks.length > 0) && <TaskCompletionPicker value={editing ? tasks : session.data.task_completions} onChange={setTasks} readOnly={!editing} />}
 
-      {session.data.task_completions?.length > 0 && (
-        <TaskCompletionPicker
-          value={session.data.task_completions}
-          onChange={() => {}}
-          readOnly
-        />
-      )}
 
-      {questions.loading ? (
+      {questions.error ? <ErrorState error={questions.error} onRetry={questions.refresh} /> : questions.loading ? (
         <ScoreSheetSkeleton />
       ) : (
         <PhaseScoreSheet
+          phaseCode={phase?.code}
           questions={questions.data ?? []}
           drafts={drafts}
           onScore={setScore}
@@ -285,9 +288,10 @@ export default function SessionDetail() {
       )}
 
       <div className="card">
-        <div className="label">Session notes</div>
+        <label className="label" htmlFor="edit-ride-notes">Ride notes</label>
         {editing ? (
           <textarea
+            id="edit-ride-notes"
             rows={3}
             className="input"
             value={notes}
@@ -304,6 +308,7 @@ export default function SessionDetail() {
         )}
       </div>
 
+      {saveError && <p role="alert" className="alert-error">{saveError}</p>}
       {editing && (
         <div
           style={{
@@ -318,7 +323,7 @@ export default function SessionDetail() {
           </button>
           <button
             className="btn btn-leather"
-            disabled={saving}
+            disabled={saving || !!questions.error || questions.loading || !questions.data?.length}
             onClick={save}
           >
             {saving ? "Saving…" : "Save changes"}
@@ -339,7 +344,7 @@ export default function SessionDetail() {
 
       <ConfirmDialog
         open={confirmDelete}
-        title="Delete this session?"
+        title="Delete this ride?"
         body="This permanently removes the session and its scores. This cannot be undone."
         confirmLabel={deleting ? "Deleting…" : "Delete permanently"}
         cancelLabel="Cancel"

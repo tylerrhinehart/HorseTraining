@@ -1,9 +1,10 @@
+import { phaseReferenceVideo, type SourceVideo } from "../content/source-videos";
 import { useMemo, useState } from "react";
 import RatingInput from "./RatingInput";
 import { SCORE_LEGEND } from "../content/tqa-template";
 import { FIVE_FOUNDATION_LEGEND, FIVE_TEMPERAMENT_LEGEND } from "../content/programs";
 import { listResourcesForQuestion } from "../supabase/queries";
-import type { Question, RatingScaleKind, Resource } from "../supabase/types";
+import type { Question, PhaseCode, RatingScaleKind, Resource } from "../supabase/types";
 
 export interface DraftRating {
   score?: number;
@@ -12,6 +13,7 @@ export interface DraftRating {
 
 interface Props {
   questions: Question[];
+  phaseCode?: PhaseCode;
   drafts: Record<string, DraftRating>;
   onScore: (questionId: string, score: number) => void;
   onComment: (questionId: string, comment: string) => void;
@@ -25,6 +27,7 @@ interface Props {
  */
 export default function PhaseScoreSheet({
   questions,
+  phaseCode,
   drafts,
   onScore,
   onComment,
@@ -41,12 +44,14 @@ export default function PhaseScoreSheet({
     return { foundation: f, temperament: t };
   }, [questions]);
 
+  const referenceVideo = phaseReferenceVideo(phaseCode);
   return (
     <div className="space-y-4">
       <ScoreLegend scale={scale} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Column
           title="Foundation / Task Completion"
+          referenceVideo={referenceVideo}
           questions={foundation}
           drafts={drafts}
           onScore={onScore}
@@ -182,6 +187,7 @@ function FiveLegendColumn({
 }
 
 interface ColumnProps {
+  referenceVideo?: SourceVideo;
   title: string;
   questions: Question[];
   drafts: Record<string, DraftRating>;
@@ -192,6 +198,7 @@ interface ColumnProps {
 }
 
 function Column({
+  referenceVideo,
   title,
   questions,
   drafts,
@@ -219,6 +226,7 @@ function Column({
         return (
           <QuestionRow
             key={q.id}
+            referenceVideo={referenceVideo}
             question={q}
             index={i}
             draft={draft}
@@ -234,6 +242,7 @@ function Column({
 }
 
 interface QuestionRowProps {
+  referenceVideo?: SourceVideo;
   question: Question;
   index: number;
   draft: DraftRating;
@@ -244,6 +253,7 @@ interface QuestionRowProps {
 }
 
 function QuestionRow({
+  referenceVideo,
   question: q,
   index: i,
   draft,
@@ -303,8 +313,8 @@ function QuestionRow({
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              width: 18,
-              height: 18,
+              width: 44,
+              height: 44,
               borderRadius: "50%",
               border: "1px solid var(--ink-3, #ccc)",
               background: helpOpen ? "var(--leather)" : "transparent",
@@ -320,7 +330,13 @@ function QuestionRow({
             i
           </button>
         </div>
+        {referenceVideo && <a
+          href={referenceVideo.url} target="_blank" rel="noopener noreferrer"
+          className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start", minHeight: 44 }}
+          aria-label={`${referenceVideo.title} phase reference video for ${q.text} (opens in a new tab)`}
+        >▶ {referenceVideo.title} — phase reference video ↗</a>}
         <RatingInput
+          readOnly={readOnly}
           name={`q-${q.id}`}
           value={draft.score ?? null}
           onChange={(s) => onScore(q.id, s)}

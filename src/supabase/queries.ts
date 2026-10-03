@@ -1,3 +1,4 @@
+import { todayLocal } from "../utils/dates";
 import { invalidate } from "./cache";
 import { requireSupabase } from "./client";
 import type {
@@ -26,16 +27,16 @@ const throwIfError = <T>(res: { data: T | null; error: { message: string } | nul
   return res.data as T;
 };
 
-// PostgREST returns PGRST202 when the RPC doesn't exist (migration not yet run
-// on the live DB). Match the message defensively too so a stale code still
-// triggers the multi-step fallback rather than surfacing as a hard failure.
-const isRpcMissing = (err: { code?: string; message?: string } | null): boolean => {
-  if (!err) return false;
-  return (
-    err.code === "PGRST202" ||
-    (err.message?.includes("Could not find the function") ?? false)
-  );
-};
+// Scores must be saved in one database transaction. Older databases require
+// migration_programs.sql; never fall back to deleting/replacing scores in
+// separate requests where a failed insert would destroy the previous record.
+function requireAtomicSave(error: { code?: string; message: string } | null): void {
+  if (!error) return;
+  if (error.code === "PGRST202" || error.message.includes("Could not find the function")) {
+    throw new Error("Saving is unavailable until the database is updated for atomic score saves. Your existing records have not been changed. Ask the app administrator to apply migration_programs.sql.");
+  }
+  throw new Error(error.message);
+}
 
 async function currentUserId(): Promise<ID> {
   const userId = (await sb().auth.getUser()).data.user?.id;
@@ -139,7 +140,7 @@ export async function getHorse(id: ID): Promise<Horse | null> {
 
 export async function createHorse(input: HorseInput): Promise<Horse> {
   const userId = await currentUserId();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const trainingType: TrainingType = input.training_type ?? "foundation";
   // Start the horse on the first phase of its chosen program (Groundwork for
   // Foundation, the Performance Horse Warm-Up for the performance programs).
@@ -188,6 +189,7 @@ export async function updateHorse(
       | "status"
       | "current_phase_id"
       | "program_meta"
+      | "training_type"
     >
   >,
 ): Promise<void> {
@@ -218,7 +220,9 @@ export async function setHorseStatus(id: ID, status: HorseStatus): Promise<void>
   const { error } = await sb()
     .from("horses")
     .update({ status })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .single();
   if (error) throw new Error(error.message);
   invalidate(["horses"]);
   invalidate(["horse", id]);
@@ -333,53 +337,12 @@ export async function createSession(input: SessionInput): Promise<Session> {
     p_task_completions: input.task_completions ?? [],
     p_ratings: input.ratings,
   });
-  const session = isRpcMissing(error)
-    ? await createSessionLegacy(input)
-    : (throwIfError({ data, error }) as Session);
+  requireAtomicSave(error);
+  const session = data as Session;
   invalidate(["sessions", input.horse_id]);
   invalidate(["sessions", "dates"]);
   invalidate(["ratings", input.horse_id]);
   return session;
-}
-
-// Pre-RPC multi-step write, kept as a fallback for databases where the
-// create_session_with_ratings migration has not been applied yet.
-async function createSessionLegacy(input: SessionInput): Promise<Session> {
-  const userId = await currentUserId();
-  const { data: session, error } = await sb()
-    .from("sessions")
-    .insert({
-      user_id: userId,
-      horse_id: input.horse_id,
-      phase_id: input.phase_id,
-      occurred_at: input.occurred_at,
-      notes: input.notes ?? null,
-      rider: input.rider ?? null,
-      bit: input.bit ?? null,
-      task_completions: input.task_completions ?? [],
-    })
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-
-  if (input.ratings.length > 0) {
-    const { error: rerr } = await sb()
-      .from("ratings")
-      .insert(
-        input.ratings.map((r) => ({
-          user_id: userId,
-          session_id: session.id,
-          question_id: r.question_id,
-          axis_snapshot: r.axis,
-          question_text_snapshot: r.question_text_snapshot,
-          score: r.score,
-          comment: r.comment ?? null,
-        })),
-      );
-    if (rerr) throw new Error(rerr.message);
-  }
-
-  return session as Session;
 }
 
 export interface SessionUpdateInput {
@@ -410,54 +373,10 @@ export async function updateSession(
     p_task_completions: input.task_completions ?? null,
     p_ratings: input.ratings ?? null,
   });
-  if (isRpcMissing(error)) {
-    await updateSessionLegacy(id, input);
-  } else if (error) {
-    throw new Error(error.message);
-  }
+  requireAtomicSave(error);
   invalidate(["session", id]);
   invalidate(["sessions"]);
   invalidate(["ratings"]);
-}
-
-// Pre-RPC multi-step edit, kept for databases without the RPC migration.
-async function updateSessionLegacy(
-  id: ID,
-  input: SessionUpdateInput,
-): Promise<void> {
-  const userId = await currentUserId();
-  const patch: Record<string, unknown> = {};
-  if (input.horse_id !== undefined) patch.horse_id = input.horse_id;
-  if (input.phase_id !== undefined) patch.phase_id = input.phase_id;
-  if (input.occurred_at !== undefined) patch.occurred_at = input.occurred_at;
-  if (input.notes !== undefined)
-    patch.notes = input.notes?.trim() ? input.notes.trim() : null;
-  if (input.rider !== undefined)
-    patch.rider = input.rider?.trim() ? input.rider.trim() : null;
-  if (input.bit !== undefined) patch.bit = input.bit || null;
-  if (input.task_completions !== undefined)
-    patch.task_completions = input.task_completions;
-  if (Object.keys(patch).length > 0) {
-    const res = await sb().from("sessions").update(patch).eq("id", id);
-    if (res.error) throw new Error(res.error.message);
-  }
-  if (input.ratings) {
-    const del = await sb().from("ratings").delete().eq("session_id", id);
-    if (del.error) throw new Error(del.error.message);
-    if (input.ratings.length > 0) {
-      const ratingRows = input.ratings.map((r) => ({
-        user_id: userId,
-        session_id: id,
-        question_id: r.question_id,
-        axis_snapshot: r.axis,
-        question_text_snapshot: r.question_text_snapshot,
-        score: r.score,
-        comment: r.comment ?? null,
-      }));
-      const ratingRes = await sb().from("ratings").insert(ratingRows);
-      if (ratingRes.error) throw new Error(ratingRes.error.message);
-    }
-  }
 }
 
 export async function deleteSession(id: ID): Promise<void> {
@@ -483,16 +402,18 @@ export async function listAllSessionsWithRatings(): Promise<SessionWithRatings[]
 export async function getTrifectaForHorse(
   horseId: ID,
 ): Promise<{ evaluation: TrifectaEvaluation; scores: TrifectaScore[] } | null> {
-  const { data: evaluation } = await sb()
+  const { data: evaluation, error: evaluationError } = await sb()
     .from("trifecta_evaluations")
     .select("*")
     .eq("horse_id", horseId)
     .maybeSingle();
+  if (evaluationError) throw new Error(evaluationError.message);
   if (!evaluation) return null;
-  const { data: scores } = await sb()
+  const { data: scores, error: scoresError } = await sb()
     .from("trifecta_scores")
     .select("*")
     .eq("evaluation_id", evaluation.id);
+  if (scoresError) throw new Error(scoresError.message);
   return {
     evaluation: evaluation as TrifectaEvaluation,
     scores: (scores ?? []) as TrifectaScore[],
@@ -528,51 +449,10 @@ export async function upsertTrifectaEvaluation(
       comment: s.comment?.trim() || null,
     })),
   });
-  const evaluation = isRpcMissing(error)
-    ? await upsertTrifectaEvaluationLegacy(input)
-    : (throwIfError({ data, error }) as TrifectaEvaluation);
+  requireAtomicSave(error);
+  const evaluation = data as TrifectaEvaluation;
   invalidate(["trifecta", input.horse_id]);
   return evaluation;
-}
-
-// Pre-RPC multi-step upsert, kept for databases without the RPC migration.
-async function upsertTrifectaEvaluationLegacy(
-  input: TrifectaEvaluationInput,
-): Promise<TrifectaEvaluation> {
-  const userId = await currentUserId();
-  const { data: evaluation, error } = await sb()
-    .from("trifecta_evaluations")
-    .upsert(
-      {
-        user_id: userId,
-        horse_id: input.horse_id,
-        notes: input.notes ?? null,
-        evaluated_at: new Date().toISOString(),
-      },
-      { onConflict: "horse_id" },
-    )
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-
-  await sb().from("trifecta_scores").delete().eq("evaluation_id", evaluation.id);
-  if (input.scores.length > 0) {
-    const { error: serr } = await sb()
-      .from("trifecta_scores")
-      .insert(
-        input.scores.map((s) => ({
-          user_id: userId,
-          evaluation_id: evaluation.id,
-          axis: s.axis,
-          item_code: s.itemCode,
-          item_text_snapshot: s.itemTextSnapshot,
-          score: s.score,
-          comment: s.comment?.trim() || null,
-        })),
-      );
-    if (serr) throw new Error(serr.message);
-  }
-  return evaluation as TrifectaEvaluation;
 }
 
 export async function deleteTrifectaEvaluation(id: ID): Promise<void> {

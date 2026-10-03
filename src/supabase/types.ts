@@ -29,6 +29,15 @@ export interface TaskCompletion {
 
 // Sale-horse target framing + selected performance disciplines.
 export interface ProgramMeta {
+  foundation_subtype?: string;
+  training_goals?: string[];
+  departure_date?: string;
+  payment_method?: string;
+  payment_amount?: number;
+  sale_date?: string;
+  estimated_rides?: number;
+  purchase_price?: number;
+  weekly_comments?: Record<string, string>;
   target_market?: string;
   price_low?: number;
   price_high?: number;

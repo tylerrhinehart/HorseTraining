@@ -4,6 +4,7 @@ import type { RatingScaleKind } from "../supabase/types";
 
 interface Props {
   value: number | null;
+  readOnly?: boolean;
   onChange: (value: number) => void;
   name: string;
   label?: string;
@@ -31,6 +32,7 @@ function formatScore(score: number, scale: RatingScaleKind): string {
 
 export default function RatingInput({
   value,
+  readOnly = false,
   onChange,
   name,
   label,
@@ -81,6 +83,7 @@ export default function RatingInput({
               ]
                 .filter(Boolean)
                 .join(" ")}
+              disabled={readOnly}
               onClick={() => onChange(score)}
               aria-pressed={selected}
               aria-label={`Rate ${formatScore(score, scale)}`}

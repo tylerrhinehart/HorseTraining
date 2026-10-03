@@ -1690,3 +1690,6 @@
     animation: none;
   }
 }
+
+/* Saved ratings remain legible while non-interactive. */
+.rating .dot:disabled { opacity: 1; cursor: default; }

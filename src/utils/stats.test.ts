@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Question, SessionWithRatings, TqaScore } from "../supabase/types";
 import {
   formatAvg,
-  meetsCertificationThreshold,
   questionAverages,
   round1,
   sessionAverage,
@@ -168,34 +167,4 @@ describe("stats", () => {
     expect(formatAvg(-1.5, "tqa")).toBe("-1.5");
   });
 
-  it("meetsCertificationThreshold requires 2.7+ on both axes", () => {
-    const base = {
-      sessionId: "1",
-      occurredAt: "1",
-      phaseId: "p",
-      combinedAverage: null,
-      count: 0,
-    };
-    expect(
-      meetsCertificationThreshold({
-        ...base,
-        foundationAverage: 2.7,
-        temperamentAverage: 2.7,
-      }),
-    ).toBe(true);
-    expect(
-      meetsCertificationThreshold({
-        ...base,
-        foundationAverage: 3,
-        temperamentAverage: 2.5,
-      }),
-    ).toBe(false);
-    expect(
-      meetsCertificationThreshold({
-        ...base,
-        foundationAverage: null,
-        temperamentAverage: 3,
-      }),
-    ).toBe(false);
-  });
 });

@@ -14,7 +14,7 @@ import { SkeletonCard } from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
 import { useToast } from "../components/Toast";
 import { IconRibbon } from "../components/Icons";
-import { sessionAverages, formatAvg } from "../utils/stats";
+import { sessionAverages } from "../utils/stats";
 
 const STEP_LABELS = ["Evaluation", "Report", "Complete"] as const;
 
@@ -66,6 +66,7 @@ export default function HorseFinish() {
     );
   };
   const [marking, setMarking] = useState(false);
+  const [confirmedCompleteId, setConfirmedCompleteId] = useState<string | null>(null);
   const toast = useToast();
 
   const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
@@ -117,7 +118,7 @@ export default function HorseFinish() {
   // Guard: step 3 (the "Training complete" screen) is only valid once the
   // horse has actually been marked complete. Direct navigation otherwise
   // bounces back to step 2 so the trainer must explicitly mark complete.
-  if (step === 3 && horse.data.status !== "complete") {
+  if (step === 3 && horse.data.status !== "complete" && confirmedCompleteId !== id) {
     return <Navigate replace to={`/horses/${id}/finish?step=2`} />;
   }
 
@@ -168,6 +169,7 @@ export default function HorseFinish() {
               setMarking(true);
               try {
                 await setHorseStatus(id, "complete");
+                setConfirmedCompleteId(id);
                 toast.success("Training complete");
                 setStep(3);
               } catch (e) {
@@ -197,7 +199,6 @@ export default function HorseFinish() {
       id={id}
       name={horse.data.name}
       arrival={horse.data.arrival_date}
-      scale={horse.data.training_type === "foundation" ? "tqa" : "five"}
       onDone={() => navigate("/")}
     />
   );
@@ -208,22 +209,15 @@ function CompleteStep({
   id,
   name,
   arrival,
-  scale,
   onDone,
 }: {
   id: string;
   name: string;
   arrival: string | null;
-  scale: "tqa" | "five";
   onDone: () => void;
 }) {
   const sessions = useQuery(qk.sessions(id), () => listSessionsForHorse(id));
   const points = sessionAverages(sessions.data ?? []);
-  const avgs = points
-    .map((p) => p.combinedAverage)
-    .filter((v): v is number => v !== null);
-  const overallAvg =
-    avgs.length > 0 ? avgs.reduce((s, n) => s + n, 0) / avgs.length : null;
   const days = arrival
     ? differenceInCalendarDays(new Date(), parseISO(arrival)) + 1
     : null;
@@ -263,10 +257,7 @@ function CompleteStep({
             {sessions.data === undefined ? "—" : points.length}
           </span>
         </div>
-        <div className="summary-tile">
-          <span className="lab">Overall average</span>
-          <span className="val">{formatAvg(overallAvg, scale)}</span>
-        </div>
+
       </div>
 
       <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>

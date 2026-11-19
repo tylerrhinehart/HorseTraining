@@ -72,6 +72,14 @@ export async function getPhase(id: ID): Promise<Phase | null> {
 
 // ---------- Questions (canonical, read-only after seed) ----------
 
+// Older accounts have the original single-job instruction in their seeded questions.
+function currentQuestionText(question: Question): Question {
+  if (question.text === 'Task Completion — Pick One Job From the "Task Completion" Sheet') {
+    return { ...question, text: "Task Completion — Select the jobs and phases worked today" };
+  }
+  return question;
+}
+
 export async function listQuestionsForPhase(phaseId: ID): Promise<Question[]> {
   const res = await sb()
     .from("questions")
@@ -79,7 +87,7 @@ export async function listQuestionsForPhase(phaseId: ID): Promise<Question[]> {
     .eq("phase_id", phaseId)
     .order("axis", { ascending: true })
     .order("position", { ascending: true });
-  return throwIfError(res) ?? [];
+  return (throwIfError(res) ?? []).map(currentQuestionText);
 }
 
 export async function listAllQuestions(): Promise<Question[]> {
@@ -87,7 +95,7 @@ export async function listAllQuestions(): Promise<Question[]> {
     .from("questions")
     .select("*")
     .order("position", { ascending: true });
-  return throwIfError(res) ?? [];
+  return (throwIfError(res) ?? []).map(currentQuestionText);
 }
 
 export async function getCanonicalPhasesAndQuestions(): Promise<{
@@ -192,9 +200,16 @@ export async function updateHorse(
       | "training_type"
     >
   >,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
-  const res = await sb().from("horses").update(patch).eq("id", id);
+  let query = sb().from("horses").update(patch).eq("id", id);
+  if (expectedUpdatedAt) query = query.eq("updated_at", expectedUpdatedAt);
+  const res = await query.select("id").maybeSingle();
   if (res.error) throw new Error(res.error.message);
+  if (!res.data) {
+    invalidate(["horse", id]);
+    throw new Error("This horse changed or is unavailable. Review the latest details and retry.");
+  }
   invalidate(["horses"]);
   invalidate(["horse", id]);
 }

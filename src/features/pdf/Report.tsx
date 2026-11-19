@@ -17,6 +17,7 @@ import type {
   SessionWithRatings,
   TrifectaEvaluationWithScores,
 } from "../../supabase/types";
+import { goalReviews } from "../../utils/goalReview";
 import { formatDateTime, formatHumanDate } from "../../utils/dates";
 import {
   formatAvg,
@@ -166,7 +167,8 @@ export function HorseReport({
     a.occurred_at.localeCompare(b.occurred_at),
   );
   const currentProgramSessions = sorted.filter(session => phases.find(phase => phase.id === session.phase_id)?.program === horse.training_type);
-  const points = sessionAverages(currentProgramSessions);
+  const points = sessionAverages(currentProgramSessions).filter(point => point.count > 0);
+  const goals = goalReviews(horse, sessions);
   const fTrend = trend(points, "foundation");
   const tTrend = trend(points, "temperament");
   const latest = points.length > 0 ? points[points.length - 1] : null;
@@ -246,7 +248,7 @@ export function HorseReport({
 
         <Text style={styles.h2}>Question averages</Text>
         {referencedQuestions.length === 0 ? (
-          <Text style={styles.muted}>No sessions recorded.</Text>
+          <Text style={styles.muted}>No scores recorded.</Text>
         ) : (
           <QuestionAveragesTable
             questions={referencedQuestions}
@@ -319,6 +321,17 @@ export function HorseReport({
         <Footer generatedAt={generatedAt} />
       </Page>
 
+      {goals.length > 0 && <Page size="LETTER" style={styles.page}>
+        <Text style={styles.h1}>{horse.name} · Training goals</Text>
+        {goals.map(goal => <View key={goal.code} style={{ marginBottom: 14 }}>
+          <Text style={styles.h2}>{goal.name}</Text>
+          <Text>{goal.assessment || "Awaiting trainer assessment."}</Text>
+          {goal.rides.length > 0 ? <>
+            <Text style={styles.muted}>Phases worked: {goal.phases.join(", ")} · Supporting rides: {goal.rides.length}</Text>
+            {goal.rides.map(ride => <Text style={styles.muted} key={ride.id}>{formatDateTime(ride.date)} · Phase {ride.phase}</Text>)}
+          </> : <Text style={styles.muted}>No rides recorded for this goal.</Text>}
+        </View>)}
+      </Page>}
       {/* ----- Page 3: Per-session score sheets ----- */}
       <Page size="LETTER" style={styles.page} wrap>
         <Text style={styles.h1}>Session Score Sheets</Text>
@@ -483,7 +496,7 @@ function SessionScoreSheetBlock({
         {phaseFor(session.phase_id)} · {formatDateTime(session.occurred_at)}
       </Text>
       <Text style={styles.muted}>
-        Foundation {formatAvg(fAvg, scale)} · Temperament {formatAvg(tAvg, scale)}
+        {session.ratings.length ? `Foundation ${formatAvg(fAvg, scale)} · Temperament ${formatAvg(tAvg, scale)}` : "Unscored ride"}
       </Text>
       {session.rider ? <Text style={styles.muted}>Rider: {session.rider}</Text> : null}
       {session.bit ? <Text style={styles.muted}>{bitLabel(session.bit, program)}</Text> : null}

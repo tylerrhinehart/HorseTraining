@@ -152,9 +152,7 @@ export default function SessionNew() {
   const isPerformance = horse.data.training_type !== "foundation";
 
   const total = questions.data?.length ?? 0;
-  const scored =
-    questions.data?.filter((q) => typeof drafts[q.id]?.score === "number")
-      .length ?? 0;
+  const scored = Object.values(drafts).filter(draft => typeof draft.score === "number").length;
 
   const setScore = (qid: string, score: number) =>
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], score } }));
@@ -168,7 +166,7 @@ export default function SessionNew() {
 
   const submit = async () => {
     setError(null);
-    if (questions.error || !questions.data?.length) { setError("The score sheet is unavailable. Retry before saving; your entries are still here."); return; }
+    if (scored > 0 && (questions.error || !questions.data?.length)) { setError("The score sheet is unavailable. Retry before saving; your entries are still here."); return; }
     if (!occurredAt || Number.isNaN(new Date(occurredAt).getTime())) { setError("Enter a valid ride date and time."); return; }
     if (!phaseId) {
       setError("Pick a phase first.");
@@ -183,8 +181,12 @@ export default function SessionNew() {
         score: drafts[q.id]!.score!,
         comment: drafts[q.id]?.comment ?? null,
       }));
-    if (ratings.length === 0) {
-      setError("Score at least one item.");
+    if (ratings.length !== scored) {
+      setError("The score sheet changed. Review your scores before saving.");
+      return;
+    }
+    if (Object.values(drafts).some(draft => draft.comment?.trim() && draft.score == null)) {
+      setError("Add a score for each item with a comment, or move the comment to Ride notes.");
       return;
     }
     setSaving(true);
@@ -200,6 +202,7 @@ export default function SessionNew() {
         ratings,
       });
       toast.success("Ride saved");
+      allowLeave();
       navigate(`/horses/${id}`);
     } catch (err) {
       const message = (err as Error).message;
@@ -282,25 +285,8 @@ export default function SessionNew() {
           </>
       </div>
 
-      {isPerformance && (
-        <TaskCompletionPicker value={tasks} onChange={setTasks} />
-      )}
-
-      <div
-        style={{
-          position: "sticky",
-          top: "calc(60px + env(safe-area-inset-top, 0px))",
-          zIndex: 20,
-          display: "flex",
-          justifyContent: "flex-end",
-          margin: "4px 0 8px",
-        }}
-      >
-        <span className="pill">
-          {scored} of {total} scored
-        </span>
-      </div>
-
+      <details className="card">
+        <summary>{isPerformance ? "Performance warm-up" : "Phase score sheet"} · {scored} of {total} scored</summary>
       {questions.error ? <ErrorState error={questions.error} onRetry={questions.refresh} /> : questions.loading || !phaseId ? (
         <ScoreSheetSkeleton />
       ) : (
@@ -313,6 +299,9 @@ export default function SessionNew() {
           scale={scale}
         />
       )}
+
+      </details>
+      {isPerformance && <TaskCompletionPicker goals={horse.data.program_meta?.training_goals} value={tasks} onChange={setTasks} />}
 
       <div className="card">
         <label className="label" htmlFor="session-notes">
@@ -345,12 +334,12 @@ export default function SessionNew() {
           marginTop: 12,
         }}
       >
-        {total > 0 && scored < total && (
+        {(scored === 0 || scored < total) && (
           <span
             className="muted"
             style={{ fontSize: 13, marginRight: "auto" }}
           >
-            {total - scored} of {total} not yet scored
+            {scored === 0 ? "Saves as unscored · add scores later" : `${total - scored} items unscored`}
           </span>
         )}
         <button type="button" className="btn btn-ghost" onClick={cancel}>
@@ -358,7 +347,7 @@ export default function SessionNew() {
         </button>
         <button
           className="btn btn-leather"
-          disabled={saving || questions.loading || !!questions.error || !questions.data?.length}
+          disabled={saving || !phaseId}
           onClick={submit}
         >
           {saving ? "Saving…" : "Save ride"}

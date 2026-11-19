@@ -21,8 +21,11 @@ import type {
   TrifectaEvaluationWithScores,
 } from "../supabase/types";
 
+import type { Horse } from "../supabase/types";
+import GoalAssessments from "./GoalAssessments";
+
 interface Props {
-  horseId: string;
+  horse: Horse;
   onSaved?: () => void;
 }
 
@@ -31,7 +34,9 @@ interface DraftScore {
   comment?: string;
 }
 
-export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
+export default function TrifectaEvaluation({ horse, onSaved }: Props) {
+  const horseId = horse.id;
+  const [goalDirty, setGoalDirty] = useState(false);
   const trifecta = useQuery(qk.trifecta(horseId), () =>
     getTrifectaForHorse(horseId),
   );
@@ -85,7 +90,7 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
     const stored = evaluation?.scores.find(score => score.item_code === item.code && score.axis === item.axis);
     return drafts[item.code]?.score !== stored?.score || (drafts[item.code]?.comment ?? "") !== (stored?.comment ?? "");
   });
-  const {dialog: unsavedDialog} = useUnsavedChanges(dirty && !saving && savedAt === null);
+  const {dialog: unsavedDialog} = useUnsavedChanges((dirty || goalDirty) && !saving && savedAt === null);
 
   const grouped = useMemo(() => {
     const map: Record<string, TrifectaItem[]> = {
@@ -105,6 +110,7 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   const save = async () => {
     setError(null);
     if (trifecta.error || trifecta.data === undefined) { setError("The saved evaluation could not be loaded. Retry before saving."); return; }
+    if (goalDirty) { setError("Save your goal assessments before continuing."); return; }
     const scores: TrifectaScoreInput[] = TRIFECTA_ITEMS.filter(
       (item) => typeof drafts[item.code]?.score === "number",
     ).map((item) => ({
@@ -152,6 +158,7 @@ export default function TrifectaEvaluation({ horseId, onSaved }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {unsavedDialog}
+      {!!horse.program_meta?.training_goals?.length && <GoalAssessments horse={horse} onDirty={setGoalDirty} />}
       <p className="muted" style={{ fontSize: 14, margin: 0 }}>
         Score only the items you have evaluated. New scores start blank; saved scores remain available to review. Ride averages do not fill this evaluation.
       </p>

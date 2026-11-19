@@ -25,7 +25,7 @@ export default function WeeklyComments({ horse, onDirtyChange }: { horse: Horse;
       try {
         const weekly_comments = { ...horse.program_meta?.weekly_comments };
         if (comment.trim()) weekly_comments[week] = comment.trim(); else delete weekly_comments[week];
-        await updateHorse(horse.id, { program_meta: { ...horse.program_meta, weekly_comments } });
+        await updateHorse(horse.id, { program_meta: { ...horse.program_meta, weekly_comments } }, horse.updated_at);
         dirty.current = false; onDirtyChange?.(false); setFeedback("Weekly comments saved");
       } catch (error) { setFeedback((error as Error).message); }
       finally { setSaving(false); }

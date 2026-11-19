@@ -31,6 +31,7 @@ export interface TaskCompletion {
 export interface ProgramMeta {
   foundation_subtype?: string;
   training_goals?: string[];
+  goal_assessments?: Record<string, string>;
   departure_date?: string;
   payment_method?: string;
   payment_amount?: number;

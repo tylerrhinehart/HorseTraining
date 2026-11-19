@@ -370,7 +370,7 @@ begin
     ('foundation',  4, 'Stage 2 w/ Willing Submission & Vertical Direction — Standing, Walking, Jigging, Trotting, Loping', 'Very Poor', 'Excellent'),
     ('foundation',  5, 'Stage 3 w/ Willing Submission & Vertical Direction — Standing, Walking, Jigging, Trotting, Loping', 'Very Poor', 'Excellent'),
     ('foundation',  6, 'Stage 4 w/ Willing Submission & Vertical Direction — Standing, Walking, Trotting, Rollbacks and Spins', 'Very Poor', 'Excellent'),
-    ('foundation',  7, 'Task Completion — Pick One Job From the "Task Completion" Sheet', 'Very Poor', 'Excellent'),
+    ('foundation',  7, 'Task Completion — Select the jobs and phases worked today', 'Very Poor', 'Excellent'),
     ('temperament', 0, 'Self-preservation (fight or flight)',           'Low',       'High'),
     ('temperament', 1, 'Confidence',                                    'Low',       'High'),
     ('temperament', 2, 'Sensitivity (response to light pressure)',      'Dull',      'Very Responsive'),

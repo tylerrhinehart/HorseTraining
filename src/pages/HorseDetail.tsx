@@ -183,6 +183,13 @@ export default function HorseDetail() {
       ? currentPhaseAvgs.reduce((s, n) => s + n, 0) / currentPhaseAvgs.length
       : null;
 
+  const scoredRides = points.filter(point => point.count > 0).length;
+  const scoredInProgram = points.filter(point =>
+    point.combinedAverage !== null && allPhases.some(phase => phase.id === point.phaseId));
+  const programAverage = scoredInProgram.length
+    ? scoredInProgram.reduce((sum, point) => sum + point.combinedAverage!, 0) / scoredInProgram.length
+    : null;
+
   const nextP = currentPhase ? nextPhase(currentPhase, allPhases) : null;
   // Advancing is a TQA-scale (Foundation) concept — gate it on the phase scale.
   const canAdvance = !!nextP && currentPhase?.scale === "tqa";
@@ -282,7 +289,7 @@ export default function HorseDetail() {
         notes: values.notes || null,
         program_meta,
         ...(changingProgram ? { training_type: values.training_type, current_phase_id: firstPhase!.id } : {}),
-      });
+      }, horse.data!.updated_at);
       reset(values);
       toast.success("Saved");
       setEditSavedAt(Date.now());
@@ -379,7 +386,27 @@ export default function HorseDetail() {
       </div>
       {[phases,sessions,ratings].filter(query=>query.error).map((query,index)=><ErrorState key={index} error={query.error!} onRetry={query.refresh} />)}
       <details className="card" style={{marginTop:12}}><summary>All ride history ({allSessions.length})</summary>
-        {allSessions.length ? [...allSessions].sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at)).map(session=><Link key={session.id} className="btn btn-ghost" style={{display:"flex",justifyContent:"space-between"}} to={`/sessions/${session.id}`}>{formatHumanDate(session.occurred_at)} · {phases.data?.find(phase=>phase.id===session.phase_id)?.name ?? "Ride"}</Link>) : <p className="muted">Saved rides will appear here.</p>}
+        <dl className="ride-stats">
+          <div><dt>Rides</dt><dd>{allSessions.length}</dd></div>
+          <div><dt>Scored rides</dt><dd>{scoredRides}</dd></div>
+          <div><dt>Current program average</dt><dd>{formatAvg(programAverage, scale)}</dd></div>
+        </dl>
+        {allSessions.length ? [...allSessions].reverse().map(session => {
+          const unscored = session.ratings.length === 0;
+          const jobs = (session.task_completions ?? []).map(task => `${taskJobName(task.job)} P${task.phase}`);
+          return (
+            <article key={session.id} className="task-row">
+              <div className="task-choice">
+                <strong>{formatHumanDate(session.occurred_at)} · {unscored ? "Unscored" : "Scored"}</strong>
+                <Link className="btn btn-ghost btn-sm" to={`/sessions/${session.id}${unscored ? "?edit=scores" : ""}`}>
+                  {unscored ? "Add scores" : "Review ride"}
+                </Link>
+              </div>
+              <p className="muted">{[phases.data?.find(phase => phase.id === session.phase_id)?.name, ...jobs].filter(Boolean).join(" · ")}</p>
+              {session.notes && <p>{session.notes}</p>}
+            </article>
+          );
+        }) : <p className="muted">Saved rides will appear here.</p>}
       </details>
       {!detailsReady ? (
         <>

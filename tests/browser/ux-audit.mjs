@@ -27,6 +27,7 @@ for(const [size,viewport] of [['desktop',{width:1280,height:900}],['mobile',{wid
   await page.getByRole('link',{name:`Log a ride for ${name}`,exact:true}).click();await page.getByRole('heading',{name:'Log a ride'}).waitFor();
   await page.getByLabel('Rider',{exact:true}).fill('Wade UX');await page.getByLabel('When',{exact:true}).fill('2026-10-02T17:00');
   await page.getByLabel('Ride notes',{exact:true}).fill('Unsaved UX ride notes');
+  await page.locator('summary').filter({hasText:/^(Performance warm-up|Phase score sheet) ·/}).click();
   const firstGroup=page.locator('.rating[role="group"]').first();await firstGroup.getByRole('button',{name:program==='foundation'?'Rate +2':'Rate 4',exact:true}).click();
   if(program!=='foundation'){await page.getByLabel('Bit (this week)').selectOption('bit_2');await page.getByRole('button',{name:'Fence Work, Phase 2',exact:true}).click();await page.getByRole('button',{name:'Heading, Phase 3',exact:true}).click();}
   await page.getByRole('link',{name:/^Reference$/i}).click();await page.getByRole('dialog',{name:'Leave without saving?'}).waitFor();await page.getByRole('button',{name:'Keep editing',exact:true}).click();assert.equal(await page.getByLabel('Ride notes',{exact:true}).inputValue(),'Unsaved UX ride notes');

@@ -1,6 +1,6 @@
 import useUnsavedChanges from "../hooks/useUnsavedChanges";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   deleteSession,
   getSession,
@@ -47,6 +47,8 @@ export default function SessionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const [params] = useSearchParams();
+  const openScores = params.get("edit") === "scores";
 
   const session = useQuery(id ? qk.session(id) : null, () => getSession(id!));
   const horse = useQuery(session.data ? qk.horse(session.data.horse_id) : null, () => getHorse(session.data!.horse_id));
@@ -84,8 +86,9 @@ export default function SessionDetail() {
     setNotes(session.data.notes ?? "");
     setRider(session.data.rider ?? ""); setBit(session.data.bit ?? "");
     setWhen(localDateTimeInput(new Date(session.data.occurred_at))); setTasks(session.data.task_completions ?? []);
-    setEditing(false); setSaveError("");
-  }, [session.data?.id]);
+    setEditing(!session.data.ratings.length && openScores);
+    setSaveError("");
+  }, [session.data?.id, openScores]);
 
   // Dirty only matters while editing: compare local drafts/notes to the saved
   // session so we can guard against discarding unsaved changes.
@@ -250,7 +253,7 @@ export default function SessionDetail() {
             className="btn btn-leather btn-sm"
             onClick={() => setEditing(true)}
           >
-            Edit ride
+            {session.data.ratings.length ? "Edit ride" : "Add scores"}
           </button>
         ) : (
           <button className="btn btn-ghost btn-sm" onClick={cancelEdit}>
@@ -270,7 +273,7 @@ export default function SessionDetail() {
         <div className="field"><label className="label" htmlFor="edit-ride-rider">Rider</label><input id="edit-ride-rider" className="input" value={rider} onChange={e=>setRider(e.target.value)} /></div>
         {phase?.scale === "five" && <div className="field"><label className="label" htmlFor="edit-ride-bit">Bit</label><select id="edit-ride-bit" className="input" value={bit} onChange={e=>setBit(e.target.value)}><option value="">Not recorded</option>{bitOptions(phase.program).map(option=><option key={option.code} value={option.code}>{option.label}</option>)}</select></div>}
       </div> : <p className="muted">Rider: {session.data.rider || "Not recorded"}{session.data.bit && <> · {bitLabel(session.data.bit, phase?.program)}</>}</p>}
-      {(phase?.scale === "five" || tasks.length > 0) && <TaskCompletionPicker value={editing ? tasks : session.data.task_completions} onChange={setTasks} readOnly={!editing} />}
+      {(phase?.scale === "five" || tasks.length > 0) && <TaskCompletionPicker goals={horse.data?.program_meta?.training_goals} value={editing ? tasks : session.data.task_completions} onChange={setTasks} readOnly={!editing} />}
 
 
       {questions.error ? <ErrorState error={questions.error} onRetry={questions.refresh} /> : questions.loading ? (

@@ -29,7 +29,7 @@ const PERFORMANCE_FOUNDATION: string[] = [
   "Stage 2 w/ Willing Submission & Vertical Direction — Standing, Walking, Jigging, Trotting, Loping",
   "Stage 3 w/ Willing Submission & Vertical Direction — Standing, Walking, Jigging, Trotting, Loping",
   "Stage 4 w/ Willing Submission & Vertical Direction — Standing, Walking, Trotting, Rollbacks and Spins",
-  'Task Completion — Pick One Job From the "Task Completion" Sheet',
+  'Task Completion — Select the jobs and phases worked today',
 ];
 
 // Temperament column (6 rows). Note the warm-up labels self-preservation

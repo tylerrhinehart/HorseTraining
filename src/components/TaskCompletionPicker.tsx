@@ -1,125 +1,74 @@
-import {
-  TASK_COMPLETION_GROUPS,
-  LEGACY_TASK_JOBS,
-  TASK_PHASES,
-  taskJobName,
-} from "../content/programs";
 import type { TaskCompletion } from "../supabase/types";
+import { TASK_COMPLETION_GROUPS, TASK_COMPLETION_JOBS, LEGACY_TASK_JOBS, TASK_PHASES, taskJobName, type TaskJob } from "../content/programs";
+import { DISCIPLINE_MATERIALS, PERFORMANCE_STANDARDS } from "../content/disciplineResources";
 
 interface Props {
   value: TaskCompletion[];
   onChange: (next: TaskCompletion[]) => void;
+  goals?: string[];
   readOnly?: boolean;
 }
 
-/**
- * Task Completion picker for the performance warm-up (sheet row 8). The trainer
- * goes through the warm-up, then picks one or more jobs + the phase worked that
- * day — e.g. "Fence Work · Phase 2". Like ordering at Subway: pick the jobs the
- * horse is being trained for.
- */
-export default function TaskCompletionPicker({
-  value,
-  onChange,
-  readOnly = false,
-}: Props) {
-  const toggle = (job: string, phase: number) => {
-    const existing = value.find((t) => t.job === job);
-    if (existing && existing.phase === phase) {
-      onChange(value.filter((t) => t.job !== job)); // unselect
-    } else if (existing) {
-      onChange(value.map((t) => (t.job === job ? { job, phase } : t)));
-    } else {
-      onChange([...value, { job, phase }]);
-    }
-  };
-
-  if (readOnly) {
-    if (value.length === 0) return null;
-    return (
-      <div className="card">
-        <div
-          className="mono muted"
-          style={{ fontSize: 10, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 8 }}
-        >
-          Task completions
-        </div>
-        <ul style={{ margin: 0, paddingLeft: 16 }}>
-          {value.map((t) => (
-            <li key={t.job} style={{ fontSize: 14 }}>
-              {taskJobName(t.job)} · Phase {t.phase}
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
+function TaskResources({ job, phase }: TaskCompletion) {
+  const material = DISCIPLINE_MATERIALS[job];
+  const name = taskJobName(job);
+  const videos = material?.phaseVideos?.[phase] ?? [];
   return (
-    <div className="card">
-      <div className="card-head">
-        <h2 className="card-title">Task completion</h2>
-        <span className="card-meta">pick the job(s) + phase worked today</span>
-      </div>
-      <a className="btn btn-ghost btn-sm" style={{ minHeight: 44, marginBottom: 8 }} href="https://youtu.be/B7lJWXfj4vY" target="_blank" rel="noopener noreferrer">▶ Performance warm-up reference video ↗</a>
-      <p className="muted" style={{ fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>
-        Each job is worked through Phases 1–4 — tap the phase worked today
-        (tap it again to unselect).
-      </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {[...TASK_COMPLETION_GROUPS, { name: "Previously recorded tasks", jobs: LEGACY_TASK_JOBS.filter((job) => value.some((task) => task.job === job.code)) }].filter((group) => group.jobs.length > 0).map((group) => (
-          <fieldset key={group.name} style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend style={{ fontWeight: 600, paddingTop: 12 }}>{group.name}</legend>
-            {group.jobs.map((job) => {
-          const selected = value.find((t) => t.job === job.code);
-          return (
-            <div
-              key={job.code}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 10,
-                flexWrap: "wrap",
-                borderTop: "1px solid var(--line)",
-                paddingTop: 8,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 14,
-                  fontWeight: selected ? 600 : 400,
-                  color: selected ? "var(--ink)" : "var(--ink-2)",
-                  flex: "1 1 180px",
-                  minWidth: 0,
-                }}
-              >
-                {job.name}
-              </span>
-              <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                {TASK_PHASES.map((p) => {
-                  const on = selected?.phase === p;
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      className={`btn btn-sm ${on ? "btn-leather" : "btn-ghost"}`}
-                      aria-label={`${job.name}, Phase ${p}`}
-                      aria-pressed={on}
-                      onClick={() => toggle(job.code, p)}
-                      style={{ minWidth: 44, minHeight: 44 }}
-                    >
-                      P{p}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-            })}
-          </fieldset>
-        ))}
-      </div>
+    <div className="task-resources">
+      {material?.descriptions?.[phase - 1] && <span>{material.descriptions[phase - 1]}</span>}
+      {videos.map((id, index) => (
+        <a key={id} href={`https://youtu.be/${id}`} target="_blank" rel="noreferrer">
+          {name} P{phase} · Judges Corner video{videos.length > 1 ? ` ${index + 1}` : ""} ↗
+        </a>
+      ))}
+      {material?.disciplineVideo && <a href={`https://youtu.be/${material.disciplineVideo}`} target="_blank" rel="noreferrer">{name} · Judges Corner video ↗</a>}
+      {material && <a href={material.sheet} target="_blank" rel="noreferrer">{name} · TQA judging sheet ↗</a>}
+      {!material && <a href={PERFORMANCE_STANDARDS} target="_blank" rel="noreferrer">Browse TQA performance standards ↗</a>}
     </div>
   );
+}
+
+export default function TaskCompletionPicker({ value, onChange, goals = [], readOnly = false }: Props) {
+  function toggle(job: string, phase: number) {
+    const existing = value.find(task => task.job === job);
+    if (!existing) onChange([...value, { job, phase }]);
+    else if (existing.phase === phase) onChange(value.filter(task => task.job !== job));
+    else onChange(value.map(task => task.job === job ? { job, phase } : task));
+  }
+
+  if (readOnly) {
+    if (!value.length) return null;
+    return <section className="card"><h2 className="card-title">Task completions</h2>
+      {value.map(task => <div key={task.job} className="task-row"><strong>{taskJobName(task.job)} · Phase {task.phase}</strong><TaskResources {...task} /></div>)}
+    </section>;
+  }
+
+  function group(title: string, jobs: TaskJob[]) {
+    if (!jobs.length) return null;
+    return <fieldset key={title} className="task-group"><legend>{title}</legend>
+      {jobs.map(job => {
+        const selected = value.find(task => task.job === job.code);
+        return <div key={job.code} className="task-row">
+          <div className="task-choice"><span>{job.name}</span><div className="task-phases">
+            {TASK_PHASES.map(phase => <button key={phase} type="button"
+              className={`btn btn-sm ${selected?.phase === phase ? "btn-leather" : "btn-ghost"}`}
+              aria-label={`${job.name}, Phase ${phase}`} aria-pressed={selected?.phase === phase}
+              onClick={() => toggle(job.code, phase)}>P{phase}</button>)}
+          </div></div>
+          {selected && <TaskResources {...selected} />}
+        </div>;
+      })}
+    </fieldset>;
+  }
+
+  const agreed = TASK_COMPLETION_JOBS.filter(job => goals.includes(job.code));
+  const others = TASK_COMPLETION_GROUPS.map(({ name, jobs }) => group(name, jobs.filter(job => !goals.includes(job.code))));
+  return <section className="card"><h2 className="card-title">Task completion</h2>
+    <p>Select the jobs and phases worked today.</p>
+    {group("Agreed training goals", agreed)}
+    {agreed.length && agreed.length < TASK_COMPLETION_JOBS.length
+      ? <details open={value.some(task => !goals.includes(task.job)) || undefined}><summary>Other disciplines</summary>{others}</details>
+      : others}
+    {group("Previously recorded tasks", LEGACY_TASK_JOBS.filter(job => value.some(task => task.job === job.code)))}
+  </section>;
 }

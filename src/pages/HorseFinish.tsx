@@ -132,7 +132,7 @@ export default function HorseFinish() {
           {horse.data.name} · review and score each item before sharing with
           the owner.
         </p>
-        <TrifectaEvaluation horseId={id} onSaved={() => setStep(2)} />
+        <TrifectaEvaluation key={id} horse={horse.data} onSaved={() => setStep(2)} />
         <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 14 }}>
           <Link to={`/horses/${id}`} className="btn btn-ghost">
             ← Back to horse

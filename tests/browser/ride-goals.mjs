@@ -19,7 +19,7 @@ try {
   await page.getByRole("button", {name:"Add horse", exact:true}).click();
   await page.getByRole("heading", {name, exact:true}).waitFor();
   const horseUrl = page.url();
-  await page.getByRole("link", {name:"Start ride with score sheet"}).click();
+  await page.getByRole("link", { name: "Start Ride", exact: true }).click();
   const sheet = page.locator("details").filter({ has: page.locator("summary", {hasText:"Performance warm-up"}) });
   assert.equal(await sheet.evaluate(element => element.open), true);
   await sheet.locator('.rating[role="group"]').first().waitFor();

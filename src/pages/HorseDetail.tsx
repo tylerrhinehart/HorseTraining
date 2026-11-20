@@ -592,7 +592,7 @@ export default function HorseDetail() {
                 <div style={{ marginBottom: 16 }}>
                   <p>Use this sheet for the warm-up and the jobs worked during the ride.</p>
                   {horse.data.status === "in_training" && <Link className="btn btn-leather" to={`/horses/${id}/sessions/new?sheet=open`}>
-                    Start ride with score sheet
+                    Start Ride
                   </Link>}
                 </div>
               )}

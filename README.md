@@ -14,13 +14,24 @@ A Vite + React app backed by Supabase. The observed public pilot is https://tqa.
    ```
    - `VITE_SUPABASE_URL` — your project URL (e.g. `https://xxxx.supabase.co`)
    - `VITE_SUPABASE_ANON_KEY` — the project's publishable / anon API key
-3. For a **fresh disposable database only**, initialize with `supabase/schema.sql`. It drops existing tables. For an existing database, review `supabase/migration_programs.sql` and take a backup before applying changes. Score saving requires its atomic RPC functions. For existing installations with the program and integrity migrations, apply `supabase/migration_ride_accuracy.sql` to enable version-checked ride corrections.
+3. Use a **new local or staging Supabase project**. Apply `supabase/schema.sql`, then `supabase/ride_drafts.sql` in that order, with a privileged database connection. This branch intentionally has no path for migrating legacy data. The old `migration_*.sql` files are retained as history only; do not apply them after the new schema. Do not point local tests or provisioning at a live project.
 4. Start the dev server:
    ```
    npm run dev
    ```
 
 `.env` is gitignored. Both vars are read by `src/supabase/client.ts`.
+
+## Facility and voice pilot
+
+- Verify your Supabase Auth email, then register a facility. Facility owners invite coworkers by generating a one-time signup link for the coworker's verified email address. A facility link or ID alone does not grant access.
+- Use a separate platform operator account for facility management. Follow [facility setup](supabase/facilities.md) to grant this role, then enroll and verify its TOTP factor before using the platform console. Never give an operator grant through the public signup flow.
+- Voice is opt-in per facility. Deploy the `transcribe-ride-turn` Supabase Edge Function to staging, set `OPENAI_API_KEY` as a backend-only function secret and `TQA_VOICE_ALLOWED_ORIGINS` to the approved frontend origins, and enable voice for the test facility using the platform console. The browser must be on HTTPS (or localhost) and the user must explicitly allow the microphone. The UI shows readback and requires confirmation; the app does not retain raw audio or transcripts. Test with synthetic speech before using real barn audio.
+- Voice starts with foreground push-to-talk for the Foundation column of Phase 1. Choose a horse and phase, say the metric and signed score, confirm it into the recoverable draft, and save the ride to publish it to history. Manual entry remains available. Background listening, lock-screen capture, and live arena readiness are not claimed.
+
+## Verification
+
+Run `npm test` and `npm run build` using Node 22. Run `sh tests/database/run.sh` only with a disposable PostgreSQL instance listening on `127.0.0.1:56432` with database `tqa_test`; it uses fixture Auth roles and synthetic users. For an optional REST smoke check, load `tests/database/browser-auth.sql` on that same disposable database, expose PostgREST on `127.0.0.1:56433` with the fixture-only `authenticated` role, start `node tests/browser/proxy.mjs` and run `node tests/database/postgrest.mjs`. Never expose the synthetic actor-header configuration outside localhost. These checks do not replace verification with real Supabase Auth and a physical phone/headset on a separate staging project.
 
 ## Deployment
 

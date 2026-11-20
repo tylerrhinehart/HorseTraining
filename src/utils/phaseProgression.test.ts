@@ -9,11 +9,11 @@ import {
 import type { Phase } from "../supabase/types";
 
 const phases: Phase[] = [
-  { id: "p0", user_id: "u", code: "groundwork", program: "foundation", scale: "tqa", position: 0, name: "Groundwork", created_at: "" },
-  { id: "p1", user_id: "u", code: "phase_1", program: "foundation", scale: "tqa", position: 1, name: "Phase 1", created_at: "" },
-  { id: "p2", user_id: "u", code: "phase_2", program: "foundation", scale: "tqa", position: 2, name: "Phase 2", created_at: "" },
-  { id: "p3", user_id: "u", code: "phase_3", program: "foundation", scale: "tqa", position: 3, name: "Phase 3", created_at: "" },
-  { id: "p4", user_id: "u", code: "phase_4", program: "foundation", scale: "tqa", position: 4, name: "Phase 4", created_at: "" },
+  { id: "p0", facility_id: "test-facility", user_id: "u", code: "groundwork", program: "foundation", scale: "tqa", position: 0, name: "Groundwork", created_at: "" },
+  { id: "p1", facility_id: "test-facility", user_id: "u", code: "phase_1", program: "foundation", scale: "tqa", position: 1, name: "Phase 1", created_at: "" },
+  { id: "p2", facility_id: "test-facility", user_id: "u", code: "phase_2", program: "foundation", scale: "tqa", position: 2, name: "Phase 2", created_at: "" },
+  { id: "p3", facility_id: "test-facility", user_id: "u", code: "phase_3", program: "foundation", scale: "tqa", position: 3, name: "Phase 3", created_at: "" },
+  { id: "p4", facility_id: "test-facility", user_id: "u", code: "phase_4", program: "foundation", scale: "tqa", position: 4, name: "Phase 4", created_at: "" },
 ];
 
 describe("phaseProgression", () => {
@@ -49,7 +49,7 @@ describe("phaseProgression", () => {
     const warmup: Phase[] = [
       {
         id: "w0",
-        user_id: "u",
+        facility_id: "test-facility", user_id: "u",
         code: "performance_warmup",
         program: "foundation_to_finish",
         scale: "five",

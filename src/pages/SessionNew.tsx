@@ -1,5 +1,5 @@
 import useUnsavedChanges from "../hooks/useUnsavedChanges";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   createSession,
@@ -7,8 +7,10 @@ import {
   listPhases,
   listQuestionsForPhase,
   listSessionsForHorse,
+  type SessionInput,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
+import { invalidate } from "../supabase/cache";
 import { qk } from "../supabase/keys";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
 import RidePhaseSelect from "../components/RidePhaseSelect";
@@ -22,6 +24,11 @@ import { useToast } from "../components/Toast";
 import { lastWorkedByDiscipline } from "../utils/disciplineHistory";
 import { bitOptions, programLabel } from "../content/programs";
 import { localDateTimeInput } from "../utils/dates";
+import { useAuth } from "../auth/AuthProvider";
+import { useFacility } from "../auth/FacilityProvider";
+import RideAlongPanel from "../features/ride-along/RideAlongPanel";
+import { closeDraft, getDraft, openDraft, saveDraft, type RideDraft } from "../features/ride-along/draftClient";
+import { VOICE_PHASE, type VoiceScore } from "../features/ride-along/voiceCommand";
 import type { TaskCompletion } from "../supabase/types";
 
 /** Two-column ghost of the score sheet (8 Foundation + 6 Temperament rows). */
@@ -49,6 +56,8 @@ export default function SessionNew() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const { facility } = useFacility();
+  const { user } = useAuth();
 
   const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
   const phases = useQuery(qk.phases(), () => listPhases());
@@ -68,11 +77,28 @@ export default function SessionNew() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [voiceDraft, setVoiceDraft] = useState<RideDraft>();
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voicePanelRevision, setVoicePanelRevision] = useState(0);
+  const [draftOperation, setDraftOperation] = useState(false);
+  const actionLock = useRef(false);
+  const pending = useRef<{ key: string; request: string; input?: SessionInput }>();
+  const scope = JSON.stringify([user?.id, facility?.id, id, phaseId]);
+  const recoveryKey = `tqa:voice-terminal:${scope}`;
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  useEffect(() => {
+    currentScope.current = scope;
+    return () => { currentScope.current = ""; };
+  }, [scope]);
+
 
   // React Router reuses this page when switching horses. Never carry a draft
   // (or the previous horse's phase) into another horse's ride.
   useEffect(() => {
     setPhaseId("");
+    setVoiceDraft(undefined);
+    pending.current = undefined;
     setConfirmedDate("");
     setDrafts({});
     setNotes("");
@@ -110,7 +136,13 @@ export default function SessionNew() {
     bit !== "" ||
     tasks.length > 0 || occurredAt !== initialOccurredAt;
 
-  const { dialog: unsavedDialog, allowLeave } = useUnsavedChanges(dirty && !saving);
+  const voiceChanged = voiceDraft && (
+    notes !== (voiceDraft.notes ?? "") || rider !== (voiceDraft.rider ?? "") ||
+    JSON.stringify(drafts) !== JSON.stringify(Object.fromEntries(
+      voiceDraft.ratings.map(r => [r.question_id, { score: r.score, comment: r.comment ?? undefined }]),
+    ))
+  );
+  const { dialog: unsavedDialog, allowLeave } = useUnsavedChanges((voiceDraft ? !!voiceChanged : dirty) && !saving);
 
   if (!id) return null;
 
@@ -160,6 +192,7 @@ export default function SessionNew() {
   const rideDay = occurredAt.slice(0, 10);
   const confirmPhase = !isPerformance && rideDay !== localDateTimeInput().slice(0, 10) && confirmedDate !== rideDay;
   function choosePhase(next: string) {
+    if (voiceDraft || actionLock.current) return;
     if (next !== phaseId) {
       try {
         const kept = prepareRideEntries(questions.data ?? [], drafts, notes, currentPhase?.name);
@@ -181,12 +214,164 @@ export default function SessionNew() {
   const setComment = (qid: string, comment: string) =>
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], comment } }));
 
+  const voiceEligible = facility?.voice_enabled === true && !isPerformance &&
+    currentPhase?.code === VOICE_PHASE && currentPhase?.scale === "tqa" && !confirmPhase;
+
+  function payload(nextDrafts = drafts): SessionInput {
+    if (!occurredAt || Number.isNaN(new Date(occurredAt).getTime())) throw new Error("Enter a valid ride date and time.");
+    if (!phaseId) throw new Error("Pick a phase first.");
+    const entries = prepareRideEntries(questions.data ?? [], nextDrafts, notes);
+    return {
+      horse_id: id!, phase_id: phaseId, occurred_at: voiceDraft?.occurred_at ?? new Date(occurredAt).toISOString(),
+      notes: entries.notes || null, rider: rider || null, bit: isPerformance ? bit || null : null,
+      task_completions: isPerformance ? tasks : [], ratings: entries.ratings,
+    };
+  }
+
+  async function draftAction<T>(operation: () => Promise<T>) {
+    if (actionLock.current) throw new Error("Another ride operation is in progress.");
+    actionLock.current = true;
+    setDraftOperation(true);
+    try {
+      const result = await operation();
+      if (currentScope.current !== scope) throw new Error("The active ride changed.");
+      return result;
+    } finally {
+      actionLock.current = false;
+      if (currentScope.current === scope) setDraftOperation(false);
+    }
+  }
+
+  function restore(d: RideDraft) {
+    if (d.horse_id !== id || d.facility_id !== facility?.id || d.phase_id !== phaseId || d.status !== "draft") {
+      throw new Error("This ride draft is no longer available here.");
+    }
+    setVoiceDraft(d);
+    setDrafts(Object.fromEntries(d.ratings.map(r => [r.question_id, { score: r.score, comment: r.comment ?? undefined }])));
+    setNotes(d.notes ?? "");
+    setRider(d.rider ?? "");
+    const when = localDateTimeInput(new Date(d.occurred_at));
+    setOccurredAt(when);
+    setConfirmedDate(when.slice(0, 10));
+  }
+
+  function rememberTerminal(draftId?: string) {
+    // Retain only an opaque draft pointer, not any audio, transcript or notes.
+    try {
+      if (draftId) window.sessionStorage.setItem(recoveryKey, draftId);
+      else window.sessionStorage.removeItem(recoveryKey);
+    } catch { /* Same-page retries remain available if storage is restricted. */ }
+  }
+  function terminalToCheck() {
+    try { return window.sessionStorage.getItem(recoveryKey); } catch { return null; }
+  }
+
+  async function beginVoice() {
+    if (actionLock.current || !voiceEligible || !facility || dirty || !questions.data?.length) return;
+    setError(null);
+    try {
+      const interrupted = terminalToCheck();
+      if (interrupted) {
+        const recovered = await draftAction(() => getDraft(interrupted));
+        if (recovered.horse_id !== id || recovered.facility_id !== facility.id || recovered.phase_id !== phaseId)
+          throw new Error("The saved draft no longer matches this ride.");
+        if (recovered.status === "completed") {
+          rememberTerminal();
+          refreshSavedRide();
+          allowLeave();
+          toast.success("Ride already saved");
+          navigate(`/horses/${id}`);
+          return;
+        }
+        rememberTerminal();
+        if (recovered.status === "draft") { restore(recovered); return; }
+      }
+      const key = "open:" + scope;
+      const request = pending.current?.key === key ? pending.current.request : crypto.randomUUID();
+      pending.current = { key, request };
+      const d = await draftAction(() => openDraft(facility.id, id!, phaseId, request));
+      restore(d);
+      pending.current = undefined;
+    } catch (err) {
+      if (currentScope.current === scope) setError((err as Error).message);
+    }
+  }
+
+  async function persist(d: RideDraft, key: string, input: SessionInput, request: string = crypto.randomUUID()) {
+    const operation = pending.current?.key === key ? pending.current : { key, request, input };
+    if (pending.current && pending.current.key !== key) {
+      throw new Error("A save is unresolved. Retry the same action or reload the saved draft.");
+    }
+    pending.current = operation;
+    const next = await saveDraft(d, operation.request, operation.input!);
+    if (currentScope.current !== scope) throw new Error("The active ride changed.");
+    setVoiceDraft(next);
+    pending.current = undefined;
+    return next;
+  }
+
+  async function confirmVoice(proposal: VoiceScore, request: string) {
+    const question = questions.data?.find(q => q.id === proposal.questionId && q.phase_id === phaseId && q.axis === "foundation");
+    if (!voiceDraft || !voiceEligible || !question || !Number.isInteger(proposal.score) || Math.abs(proposal.score) > 3)
+      throw new Error("This score no longer matches the ride sheet.");
+    const next = { ...drafts, [question.id]: { ...drafts[question.id], score: proposal.score } };
+    const saved = await draftAction(() => persist(voiceDraft, "voice:" + request, payload(next), request));
+    restore(saved);
+  }
+
+  async function reloadVoice() {
+    if (!voiceDraft) return;
+    setError(null);
+    try {
+      const d = await draftAction(() => getDraft(voiceDraft.id));
+      if (d.status !== "draft") {
+        rememberTerminal();
+        if (d.status === "completed") refreshSavedRide();
+        allowLeave();
+        navigate(`/horses/${id}`);
+        return;
+      }
+      restore(d);
+      pending.current = undefined;
+      rememberTerminal();
+      setVoicePanelRevision(n => n + 1);
+    } catch (err) { if (currentScope.current === scope) setError((err as Error).message); }
+  }
+
+  function refreshSavedRide() {
+    invalidate(["sessions", id]);
+    invalidate(["sessions", "dates"]);
+    invalidate(["ratings", id]);
+  }
+
+  async function discardVoice() {
+    if (!voiceDraft) return;
+    setError(null);
+    try {
+      await draftAction(async () => {
+        const request = pending.current?.key === "discard" ? pending.current.request : crypto.randomUUID();
+        pending.current = { key: "discard", request };
+        rememberTerminal(voiceDraft.id);
+        const discarded = await closeDraft(voiceDraft, request, "discard");
+        if (discarded.status !== "discarded") throw new Error("Could not verify that the draft was discarded.");
+      });
+      pending.current = undefined;
+      rememberTerminal();
+      allowLeave();
+      navigate(`/horses/${id}`);
+    } catch (err) { if (currentScope.current === scope) setError((err as Error).message); }
+  }
+
+  const manualLocked = saving || draftOperation || !!(voiceDraft && pending.current);
   const cancel = () => {
-    if (dirty) setConfirmDiscard(true);
+    if (voiceDraft) {
+      navigate(`/horses/${id}`);
+    } else if (dirty) setConfirmDiscard(true);
     else navigate(`/horses/${id}`);
   };
 
   const submit = async () => {
+    if (voiceBusy || actionLock.current) return;
     setError(null);
     if (scored > 0 && (questions.error || !questions.data?.length)) { setError("The score sheet is unavailable. Retry before saving; your entries are still here."); return; }
     if (!occurredAt || Number.isNaN(new Date(occurredAt).getTime())) { setError("Enter a valid ride date and time."); return; }
@@ -197,26 +382,32 @@ export default function SessionNew() {
     if (confirmPhase) { setError("Choose the phase worked on the selected date."); return; }
     setSaving(true);
     try {
-      const entries = prepareRideEntries(questions.data ?? [], drafts, notes);
-      await createSession({
-        horse_id: id,
-        phase_id: phaseId,
-        occurred_at: new Date(occurredAt).toISOString(),
-        notes: entries.notes || null,
-        rider: rider || null,
-        bit: isPerformance ? bit || null : null,
-        task_completions: isPerformance ? tasks : [],
-        ratings: entries.ratings,
-      });
+      if (voiceDraft) {
+        await draftAction(async () => {
+          let d = voiceDraft;
+          if (pending.current?.key !== "finalize") d = await persist(d, "save-for-finalize", payload());
+          if (currentScope.current !== scope) throw new Error("The active ride changed.");
+          const request = pending.current?.key === "finalize" ? pending.current.request : crypto.randomUUID();
+          pending.current = { key: "finalize", request };
+          rememberTerminal(d.id);
+          const completed = await closeDraft(d, request, "finalize");
+          if (completed.status !== "completed" || !completed.session_id) throw new Error("Could not verify that this ride was saved.");
+          pending.current = undefined;
+          rememberTerminal();
+        });
+      } else await createSession(payload());
+      if (currentScope.current !== scope) return;
+      if (voiceDraft) refreshSavedRide();
       toast.success("Ride saved");
       allowLeave();
       navigate(`/horses/${id}`);
     } catch (err) {
+      if (currentScope.current !== scope) return;
       const message = (err as Error).message;
       setError(message);
       toast.error(message);
     } finally {
-      setSaving(false);
+      if (currentScope.current === scope) setSaving(false);
     }
   };
 
@@ -237,7 +428,7 @@ export default function SessionNew() {
         {!isPerformance && <div className="field"><span className="label">Current foundation phase</span>
           <strong>{foundationPhase?.name ?? "—"}</strong></div>}
         {!isPerformance && <RidePhaseSelect phases={phases.data} phaseId={phaseId} needsConfirmation={confirmPhase}
-          hasEntries={hasEntries(drafts)} disabled={saving || (hasEntries(drafts) && !questions.data)} onChoose={choosePhase} />}
+          hasEntries={hasEntries(drafts)} disabled={saving || draftOperation || Boolean(voiceDraft) || (hasEntries(drafts) && !questions.data)} onChoose={choosePhase} />}
         <div className="field">
           <label className="label" htmlFor="session-when">
             When
@@ -246,6 +437,7 @@ export default function SessionNew() {
             id="session-when"
             type="datetime-local"
             className="input"
+            disabled={!!voiceDraft || draftOperation}
             value={occurredAt}
             onChange={(e) => setOccurredAt(e.target.value)}
           />
@@ -253,6 +445,26 @@ export default function SessionNew() {
 
       </div>
 
+      {voiceEligible && !voiceDraft && <section className="card space-y-2">
+        <h2 className="card-title">Voice scoring · Phase 1 pilot</h2>
+        <button type="button" className="btn btn-ghost" disabled={dirty || draftOperation || !questions.data?.length}
+          onClick={() => void beginVoice()}>Start or resume voice draft</button>
+        {dirty && <p className="muted">Start voice scoring before entering manual scores or notes. This keeps an existing draft from replacing your unsaved edits.</p>}
+      </section>}
+      {voiceDraft && <section className="space-y-2">
+        <p className="muted">Confirmed voice scores are saved to the draft. Manual edits are saved with the next confirmed score or when you save the ride.</p>
+        {voiceEligible && <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draftId={voiceDraft.id}
+          questions={questions.data ?? []} disabled={draftOperation || saving || !questions.data?.length}
+          onBusy={setVoiceBusy} onConfirm={confirmVoice} />}
+        <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving}
+          onClick={() => { if (window.confirm("Reload the saved draft and replace unsaved edits on this screen?")) void reloadVoice(); }}>
+          Reload saved draft
+        </button>
+        <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving || !!(pending.current && pending.current.key !== "discard")}
+          onClick={() => { if (window.confirm("Discard this saved draft and its scores?")) void discardVoice(); }}>
+          Discard saved draft
+        </button>
+      </section>}
       <NextRideFocus horse={horse.data} />
       {isPerformance && <>
         {sessions.error && <ErrorState error={sessions.error} onRetry={sessions.refresh} />}
@@ -268,6 +480,7 @@ export default function SessionNew() {
           id="session-notes"
           rows={3}
           className="input"
+          disabled={manualLocked}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
@@ -283,7 +496,8 @@ export default function SessionNew() {
                 id="session-rider"
                 className="input"
                 placeholder="Who rode today"
-                value={rider}
+                disabled={manualLocked}
+              value={rider}
                 onChange={(e) => setRider(e.target.value)}
               />
             </div>
@@ -319,6 +533,7 @@ export default function SessionNew() {
           onScore={setScore}
           onComment={setComment}
           scale={scale}
+          readOnly={manualLocked}
         />
       )}
 
@@ -349,12 +564,12 @@ export default function SessionNew() {
             {scored === 0 ? "Saves as unscored · add scores later" : `${total - scored} items unscored`}
           </span>
         )}
-        <button type="button" className="btn btn-ghost" onClick={cancel}>
-          Cancel
+        <button type="button" className="btn btn-ghost" disabled={saving || voiceBusy || draftOperation} onClick={cancel}>
+          {voiceDraft ? "Leave draft" : "Cancel"}
         </button>
         <button
           className="btn btn-leather"
-          disabled={saving || !phaseId || confirmPhase}
+          disabled={saving || voiceBusy || draftOperation || !phaseId || confirmPhase || pending.current?.key === "discard"}
           onClick={submit}
         >
           {saving ? "Saving…" : "Save ride"}

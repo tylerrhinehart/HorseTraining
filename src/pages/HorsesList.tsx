@@ -27,7 +27,10 @@ function prefetchHorse(id: string) {
   prefetchQuery(qk.ratings(id), () => listRatingsForHorse(id));
 }
 
+import { useRosterWork } from "../hooks/useRosterWork";
+
 export default function HorsesList() {
+  const {summaries, rides} = useRosterWork();
   const horsesQuery = useQuery(qk.horses("all"), () =>
     listHorses({ statuses: ["in_training", "complete", "archived"] }),
   );
@@ -122,10 +125,12 @@ export default function HorsesList() {
         </div>
       )}
 
+      {rides.error && <ErrorState error={rides.error} onRetry={rides.refresh} />}
       <Section
         title="In training"
         horses={inTraining}
         defaultOpen
+        summaries={summaries}
         phasesById={phasesById}
         activeId={activeId}
         setActiveId={setActiveId}
@@ -133,6 +138,7 @@ export default function HorsesList() {
       <Section
         title="Completed"
         horses={completed}
+        summaries={summaries}
         phasesById={phasesById}
         activeId={activeId}
         setActiveId={setActiveId}
@@ -140,6 +146,7 @@ export default function HorsesList() {
       <Section
         title="Archived"
         horses={archived}
+        summaries={summaries}
         phasesById={phasesById}
         activeId={activeId}
         setActiveId={setActiveId}
@@ -152,6 +159,7 @@ function Section({
   title,
   horses,
   defaultOpen,
+  summaries,
   phasesById,
   activeId,
   setActiveId,
@@ -159,6 +167,7 @@ function Section({
   title: string;
   horses: Horse[];
   defaultOpen?: boolean;
+  summaries?: Map<string,string>;
   phasesById: Map<string, Phase>;
   activeId: string | null;
   setActiveId: (id: string) => void;
@@ -177,6 +186,7 @@ function Section({
           <HorseCard
             key={h.id}
             horse={h}
+            summary={summaries?.get(h.id)}
             phasesById={phasesById}
             isActive={h.id === activeId}
             onClick={() => setActiveId(h.id)}
@@ -188,12 +198,14 @@ function Section({
 }
 
 function HorseCard({
+  summary,
   horse,
   phasesById,
   isActive,
   onClick,
 }: {
   horse: Horse;
+  summary?: string;
   phasesById: Map<string, Phase>;
   isActive: boolean;
   onClick: () => void;
@@ -240,9 +252,9 @@ function HorseCard({
         <span className="pill pill-muted" style={{ marginTop: 2, alignSelf: "flex-start" }}>
           {programLabel(horse.training_type)}
         </span>
-        {phase && (
+        {(horse.training_type === "foundation" ? phase : summary) && (
           <span className="horse-sub" style={{ color: "var(--leather)" }}>
-            {phase.name}
+            {horse.training_type === "foundation" ? phase?.name : summary}
           </span>
         )}
         <div className="horse-stats">

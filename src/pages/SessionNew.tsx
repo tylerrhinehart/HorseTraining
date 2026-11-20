@@ -1,21 +1,26 @@
 import useUnsavedChanges from "../hooks/useUnsavedChanges";
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   createSession,
   getHorse,
   listPhases,
   listQuestionsForPhase,
+  listSessionsForHorse,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import { qk } from "../supabase/keys";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
+import RidePhaseSelect from "../components/RidePhaseSelect";
+import { hasEntries, prepareRideEntries } from "../utils/rideEntries";
+import NextRideFocus from "../components/NextRideFocus";
 import TaskCompletionPicker from "../components/TaskCompletionPicker";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
-import { bitOptions } from "../content/programs";
+import { lastWorkedByDiscipline } from "../utils/disciplineHistory";
+import { bitOptions, programLabel } from "../content/programs";
 import { localDateTimeInput } from "../utils/dates";
 import type { TaskCompletion } from "../supabase/types";
 
@@ -47,8 +52,12 @@ export default function SessionNew() {
 
   const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
   const phases = useQuery(qk.phases(), () => listPhases());
+  const isPerformance = !!horse.data && horse.data.training_type !== "foundation";
+  const sessions = useQuery(id && isPerformance ? qk.sessions(id) : null, () => listSessionsForHorse(id!));
+  const history = useMemo(() => sessions.data && lastWorkedByDiscipline(sessions.data), [sessions.data]);
 
   const [phaseId, setPhaseId] = useState<string>("");
+  const [confirmedDate, setConfirmedDate] = useState("");
   const [initialOccurredAt, setInitialOccurredAt] = useState(localDateTimeInput);
   const [occurredAt, setOccurredAt] = useState(initialOccurredAt);
   const [drafts, setDrafts] = useState<Record<string, DraftRating>>({});
@@ -64,6 +73,7 @@ export default function SessionNew() {
   // (or the previous horse's phase) into another horse's ride.
   useEffect(() => {
     setPhaseId("");
+    setConfirmedDate("");
     setDrafts({});
     setNotes("");
     setRider("");
@@ -75,8 +85,7 @@ export default function SessionNew() {
     setError(null);
   }, [id]);
 
-  // Sessions are always logged against the horse's current phase. Advancing
-  // through phases happens via the workspace's "Advance to <next>" gate.
+  // Default to the current program sheet when a horse is opened.
   useEffect(() => {
     if (phaseId) return;
     if (horse.loading || !phases.data) return;
@@ -91,17 +100,12 @@ export default function SessionNew() {
     () => listQuestionsForPhase(phaseId),
   );
 
-  // Reset drafts when phase changes (different question set).
-  useEffect(() => {
-    setDrafts({});
-  }, [phaseId]);
-
   // Any entered data makes the session dirty — guard against accidental loss.
   const dirty =
     Object.values(drafts).some(
       (d) => typeof d.score === "number" || !!d.comment,
     ) ||
-    notes.trim() !== "" ||
+    (!!confirmedDate && phaseId !== horse.data?.current_phase_id) || notes.trim() !== "" ||
     rider.trim() !== "" ||
     bit !== "" ||
     tasks.length > 0 || occurredAt !== initialOccurredAt;
@@ -146,15 +150,31 @@ export default function SessionNew() {
     );
   }
 
+  if (horse.data.status !== "in_training") {
+    return <div className="view">{unsavedDialog}<h1 className="h-display">{horse.data.name}</h1>
+      <p>Resume training on the horse’s workspace to start a ride.</p><Link className="btn btn-ghost" to={`/horses/${id}`}>Back to horse</Link></div>;
+  }
+
   const currentPhase = phases.data.find((p) => p.id === phaseId) ?? null;
-  const currentPhaseName = currentPhase?.name ?? "—";
+  const foundationPhase = phases.data.find(p => p.id === horse.data?.current_phase_id) ?? phases.data.find(p => p.program === "foundation");
+  const rideDay = occurredAt.slice(0, 10);
+  const confirmPhase = !isPerformance && rideDay !== localDateTimeInput().slice(0, 10) && confirmedDate !== rideDay;
+  function choosePhase(next: string) {
+    if (next !== phaseId) {
+      try {
+        const kept = prepareRideEntries(questions.data ?? [], drafts, notes, currentPhase?.name);
+        setNotes(kept.notes);
+        setDrafts({});
+      } catch (err) { setError((err as Error).message); return; }
+    }
+    setPhaseId(next);
+    setConfirmedDate(rideDay);
+    setError(null);
+  }
   const scale = currentPhase?.scale ?? "tqa";
-  const isPerformance = horse.data.training_type !== "foundation";
 
   const total = questions.data?.length ?? 0;
-  const scored =
-    questions.data?.filter((q) => typeof drafts[q.id]?.score === "number")
-      .length ?? 0;
+  const scored = Object.values(drafts).filter(draft => typeof draft.score === "number").length;
 
   const setScore = (qid: string, score: number) =>
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], score } }));
@@ -168,38 +188,28 @@ export default function SessionNew() {
 
   const submit = async () => {
     setError(null);
-    if (questions.error || !questions.data?.length) { setError("The score sheet is unavailable. Retry before saving; your entries are still here."); return; }
+    if (scored > 0 && (questions.error || !questions.data?.length)) { setError("The score sheet is unavailable. Retry before saving; your entries are still here."); return; }
     if (!occurredAt || Number.isNaN(new Date(occurredAt).getTime())) { setError("Enter a valid ride date and time."); return; }
     if (!phaseId) {
       setError("Pick a phase first.");
       return;
     }
-    const ratings = (questions.data ?? [])
-      .filter((q) => typeof drafts[q.id]?.score === "number")
-      .map((q) => ({
-        question_id: q.id,
-        axis: q.axis,
-        question_text_snapshot: q.text,
-        score: drafts[q.id]!.score!,
-        comment: drafts[q.id]?.comment ?? null,
-      }));
-    if (ratings.length === 0) {
-      setError("Score at least one item.");
-      return;
-    }
+    if (confirmPhase) { setError("Choose the phase worked on the selected date."); return; }
     setSaving(true);
     try {
+      const entries = prepareRideEntries(questions.data ?? [], drafts, notes);
       await createSession({
         horse_id: id,
         phase_id: phaseId,
         occurred_at: new Date(occurredAt).toISOString(),
-        notes: notes || null,
+        notes: entries.notes || null,
         rider: rider || null,
         bit: isPerformance ? bit || null : null,
         task_completions: isPerformance ? tasks : [],
-        ratings,
+        ratings: entries.ratings,
       });
       toast.success("Ride saved");
+      allowLeave();
       navigate(`/horses/${id}`);
     } catch (err) {
       const message = (err as Error).message;
@@ -213,12 +223,9 @@ export default function SessionNew() {
   return (
     <div className="view">
       {unsavedDialog}
-      <div className="eyebrow">New ride</div>
+      <Link className="workflow-link" to={`/horses/${id}`}>← {horse.data.name}</Link>
+      <div className="eyebrow">{programLabel(horse.data.training_type)}</div>
       <h1 className="h-display">Log a ride</h1>
-      <p className="muted" style={{ margin: "4px 0 14px", fontSize: 14 }}>
-        {horse.data.name}
-      </p>
-
       <div
         className="card"
         style={{
@@ -227,15 +234,10 @@ export default function SessionNew() {
           gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
         }}
       >
-        <div className="field">
-          <label className="label">Phase</label>
-          <div>
-            <span className="pill pill-leather">{currentPhaseName}</span>
-          </div>
-          <span className="muted" style={{ fontSize: 11 }}>
-            Logged against the current phase
-          </span>
-        </div>
+        {!isPerformance && <div className="field"><span className="label">Current foundation phase</span>
+          <strong>{foundationPhase?.name ?? "—"}</strong></div>}
+        {!isPerformance && <RidePhaseSelect phases={phases.data} phaseId={phaseId} needsConfirmation={confirmPhase}
+          hasEntries={hasEntries(drafts)} disabled={saving || (hasEntries(drafts) && !questions.data)} onChoose={choosePhase} />}
         <div className="field">
           <label className="label" htmlFor="session-when">
             When
@@ -248,7 +250,31 @@ export default function SessionNew() {
             onChange={(e) => setOccurredAt(e.target.value)}
           />
         </div>
-        <>
+
+      </div>
+
+      <NextRideFocus horse={horse.data} />
+      {isPerformance && <>
+        {sessions.error && <ErrorState error={sessions.error} onRetry={sessions.refresh} />}
+        {sessions.loading && <p role="status">Loading discipline history…</p>}
+        <TaskCompletionPicker goals={horse.data.program_meta?.training_goals} value={tasks} onChange={setTasks} history={history} />
+      </>}
+
+      <div className="card">
+        <label className="label" htmlFor="session-notes">
+          Ride notes
+        </label>
+        <textarea
+          id="session-notes"
+          rows={3}
+          className="input"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </div>
+
+      <details className="card"><summary>{isPerformance ? "Rider and bit" : "Rider"}</summary>
+        <div className="field-row">
             <div className="field">
               <label className="label" htmlFor="session-rider">
                 Rider
@@ -279,28 +305,10 @@ export default function SessionNew() {
                 ))}
               </select>
             </div>}
-          </>
-      </div>
-
-      {isPerformance && (
-        <TaskCompletionPicker value={tasks} onChange={setTasks} />
-      )}
-
-      <div
-        style={{
-          position: "sticky",
-          top: "calc(60px + env(safe-area-inset-top, 0px))",
-          zIndex: 20,
-          display: "flex",
-          justifyContent: "flex-end",
-          margin: "4px 0 8px",
-        }}
-      >
-        <span className="pill">
-          {scored} of {total} scored
-        </span>
-      </div>
-
+        </div>
+      </details>
+      <details className="card">
+        <summary>Optional score sheet · {scored} of {total} scored</summary>
       {questions.error ? <ErrorState error={questions.error} onRetry={questions.refresh} /> : questions.loading || !phaseId ? (
         <ScoreSheetSkeleton />
       ) : (
@@ -314,19 +322,7 @@ export default function SessionNew() {
         />
       )}
 
-      <div className="card">
-        <label className="label" htmlFor="session-notes">
-          Ride notes
-        </label>
-        <textarea
-          id="session-notes"
-          rows={3}
-          className="input"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-        />
-      </div>
-
+      </details>
       {error && (
         <div role="alert" className="alert-error" style={{ marginTop: 10 }}>
           <span className="alert-error-icon" aria-hidden>
@@ -345,12 +341,12 @@ export default function SessionNew() {
           marginTop: 12,
         }}
       >
-        {total > 0 && scored < total && (
+        {(scored === 0 || scored < total) && (
           <span
             className="muted"
             style={{ fontSize: 13, marginRight: "auto" }}
           >
-            {total - scored} of {total} not yet scored
+            {scored === 0 ? "Saves as unscored · add scores later" : `${total - scored} items unscored`}
           </span>
         )}
         <button type="button" className="btn btn-ghost" onClick={cancel}>
@@ -358,7 +354,7 @@ export default function SessionNew() {
         </button>
         <button
           className="btn btn-leather"
-          disabled={saving || questions.loading || !!questions.error || !questions.data?.length}
+          disabled={saving || !phaseId || confirmPhase}
           onClick={submit}
         >
           {saving ? "Saving…" : "Save ride"}

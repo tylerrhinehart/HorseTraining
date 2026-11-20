@@ -33,7 +33,7 @@ export const PROGRAMS: ProgramDef[] = [
     label: "Foundation to Finish / Performance Horse",
     tagline: "Performance Horse · Outside Horse",
     description:
-      "The Performance Horse Warm-Up score sheet, logged daily and scored 1…5. After the warm-up the trainer picks a Task Completion job (Reining, Fence Work, Rope Horse, Barrels, and more) for the day. For a client's horse trained toward a performance discipline.",
+      "Log the Performance Horse Warm-Up on a 1…5 scale and select the jobs and phases worked on each ride. For a client's horse trained toward a performance discipline.",
   },
   {
     id: "sale_horse",
@@ -77,10 +77,7 @@ export const FIVE_TEMPERAMENT_LEGEND: Record<1 | 2 | 3 | 4 | 5, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Task Completion menu (warm-up row 8 → "Pick One Job From Task Completion
-// Sheet"). Each job is worked through Phase 1–4. Wade's note: advancement
-// through these phases is NOT tracked in the daily log — the trainer goes
-// through the warm-up, then picks a job + phase to work that day.
+// Trainers can record multiple jobs per ride, with a phase for each job.
 // ---------------------------------------------------------------------------
 
 export interface TaskJob {

@@ -1693,3 +1693,61 @@
 
 /* Saved ratings remain legible while non-interactive. */
 .rating .dot:disabled { opacity: 1; cursor: default; }
+
+.task-group { border: 0; margin: 12px 0; padding: 0; min-width: 0; }
+.task-group legend { font-weight: 600; }
+.task-row { border-top: 1px solid var(--line); padding: 8px 0; }
+.task-choice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.task-phases { display: flex; gap: 4px; flex-wrap: wrap; }
+.task-phases button { min-width: 44px; min-height: 44px; }
+.task-resources { display: grid; justify-items: start; gap: 6px; margin-top: 6px; font-size: 13px; }
+.task-resources a { color: var(--leather); text-decoration: underline; }
+
+.ride-stats { display: flex; flex-wrap: wrap; gap: 20px; margin: 12px 0; }
+.ride-stats dt { font-size: 13px; }
+.ride-stats dd { margin: 0; font-size: 18px; font-weight: 600; }
+
+.discipline-history { margin: 8px 0; }
+.discipline-history > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.discipline-history dt { font-weight: 600; }
+.discipline-history dd { margin: 0; }
+.discipline-last { margin: 2px 0 6px; font-size: 14px; color: var(--muted); }
+
+.workflow-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+.workflow-panel { margin-top: 14px; }
+.workflow-link { color: var(--leather); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; background: transparent; border: 0; padding: 5px 0; cursor: pointer; }
+.ride-focus { margin: 14px 0 8px; padding: 12px 15px; background: color-mix(in srgb, var(--sage) 14%, var(--paper)); border-left: 3px solid var(--sage); }
+.ride-focus p, .recent-ride p { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.phase-trail { display: flex; list-style: none; gap: 5px; margin: 12px 0; padding: 0; }
+.phase-trail li { flex: 1; border-top: 3px solid var(--line); padding: 4px 0; font-size: 12px; }
+.phase-trail li[aria-current=step] { border-color: var(--sage); font-weight: 700; }
+.recent-ride { display: grid; grid-template-columns: minmax(80px, 25%) 1fr; gap: 12px; border-top: 1px solid var(--line); padding: 10px 0; }
+.recent-ride a { font-weight: 650; text-decoration: underline; }
+.workflow-dialog { position: fixed; inset: 0; margin: auto; width: min(92vw, 480px); max-height: 85vh; overflow-y: auto; padding: 22px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink); }
+.workflow-dialog::backdrop { background: rgb(30 25 18 / 60%); }
+.workflow-dialog ul, .workflow-dialog ol { padding-left: 20px; margin: 12px 0; list-style: revert; }
+.workflow-dialog li { padding: 3px 0; }
+.workflow-dialog a { color: var(--leather); text-decoration: underline; }
+.horse-workspace { max-width: 1080px; margin: auto; padding: 20px; display: grid; grid-template-columns: 225px minmax(0, 1fr); gap: 24px; }
+.workspace-body { min-width: 0; }
+.workspace-body:only-child { grid-column: 1 / -1; }
+.workspace-body .view { width: 100%; margin: 0; padding: 0 0 calc(30px + var(--tabbar-h)); }
+.workspace-roster { align-self: start; max-height: 76vh; overflow: auto; }
+.workspace-roster a { display: block; border-top: 1px solid var(--line); padding: 9px; overflow-wrap: anywhere; }
+.workspace-roster a[aria-current=page] { background: var(--paper-2); border-left: 3px solid var(--sage); }
+.workspace-roster small { display: block; color: var(--muted); }
+.workspace-switch { display: none; }
+.discipline-history > div { display: grid; grid-template-columns: minmax(0,1fr) auto; }
+.discipline-history dd:first-of-type { grid-column: 1; }
+.discipline-history dd:last-child { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+@media (max-width: 730px) {
+  .horse-workspace { display: block; padding: 16px; }
+  .workspace-roster { display: none; }
+  .workspace-switch { display: block; margin-bottom: 16px; }
+}
+
+.workspace-heading .h-display { margin: 0; }
+.workspace-heading p { margin: 4px 0 0; }
+.workspace-body .view > .card, .workspace-body .view > .ride-focus { margin-top: 14px; }
+.workspace-body details > summary { cursor: pointer; }
+.workspace-body .recent-ride p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

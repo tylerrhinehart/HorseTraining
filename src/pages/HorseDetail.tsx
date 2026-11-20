@@ -8,25 +8,23 @@ import {
   deleteHorse,
   getHorse,
   listPhases,
-  listRatingsForHorse,
   listSessionsForHorse,
-  setHorseCurrentPhase,
   setHorseStatus,
   updateHorse,
 } from "../supabase/queries";
 import { qk } from "../supabase/keys";
 import { PROGRAMS, programLabel, taskJobName } from "../content/programs";
 import HorseProgramFields, { programFormDefaults, programMetaFromForm, type HorseProgramForm } from "../components/HorseProgramFields";
+import DisciplineHistoryCard from "../components/DisciplineHistory";
+import { lastWorkedByDiscipline } from "../utils/disciplineHistory";
 import WeeklyComments from "../components/WeeklyComments";
 import type { TrainingType } from "../supabase/types";
 import { useQuery } from "../supabase/useQuery";
-import { useActiveHorseId } from "../state/activeHorse";
-import {
-  nextPhase,
-} from "../utils/phaseProgression";
+import FoundationWorkflow from "../components/FoundationWorkflow";
+import NextRideFocus from "../components/NextRideFocus";
+import { rideWork } from "../utils/rideWork";
 import { sessionAverages, formatAvg } from "../utils/stats";
 import { formatHumanDate } from "../utils/dates";
-import HorseAvatar, { hashTone } from "../components/HorseAvatar";
 import Sparkline from "../components/Sparkline";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
@@ -50,10 +48,6 @@ export default function HorseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const [, setActiveId] = useActiveHorseId();
-  const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
-  const [advanceDialogOpen, setAdvanceDialogOpen] = useState(false);
-  const [advancing, setAdvancing] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -71,13 +65,6 @@ export default function HorseDetail() {
     listSessionsForHorse(id!),
   );
   const phases = useQuery(qk.phases(), () => listPhases());
-  const ratings = useQuery(id ? qk.ratings(id) : null, () =>
-    listRatingsForHorse(id!),
-  );
-
-  useEffect(() => {
-    if (id) setActiveId(id);
-  }, [id, setActiveId]);
 
   const {
     register,
@@ -87,8 +74,9 @@ export default function HorseDetail() {
     formState: { isSubmitting: isEditSubmitting, isDirty: isEditDirty, errors: editErrors },
   } = useForm<EditFormValues>();
 
+  const [focusDirty, setFocusDirty] = useState(false);
   const [weeklyDirty, setWeeklyDirty] = useState(false);
-  const { dialog: unsavedDialog } = useUnsavedChanges((isEditDirty || weeklyDirty) && !isEditSubmitting);
+  const { dialog: unsavedDialog } = useUnsavedChanges((isEditDirty || weeklyDirty || focusDirty) && !isEditSubmitting);
   const editTrainingType = watch("training_type");
 
   const formHorseId = useRef<string>();
@@ -148,12 +136,6 @@ export default function HorseDetail() {
     );
   }
 
-  // Secondary queries stream in behind the header; show skeletons meanwhile.
-  const detailsReady =
-    phases.data !== undefined &&
-    sessions.data !== undefined &&
-    ratings.data !== undefined;
-
   // Only this horse's program has its score sheets; filter the global phase list.
   const allPhases: Phase[] = (phases.data ?? [])
     .filter((p) => p.program === horse.data!.training_type)
@@ -183,50 +165,17 @@ export default function HorseDetail() {
       ? currentPhaseAvgs.reduce((s, n) => s + n, 0) / currentPhaseAvgs.length
       : null;
 
-  const nextP = currentPhase ? nextPhase(currentPhase, allPhases) : null;
-  // Advancing is a TQA-scale (Foundation) concept — gate it on the phase scale.
-  const canAdvance = !!nextP && currentPhase?.scale === "tqa";
-
-  // Last session date for current phase
-  const sortedCurrentPhaseSessions = [...currentPhaseSessions].sort(
-    (a, b) => b.occurred_at.localeCompare(a.occurred_at),
-  );
-  const lastSessionDate =
-    sortedCurrentPhaseSessions.length > 0
-      ? sortedCurrentPhaseSessions[0].occurred_at
-      : null;
+  const scoredRides = points.filter(point => point.count > 0).length;
+  const scoredInProgram = points.filter(point =>
+    point.combinedAverage !== null && allPhases.some(phase => phase.id === point.phaseId));
+  const programAverage = scoredInProgram.length
+    ? scoredInProgram.reduce((sum, point) => sum + point.combinedAverage!, 0) / scoredInProgram.length
+    : null;
 
   // Scale-aware display: signed ±3 for Foundation, unsigned 1–5 otherwise.
   const scale = horse.data.training_type === "foundation" ? "tqa" : "five";
 
   const dayLabel = horse.data.arrival_date ? `Day ${Math.max(1, differenceInDays(new Date(), parseISO(horse.data.arrival_date)) + 1)}` : null;
-
-  // Phase average from ratings for a given phase id
-  const phaseAvgFromRatings = (phaseId: string): number | null => {
-    const averages = points.filter(point => point.phaseId === phaseId).map(point => point.foundationAverage).filter((average): average is number => average !== null);
-    return averages.length ? averages.reduce((sum, average) => sum + average, 0) / averages.length : null;
-  };
-
-  const handleAdvance = () => {
-    if (!currentPhase || !canAdvance) return;
-    setAdvanceDialogOpen(true);
-  };
-
-  const performAdvance = async () => {
-    if (!currentPhase || !nextP || currentPhase.scale !== "tqa") return;
-    setAdvancing(true);
-    try {
-      await setHorseCurrentPhase(horse.data!.id, nextP.id);
-      toast.success(`Advanced to ${nextP.name}`);
-      setAdvanceDialogOpen(false);
-    } catch (e) {
-      toast.error((e as Error).message || "Couldn't advance the phase.");
-    } finally {
-      setAdvancing(false);
-    }
-  };
-
-  const advanceDialogCopy = `Move to ${nextP?.name ?? "the next phase"}? Phase changes are the trainer’s decision. Scores do not certify readiness or safety.`;
 
   const handleArchive = async () => {
     setArchiving(true);
@@ -282,7 +231,7 @@ export default function HorseDetail() {
         notes: values.notes || null,
         program_meta,
         ...(changingProgram ? { training_type: values.training_type, current_phase_id: firstPhase!.id } : {}),
-      });
+      }, horse.data!.updated_at);
       reset(values);
       toast.success("Saved");
       setEditSavedAt(Date.now());
@@ -292,426 +241,62 @@ export default function HorseDetail() {
   };
 
   const isFiveScale = horse.data.training_type !== "foundation";
-  const avgColor = (avg: number | null): string => {
-    if (avg === null) return "var(--muted)";
-    if (isFiveScale) {
-      // 1…5 performance scale: 4+ Good, below 3 Poor.
-      if (avg >= 4) return "var(--ok)";
-      if (avg < 3) return "var(--bad)";
-      return "var(--ink-2)";
-    }
-    if (avg >= 2.0) return "var(--ok)";
-    if (avg < 0) return "var(--bad)";
-    return "var(--ink-2)";
-  };
-
+  const recent = [...allSessions].reverse().slice(0, 3);
   return (
     <div className="view" style={{ maxWidth: 720 }}>
       {/* ── 1. Header ── */}
       {unsavedDialog}
-      <div className="eyebrow">Horse workspace</div>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 16,
-          marginBottom: 4,
-        }}
-      >
-        <HorseAvatar
-          name={horse.data.name}
-          tone={hashTone(horse.data.name)}
-          size={64}
-        />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1
-            className="h-display"
-            style={{
-              margin: "0 0 4px",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            {horse.data.name}
-            {horse.data.status === "complete" && (
-              <span className="pill">Complete</span>
-            )}
-            {horse.data.status === "archived" && (
-              <span className="pill pill-muted">Archived</span>
-            )}
-          </h1>
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-            Owner: {horse.data.owner_name ?? "—"}
-          </p>
-          <span
-            className="pill pill-leather"
-            style={{ marginTop: 6, display: "inline-block" }}
-          >
-            {programLabel(horse.data.training_type)}
-          </span>
+      <header className="task-choice workspace-heading">
+        <div><div className="eyebrow">{programLabel(horse.data.training_type)}</div>
+          <h1 className="h-display">{horse.data.name}</h1>
+          <p className="muted">Owner: {horse.data.owner_name ?? "—"}{dayLabel && ` · ${dayLabel}`}</p>
+          {horse.data.status !== "in_training" && <span className="pill">{horse.data.status === "complete" ? "Complete" : "Archived"}</span>}
         </div>
-        {dayLabel && (
-          <div
-            style={{
-              flexShrink: 0,
-              textAlign: "right",
-              fontFamily: "var(--font-mono)",
-              fontSize: 11,
-              letterSpacing: "1.2px",
-              textTransform: "uppercase",
-              color: "var(--muted)",
-              paddingTop: 4,
-            }}
-          >
-            {dayLabel}
-          </div>
-        )}
-      </div>
-
-      <div className="card" style={{marginTop:16}}>
-        {horse.data.status === "in_training" && <Link className="btn btn-leather" to={`/horses/${id}/sessions/new`}>Log a ride for {horse.data.name}</Link>}
-        <Link className="btn btn-ghost" to={`/horses/${id}/report`}>View / download report</Link>
-        <p className="muted">Last ride: {allSessions.length ? formatHumanDate([...allSessions].sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at))[0].occurred_at) : sessions.error ? "Unavailable — retry below" : sessions.loading ? "Loading…" : "No rides yet"}</p>
-        {horse.data.program_meta?.training_goals?.length ? <p>Goals: {horse.data.program_meta.training_goals.map(taskJobName).join(", ")}</p> : null}
-      </div>
-      {[phases,sessions,ratings].filter(query=>query.error).map((query,index)=><ErrorState key={index} error={query.error!} onRetry={query.refresh} />)}
+        {horse.data.status === "in_training" && <Link className="btn btn-leather" to={`/horses/${id}/sessions/new`}>Start Ride</Link>}
+      </header>
+      {[phases,sessions].filter(query=>query.error).map((query,index)=><ErrorState key={index} error={query.error!} onRetry={query.refresh} />)}
+      <section className="card workflow-panel">
+        {isFiveScale
+          ? sessions.data ? <DisciplineHistoryCard history={lastWorkedByDiscipline(sessions.data)} goals={horse.data.program_meta?.training_goals ?? []} /> : <p>{sessions.error ? "Discipline history unavailable." : "Loading discipline history…"}</p>
+          : currentPhase ? <FoundationWorkflow key={horse.data.id} horse={horse.data} current={currentPhase} phases={allPhases} /> : <p>{phases.error ? "Phase unavailable." : "Loading phase…"}</p>}
+        {!isFiveScale && !!horse.data.program_meta?.training_goals?.length && <p>Goals: {horse.data.program_meta.training_goals.map(taskJobName).join(", ")}</p>}
+        <NextRideFocus key={horse.data.id} horse={horse.data} onDirty={setFocusDirty} />
+      </section>
+      <section className="card workflow-panel"><h2 className="card-title">Recent rides</h2>
+        {recent.length ? recent.map(ride => <div key={ride.id} className="recent-ride">
+          <span className="muted">{formatHumanDate(ride.occurred_at)}</span>
+          <div><Link to={`/sessions/${ride.id}`}>{rideWork(phases.data?.find(p => p.id === ride.phase_id),ride.task_completions)}</Link>
+          {ride.notes && <p>{ride.notes}</p>}</div>
+        </div>) : <p className="muted">{sessions.loading ? "Loading rides…" : sessions.error ? "Ride history unavailable." : "No rides logged yet."}</p>}
+      </section>
       <details className="card" style={{marginTop:12}}><summary>All ride history ({allSessions.length})</summary>
-        {allSessions.length ? [...allSessions].sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at)).map(session=><Link key={session.id} className="btn btn-ghost" style={{display:"flex",justifyContent:"space-between"}} to={`/sessions/${session.id}`}>{formatHumanDate(session.occurred_at)} · {phases.data?.find(phase=>phase.id===session.phase_id)?.name ?? "Ride"}</Link>) : <p className="muted">Saved rides will appear here.</p>}
+        <dl className="ride-stats">
+          <div><dt>Rides</dt><dd>{allSessions.length}</dd></div>
+          <div><dt>Scored rides</dt><dd>{scoredRides}</dd></div>
+          <div><dt>Current program average</dt><dd>{formatAvg(programAverage, scale)}</dd></div>
+        </dl>
+        {currentPhase && currentPhaseSessions.length > 0 && <div>
+          <p>{isFiveScale ? "Current program" : currentPhase.name} · {currentPhaseSessions.length} rides · Foundation average {formatAvg(currentPhaseAvg, scale)}</p>
+          {currentPhaseAvgs.length > 1 && <Sparkline values={currentPhaseAvgs} scale={scale} />}
+        </div>}
+        {allSessions.length ? [...allSessions].reverse().map(session => {
+          const unscored = session.ratings.length === 0;
+          const work = rideWork(phases.data?.find(p => p.id === session.phase_id), session.task_completions);
+          return (
+            <article key={session.id} className="task-row">
+              <div className="task-choice">
+                <strong>{formatHumanDate(session.occurred_at)} · {unscored ? "Unscored" : "Scored"}</strong>
+                <Link className="btn btn-ghost btn-sm" to={`/sessions/${session.id}${unscored ? "?edit=scores" : ""}`}>
+                  {unscored ? "Add scores" : "Review ride"}
+                </Link>
+              </div>
+              <p className="muted">{work}</p>
+              {session.notes && <p>{session.notes}</p>}
+            </article>
+          );
+        }) : <p className="muted">Saved rides will appear here.</p>}
       </details>
-      {!detailsReady ? (
-        <>
-          <div style={{ marginTop: 20 }}>
-            <SkeletonCard lines={4} />
-          </div>
-          <div style={{ marginTop: "var(--gap)" }}>
-            <SkeletonCard lines={3} />
-          </div>
-        </>
-      ) : (
-        <>
-          {/* ── 2. Phase progression ribbon ── */}
-          <div className="card" style={{ marginTop: 20 }}>
-            <div className="card-head">
-              <h2 className="card-title">Phase progression</h2>
-              {currentPhase && (
-                <span className="card-meta">
-                  {allPhases.filter((p) => p.position < currentPhase.position).length}
-                  /{allPhases.length} complete
-                </span>
-              )}
-            </div>
-            <div className="phase-ribbon">
-              {allPhases.map((phase) => {
-                const isCurrent =
-                  currentPhase != null && phase.id === currentPhase.id;
-                const isCompleted =
-                  currentPhase != null && phase.position < currentPhase.position;
-                const isSelected = expandedPhaseId === phase.id;
-                return (
-                  <button
-                    key={phase.id}
-                    type="button"
-                    className={`phase-pip${isCompleted ? " is-done" : ""}${isCurrent ? " is-current" : ""}`}
-                    aria-pressed={isSelected}
-                    aria-label={`${phase.name} — ${
-                      isCompleted ? "completed" : isCurrent ? "current" : "upcoming"
-                    }`}
-                    onClick={() =>
-                      setExpandedPhaseId(isSelected ? null : phase.id)
-                    }
-                  >
-                    <span className="phase-pip-n">
-                      {isCompleted ? "✓" : (phase.name.match(/(\d+)\s*$/)?.[1] ?? phase.name.charAt(0).toUpperCase())}
-                    </span>
-                    <span className="phase-pip-l">{phase.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Tapped-phase detail panel */}
-            {expandedPhaseId &&
-              (() => {
-                const phase = allPhases.find((p) => p.id === expandedPhaseId);
-                if (!phase || !currentPhase) return null;
-                const isCurrent = phase.id === currentPhase.id;
-                const isUpcoming = phase.position > currentPhase.position;
-                const phaseSessions = [...allSessions]
-                  .filter((s) => s.phase_id === phase.id)
-                  .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
-                const phaseAvg = phaseAvgFromRatings(phase.id);
-                const prevP =
-                  allPhases[allPhases.findIndex((p) => p.id === phase.id) - 1] ??
-                  null;
-                return (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      padding: "12px 14px",
-                      background: "var(--paper)",
-                      border: "1px solid var(--line)",
-                      borderRadius: "var(--radius)",
-                      animation: "rise-in var(--dur-2) var(--ease-out)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "baseline",
-                        gap: 10,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <strong
-                        style={{
-                          fontFamily: "var(--font-display)",
-                          fontSize: 15,
-                        }}
-                      >
-                        {phase.name}
-                      </strong>
-                      <span className="mono muted" style={{ fontSize: 11 }}>
-                        {phaseSessions.length} session
-                        {phaseSessions.length !== 1 ? "s" : ""}
-                        {phaseAvg !== null && (
-                          <>
-                            {" "}
-                            · avg{" "}
-                            <span style={{ color: avgColor(phaseAvg) }}>
-                              {formatAvg(phaseAvg, scale)}
-                            </span>
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    {isUpcoming ? (
-                      <p
-                        className="muted"
-                        style={{ fontSize: 13, margin: "8px 0 0" }}
-                      >
-                        Not started yet — finish{" "}
-                        {prevP ? prevP.name : "the previous phase"} and advance
-                        to reach this one.
-                      </p>
-                    ) : isCurrent ? (
-                      <p
-                        className="muted"
-                        style={{ fontSize: 13, margin: "8px 0 0" }}
-                      >
-                        The current phase — full detail below.
-                      </p>
-                    ) : phaseSessions.length === 0 ? (
-                      <p
-                        className="muted"
-                        style={{ fontSize: 13, margin: "8px 0 0" }}
-                      >
-                        No sessions logged for this phase.
-                      </p>
-                    ) : (
-                      <div style={{ marginTop: 4 }}>
-                        {phaseSessions.map((s) => {
-                          const pt = points.find((p) => p.sessionId === s.id);
-                          return (
-                            <Link
-                              key={s.id}
-                              to={`/sessions/${s.id}`}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                padding: "6px 0",
-                                borderTop: "1px solid var(--line)",
-                                textDecoration: "none",
-                                color: "inherit",
-                                fontSize: 13,
-                              }}
-                            >
-                              <span>{formatHumanDate(s.occurred_at)}</span>
-                              {pt?.foundationAverage !== undefined &&
-                                pt.foundationAverage !== null && (
-                                  <span
-                                    className="mono"
-                                    style={{
-                                      color: avgColor(pt.foundationAverage),
-                                      fontSize: 12,
-                                    }}
-                                  >
-                                    {formatAvg(pt.foundationAverage, scale)}
-                                  </span>
-                                )}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-          </div>
-
-          {/* ── 3. Current phase card ── */}
-          {currentPhase && (
-            <div className="card" style={{ marginTop: "var(--gap)" }}>
-              <div className="card-head">
-                <h2 className="card-title">{currentPhase.name}</h2>
-                <span className="card-meta">current phase</span>
-              </div>
-
-              {/* Phase running average + trend */}
-              {currentPhaseSessions.length > 0 ? (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-end",
-                    justifyContent: "space-between",
-                    gap: 16,
-                    flexWrap: "wrap",
-                    marginBottom: 12,
-                  }}
-                >
-                  <div>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-display)",
-                        fontSize: 32,
-                        fontWeight: 600,
-                        color: avgColor(currentPhaseAvg),
-                        letterSpacing: "0.2px",
-                      }}
-                    >
-                      {formatAvg(currentPhaseAvg, scale)}
-                    </span>
-                    <span
-                      className="mono muted"
-                      style={{ fontSize: 11, marginLeft: 8 }}
-                    >
-                      Foundation average
-                    </span>
-                  </div>
-                  {currentPhaseAvgs.length >= 2 && (
-                    <div style={{ flex: "1 1 160px", maxWidth: 260 }}>
-                      <Sparkline values={currentPhaseAvgs} scale={scale} />
-                      <div
-                        className="mono muted"
-                        style={{
-                          fontSize: 9,
-                          letterSpacing: 1.2,
-                          textTransform: "uppercase",
-                          marginTop: 2,
-                          textAlign: "right",
-                        }}
-                      >
-                        trend · {currentPhaseAvgs.length} sessions
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>
-                  No sessions yet
-                </p>
-              )}
-
-              {/* Session count + last date as stat tiles */}
-              <div className="horse-stats" style={{ margin: "0 0 16px" }}>
-                <div className="stat">
-                  <span className="k">Sessions</span>
-                  <span className="v">{currentPhaseSessions.length}</span>
-                </div>
-                <div className="stat">
-                  <span className="k">Last session</span>
-                  <span className="v">
-                    {lastSessionDate ? formatHumanDate(lastSessionDate) : "—"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Primary CTA */}
-              <Link
-                to={`/horses/${id}/sessions/new`}
-                className="btn btn-ghost"
-                style={{ marginBottom: 10, display: "inline-flex" }}
-              >
-                Log another ride
-              </Link>
-
-              {/* Secondary CTA: Advance (TQA/Foundation scale only) */}
-              {canAdvance && nextP && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    marginTop: 8,
-                  }}
-                >
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={handleAdvance}
-                  >
-                    Advance to {nextP.name}
-                  </button>
-                </div>
-              )}
-
-              {/* Sessions list for current phase */}
-              {sortedCurrentPhaseSessions.length > 0 && (
-                <div style={{ marginTop: 20 }}>
-                  <div
-                    className="mono muted"
-                    style={{
-                      fontSize: 10,
-                      letterSpacing: "1.4px",
-                      textTransform: "uppercase",
-                      marginBottom: 6,
-                    }}
-                  >
-                    Sessions this phase
-                  </div>
-                  {sortedCurrentPhaseSessions.map((s) => {
-                    const pt = points.find((p) => p.sessionId === s.id);
-                    return (
-                      <Link
-                        key={s.id}
-                        to={`/sessions/${s.id}`}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "7px 0",
-                          borderTop: "1px solid var(--line)",
-                          textDecoration: "none",
-                          color: "inherit",
-                          fontSize: 14,
-                        }}
-                      >
-                        <span>{formatHumanDate(s.occurred_at)}</span>
-                        {pt?.foundationAverage !== undefined &&
-                          pt.foundationAverage !== null && (
-                            <span
-                              className="mono"
-                              style={{
-                                color: avgColor(pt.foundationAverage),
-                                fontSize: 13,
-                              }}
-                            >
-                              {formatAvg(pt.foundationAverage, scale)}
-                            </span>
-                          )}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
+      <Link className="workflow-link" to={`/horses/${id}/report`}>View / download report</Link>
       <details className="card" style={{marginTop:12}}><summary>Finish or review training</summary>
         <p className="muted">Review the final evaluation when you are ready to finish this horse’s training. Your ride history remains available.</p>
         <Link to={`/horses/${id}/finish`} className="btn">{horse.data.status === "in_training" ? "Finish training" : "Review final evaluation"}</Link>
@@ -929,19 +514,6 @@ export default function HorseDetail() {
           </button>
         </div>
       </details>
-
-      {/* ── Advance confirmation dialog ── */}
-      <ConfirmDialog
-        open={advanceDialogOpen && !!nextP}
-        title={`Advance to ${nextP?.name ?? "the next phase"}?`}
-        body={advanceDialogCopy}
-        confirmLabel={
-          advancing ? "Advancing…" : `Advance to ${nextP?.name ?? "next phase"}`
-        }
-        busy={advancing}
-        onConfirm={performAdvance}
-        onCancel={() => setAdvanceDialogOpen(false)}
-      />
 
       {/* ── Delete confirmation dialog ── */}
       <ConfirmDialog

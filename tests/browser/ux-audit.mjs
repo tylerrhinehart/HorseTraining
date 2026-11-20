@@ -24,9 +24,12 @@ for(const [size,viewport] of [['desktop',{width:1280,height:900}],['mobile',{wid
   if(program==='sale_horse'){await page.getByLabel('Estimated rides needed').fill('30');await page.getByLabel('Purchase price').fill('4500');await page.getByLabel('Expected sale date').fill('2026-11-20');}
   else{await page.getByLabel('Payment method').fill('Check');await page.getByLabel('Payment amount').fill('1200');}
   await page.getByRole('button',{name:'Add horse',exact:true}).click();await page.getByRole('heading',{name,exact:true}).waitFor();const horseUrl=page.url();
-  await page.getByRole('link',{name:`Log a ride for ${name}`,exact:true}).click();await page.getByRole('heading',{name:'Log a ride'}).waitFor();
+  await page.getByRole('link',{name:"Start Ride",exact:true}).click();await page.getByRole('heading',{name:'Log a ride'}).waitFor();
+  await page.locator('summary').filter({hasText:/^Rider( and bit)?$/}).click();
   await page.getByLabel('Rider',{exact:true}).fill('Wade UX');await page.getByLabel('When',{exact:true}).fill('2026-10-02T17:00');
+  if(program==='foundation') await page.getByLabel('Phase worked on this ride').selectOption({label:'Groundwork'});
   await page.getByLabel('Ride notes',{exact:true}).fill('Unsaved UX ride notes');
+  await page.locator('summary').filter({hasText:/^Optional score sheet ·/}).click();
   const firstGroup=page.locator('.rating[role="group"]').first();await firstGroup.getByRole('button',{name:program==='foundation'?'Rate +2':'Rate 4',exact:true}).click();
   if(program!=='foundation'){await page.getByLabel('Bit (this week)').selectOption('bit_2');await page.getByRole('button',{name:'Fence Work, Phase 2',exact:true}).click();await page.getByRole('button',{name:'Heading, Phase 3',exact:true}).click();}
   await page.getByRole('link',{name:/^Reference$/i}).click();await page.getByRole('dialog',{name:'Leave without saving?'}).waitFor();await page.getByRole('button',{name:'Keep editing',exact:true}).click();assert.equal(await page.getByLabel('Ride notes',{exact:true}).inputValue(),'Unsaved UX ride notes');
@@ -51,7 +54,7 @@ for(const [size,viewport] of [['desktop',{width:1280,height:900}],['mobile',{wid
   await page.getByLabel(`Comments for ${name}`,{exact:true}).fill('Weekly UX check');await page.getByRole('button',{name:'Save weekly comments',exact:true}).click();await page.getByRole('status').filter({hasText:'Weekly comments saved'}).waitFor();
   await page.reload();assert.equal(await page.getByLabel(`Comments for ${name}`,{exact:true}).inputValue(),'Weekly UX check');
   assert.equal(await page.getByRole('link',{name:'View / download report',exact:true}).count(),1);
-  await page.locator('summary').filter({hasText:/^Edit details$/}).click();await page.getByLabel('Owner name',{exact:true}).fill('Corrected synthetic owner');await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.getByText('Owner: Corrected synthetic owner',{exact:true}).waitFor();
+  await page.locator('summary').filter({hasText:/^Edit details$/}).click();await page.getByLabel('Owner name',{exact:true}).fill('Corrected synthetic owner');await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.getByText(/Owner: Corrected synthetic owner/).waitFor();
   await page.getByRole('link',{name:/^Horses$/i}).click();await page.getByRole('searchbox',{name:'Search horses'}).fill('no-match-ux');await page.getByText('No horses match “no-match-ux”.').waitFor();assert.equal(await page.getByRole('heading',{name:'No horses yet',exact:true}).count(),0);await page.getByRole('searchbox',{name:'Search horses'}).fill('');
   evidence.push(`${size}/${program}: add validation, owner/goals/metadata, blank scores, navigation/back discard guard, video-return draft, save/edit/reload rider+date+bit+tasks+rating+notes, weekly comments, independent report, search empty state PASS`);
  }

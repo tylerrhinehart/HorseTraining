@@ -72,6 +72,14 @@ export async function getPhase(id: ID): Promise<Phase | null> {
 
 // ---------- Questions (canonical, read-only after seed) ----------
 
+// Older accounts have the original single-job instruction in their seeded questions.
+function currentQuestionText(question: Question): Question {
+  if (question.text === 'Task Completion — Pick One Job From the "Task Completion" Sheet') {
+    return { ...question, text: "Task Completion — Select the jobs and phases worked today" };
+  }
+  return question;
+}
+
 export async function listQuestionsForPhase(phaseId: ID): Promise<Question[]> {
   const res = await sb()
     .from("questions")
@@ -79,7 +87,7 @@ export async function listQuestionsForPhase(phaseId: ID): Promise<Question[]> {
     .eq("phase_id", phaseId)
     .order("axis", { ascending: true })
     .order("position", { ascending: true });
-  return throwIfError(res) ?? [];
+  return (throwIfError(res) ?? []).map(currentQuestionText);
 }
 
 export async function listAllQuestions(): Promise<Question[]> {
@@ -87,7 +95,7 @@ export async function listAllQuestions(): Promise<Question[]> {
     .from("questions")
     .select("*")
     .order("position", { ascending: true });
-  return throwIfError(res) ?? [];
+  return (throwIfError(res) ?? []).map(currentQuestionText);
 }
 
 export async function getCanonicalPhasesAndQuestions(): Promise<{
@@ -192,9 +200,16 @@ export async function updateHorse(
       | "training_type"
     >
   >,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
-  const res = await sb().from("horses").update(patch).eq("id", id);
+  let query = sb().from("horses").update(patch).eq("id", id);
+  if (expectedUpdatedAt) query = query.eq("updated_at", expectedUpdatedAt);
+  const res = await query.select("id").maybeSingle();
   if (res.error) throw new Error(res.error.message);
+  if (!res.data) {
+    invalidate(["horse", id]);
+    throw new Error("This horse changed or is unavailable. Review the latest details and retry.");
+  }
   invalidate(["horses"]);
   invalidate(["horse", id]);
 }
@@ -223,16 +238,6 @@ export async function setHorseStatus(id: ID, status: HorseStatus): Promise<void>
     .eq("id", id)
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
-  invalidate(["horses"]);
-  invalidate(["horse", id]);
-}
-
-export async function setHorseCurrentPhase(id: ID, phaseId: ID): Promise<void> {
-  const { error } = await sb()
-    .from("horses")
-    .update({ current_phase_id: phaseId })
-    .eq("id", id);
   if (error) throw new Error(error.message);
   invalidate(["horses"]);
   invalidate(["horse", id]);
@@ -277,24 +282,35 @@ export async function listRatingsForHorse(
 export async function listSessionsForHorse(
   horseId: ID,
 ): Promise<SessionWithRatings[]> {
-  const res = await sb()
-    .from("sessions")
-    .select("*, ratings(*)")
-    .eq("horse_id", horseId)
-    .order("occurred_at", { ascending: true });
-  return throwIfError(res) ?? [];
+  // A discipline's most recent ride can be on any page of the horse's history.
+  const rides: SessionWithRatings[] = [];
+  const pageSize = 500;
+  for (;;) {
+    const res = await sb()
+      .from("sessions")
+      .select("*, ratings(*)")
+      .eq("horse_id", horseId)
+      .order("occurred_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(rides.length, rides.length + pageSize - 1);
+    const page = throwIfError(res) ?? [];
+    rides.push(...page);
+    if (page.length < pageSize) return rides;
+  }
 }
 
-// Lightweight feed for the Today dashboard: dates only, newest first.
-export async function listSessionDates(): Promise<
-  { id: ID; horse_id: ID; occurred_at: string }[]
-> {
-  const res = await sb()
-    .from("sessions")
-    .select("id, horse_id, occurred_at")
-    .order("occurred_at", { ascending: false })
-    .limit(500);
-  return throwIfError(res) ?? [];
+// Shared roster feed. Include every page so infrequently ridden horses still have a last-worked summary.
+export async function listSessionDates() {
+  const rows: Pick<Session, "id" | "horse_id" | "occurred_at" | "task_completions">[] = [];
+  const pageSize = 500;
+  for (;;) {
+    const res = await sb().from("sessions").select("id, horse_id, occurred_at, task_completions")
+      .order("occurred_at", {ascending:false}).order("created_at", {ascending:false}).order("id", {ascending:false})
+      .range(rows.length, rows.length + pageSize - 1);
+    const page = throwIfError(res) ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
 }
 
 export async function getSession(id: ID): Promise<SessionWithRatings | null> {
@@ -346,6 +362,7 @@ export async function createSession(input: SessionInput): Promise<Session> {
 }
 
 export interface SessionUpdateInput {
+  expectedUpdatedAt?: string;
   horse_id?: ID;
   phase_id?: ID;
   occurred_at?: string;
@@ -360,11 +377,10 @@ export async function updateSession(
   id: ID,
   input: SessionUpdateInput,
 ): Promise<void> {
-  // Atomic path: the session row plus its full rating set update in one
-  // transaction. notes/rider/bit are always overwritten (the edit form sends
-  // the complete current state); occurred_at/task_completions stay unchanged
-  // when omitted. horse_id/phase_id aren't editable here, so they're not sent.
-  const { error } = await sb().rpc("update_session_with_ratings", {
+  if (input.phase_id && !input.expectedUpdatedAt) throw new Error("Reload the ride before changing its phase.");
+  const versioned = !!input.expectedUpdatedAt;
+  const { error } = await sb().rpc(versioned ? "update_ride_record" : "update_session_with_ratings", {
+    ...(versioned ? { p_expected_updated_at: input.expectedUpdatedAt, p_phase_id: input.phase_id ?? null } : {}),
     p_session_id: id,
     p_occurred_at: input.occurred_at ?? null,
     p_notes: input.notes?.trim() ? input.notes.trim() : null,
@@ -373,6 +389,7 @@ export async function updateSession(
     p_task_completions: input.task_completions ?? null,
     p_ratings: input.ratings ?? null,
   });
+  if (versioned && error?.code === "PGRST202") throw new Error("Ride edits require the ride accuracy database update (migration_ride_accuracy.sql). Your edits are still here.");
   requireAtomicSave(error);
   invalidate(["session", id]);
   invalidate(["sessions"]);

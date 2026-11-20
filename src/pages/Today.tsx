@@ -2,7 +2,6 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   listInTrainingHorses,
   listPhases,
-  listSessionDates,
   getHorse,
   listSessionsForHorse,
   listRatingsForHorse,
@@ -15,6 +14,8 @@ import { gradientFor, hashTone, initialsOf } from "../components/HorseAvatar";
 import { SkeletonCard } from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
 import { differenceInCalendarDays, format, parseISO, subDays } from "date-fns";
+import { useRosterWork } from "../hooks/useRosterWork";
+import { programLabel } from "../content/programs";
 import type { Horse, Phase } from "../supabase/types";
 
 // Warm the horse workspace caches on intent (hover/focus/touch) so tapping a
@@ -73,7 +74,7 @@ function EmptyState() {
 
 function MultiHorseToday({ horses }: { horses: Horse[] }) {
   const phases = useQuery(qk.phases(), () => listPhases());
-  const sessionDates = useQuery(qk.sessionDates(), () => listSessionDates());
+  const {rides:sessionDates, summaries} = useRosterWork();
   const phasesById = new Map<string, Phase>(
     (phases.data ?? []).map((p) => [p.id, p]),
   );
@@ -157,6 +158,7 @@ function MultiHorseToday({ horses }: { horses: Horse[] }) {
           <TodayCard
             key={h.id}
             horse={h}
+            summary={summaries?.get(h.id)}
             phasesById={phasesById}
             isActive={h.id === activeId}
             workedToday={workedTodayIds.has(h.id)}
@@ -172,12 +174,14 @@ function MultiHorseToday({ horses }: { horses: Horse[] }) {
 function TodayCard({
   horse,
   phasesById,
+  summary,
   isActive,
   workedToday,
   lastSession,
   datesReady,
 }: {
   horse: Horse;
+  summary?: string;
   phasesById: Map<string, Phase>;
   isActive: boolean;
   workedToday: boolean;
@@ -236,9 +240,10 @@ function TodayCard({
         </h3>
         <span className="horse-sub">
           {horse.owner_name ? `Owner: ${horse.owner_name}` : "—"}
-          {phase ? ` · ${phase.name}` : ""}
+          {horse.training_type === "foundation" ? phase && ` · ${phase.name}` : ` · ${programLabel(horse.training_type)}`}
           {dayN != null ? ` · Day ${dayN}` : ""}
         </span>
+        {summary && horse.training_type !== "foundation" && <span className="horse-sub">{summary}</span>}
         {workedLine && (
           <span
             style={{
@@ -256,7 +261,7 @@ function TodayCard({
           style={{ marginTop: 6, justifyContent: "center" }}
           onClick={(e) => e.stopPropagation()}
         >
-          Log a ride
+          Start Ride
         </Link>
       </div>
     </div>

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, type ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { useEffect, type ReactNode } from "react";
+import { NavLink, useLocation, useMatch } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { useActiveHorseId } from "../state/activeHorse";
-import { listInTrainingHorses, listPhases } from "../supabase/queries";
+import { getHorse, getSession, listInTrainingHorses, listPhases } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import { prefetchQuery } from "../supabase/cache";
 import { qk } from "../supabase/keys";
@@ -18,8 +18,16 @@ export default function AppShell({ children }: Props) {
   const { user } = useAuth();
   const location = useLocation();
   const [activeId, setActiveId] = useActiveHorseId();
+  const match = useMatch("/horses/:id/*");
+  const rideId = useMatch("/sessions/:id")?.params.id;
+  const ride = useQuery(rideId ? qk.session(rideId) : null, () => getSession(rideId!));
+  const routeId = rideId ? ride.data?.horse_id : match?.params.id === "new" ? undefined : match?.params.id;
 
   const horses = useQuery(qk.horses("in_training"), listInTrainingHorses);
+  const selectedId = routeId ?? (rideId ? undefined : activeId);
+  const rosterHorse = horses.data?.find(horse => horse.id === selectedId);
+  const routeHorse = useQuery(routeId && !rosterHorse ? qk.horse(routeId) : null, () => getHorse(routeId!));
+  const activeHorse = rosterHorse ?? routeHorse.data;
 
   // Prime the cache so first navigations paint instantly.
   useEffect(() => {
@@ -29,26 +37,14 @@ export default function AppShell({ children }: Props) {
   }, [user]);
 
   useEffect(() => {
-    if (!horses.data) return;
+    if (routeId) {
+      if (activeHorse && activeId !== routeId) setActiveId(routeId);
+      return;
+    }
+    if (rideId || !horses.data) return;
     if (activeId && horses.data.some((h) => h.id === activeId)) return;
     if (horses.data.length > 0) setActiveId(horses.data[0].id);
-  }, [horses.data, activeId, setActiveId]);
-
-  // If activeId points at a horse not in our cached list (e.g. just-created
-  // horse from /horses/new), re-fetch so the topbar pill renders immediately.
-  useEffect(() => {
-    if (!activeId) return;
-    if (horses.loading) return;
-    if (!horses.data) return;
-    if (horses.data.some((h) => h.id === activeId)) return;
-    horses.refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId]);
-
-  const activeHorse = useMemo(
-    () => horses.data?.find((h) => h.id === activeId) ?? null,
-    [horses.data, activeId],
-  );
+  }, [routeId, rideId, activeHorse, horses.data, activeId, setActiveId]);
 
   const onAuthRoute = AUTH_PATHS.has(location.pathname);
 

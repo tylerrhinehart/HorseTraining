@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useFacility } from "../auth/FacilityProvider";
+import { captureFacilityScope } from "../supabase/facilityScope";
 import { useAuth } from "../auth/AuthProvider";
 import { supabaseConfigured } from "../supabase/client";
 import {
@@ -25,6 +27,7 @@ type InstallEvent = Event & {
 
 export default function Settings() {
   const { user, signOut } = useAuth();
+  const { facility } = useFacility();
   const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
@@ -45,6 +48,7 @@ export default function Settings() {
     setExportStatus(null);
     setExportFailed(false);
     try {
+      const scope = captureFacilityScope();
       const [horses, phases, questions, sessions, trifecta_evaluations] =
         await Promise.all([
           listHorses({ statuses: ["in_training", "complete", "archived"] }),
@@ -53,6 +57,7 @@ export default function Settings() {
           listAllSessionsWithRatings(),
           listAllTrifectas(),
         ]);
+      scope.assertCurrent();
       const blob = new Blob(
         [
           JSON.stringify(
@@ -60,6 +65,7 @@ export default function Settings() {
               app: "tqa-tracker",
               exportedAt: new Date().toISOString(),
               userId: user?.id,
+              facilityId: facility?.id,
               horses,
               phases,
               questions,
@@ -88,7 +94,8 @@ export default function Settings() {
   return (
     <div className="view" style={{ maxWidth: 720 }}>
       <div className="eyebrow">Account</div>
-      <h1 className="h-display">Settings</h1>
+      <Link className="btn" to="/facility-settings">Facility and team settings</Link>
+        <h1 className="h-display">Settings</h1>
 
       <div className="card">
         <div className="card-head">

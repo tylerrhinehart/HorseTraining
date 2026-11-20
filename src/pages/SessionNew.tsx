@@ -1,11 +1,12 @@
 import useUnsavedChanges from "../hooks/useUnsavedChanges";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   createSession,
   getHorse,
   listPhases,
   listQuestionsForPhase,
+  listSessionsForHorse,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
 import { qk } from "../supabase/keys";
@@ -15,7 +16,8 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
-import { bitOptions } from "../content/programs";
+import { lastWorkedByDiscipline } from "../utils/disciplineHistory";
+import { bitOptions, programLabel } from "../content/programs";
 import { localDateTimeInput } from "../utils/dates";
 import type { TaskCompletion } from "../supabase/types";
 
@@ -49,6 +51,9 @@ export default function SessionNew() {
 
   const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
   const phases = useQuery(qk.phases(), () => listPhases());
+  const isPerformance = !!horse.data && horse.data.training_type !== "foundation";
+  const sessions = useQuery(id && isPerformance ? qk.sessions(id) : null, () => listSessionsForHorse(id!));
+  const history = useMemo(() => sessions.data && lastWorkedByDiscipline(sessions.data), [sessions.data]);
 
   const [phaseId, setPhaseId] = useState<string>("");
   const [initialOccurredAt, setInitialOccurredAt] = useState(localDateTimeInput);
@@ -151,7 +156,6 @@ export default function SessionNew() {
   const currentPhase = phases.data.find((p) => p.id === phaseId) ?? null;
   const currentPhaseName = currentPhase?.name ?? "—";
   const scale = currentPhase?.scale ?? "tqa";
-  const isPerformance = horse.data.training_type !== "foundation";
 
   const total = questions.data?.length ?? 0;
   const scored = Object.values(drafts).filter(draft => typeof draft.score === "number").length;
@@ -233,13 +237,8 @@ export default function SessionNew() {
         }}
       >
         <div className="field">
-          <label className="label">Phase</label>
-          <div>
-            <span className="pill pill-leather">{currentPhaseName}</span>
-          </div>
-          <span className="muted" style={{ fontSize: 11 }}>
-            Logged against the current phase
-          </span>
+          <span className="label">{isPerformance ? "Training program" : "Current foundation phase"}</span>
+          <div><strong className="pill pill-leather">{isPerformance ? programLabel(horse.data.training_type) : currentPhaseName}</strong></div>
         </div>
         <div className="field">
           <label className="label" htmlFor="session-when">
@@ -303,7 +302,11 @@ export default function SessionNew() {
       )}
 
       </details>
-      {isPerformance && <TaskCompletionPicker goals={horse.data.program_meta?.training_goals} value={tasks} onChange={setTasks} />}
+      {isPerformance && <>
+        {sessions.error && <ErrorState error={sessions.error} onRetry={sessions.refresh} />}
+        {sessions.loading && <p role="status">Loading discipline history…</p>}
+        <TaskCompletionPicker goals={horse.data.program_meta?.training_goals} value={tasks} onChange={setTasks} history={history} />
+      </>}
 
       <div className="card">
         <label className="label" htmlFor="session-notes">

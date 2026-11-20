@@ -17,6 +17,8 @@ import {
 import { qk } from "../supabase/keys";
 import { PROGRAMS, programLabel, taskJobName } from "../content/programs";
 import HorseProgramFields, { programFormDefaults, programMetaFromForm, type HorseProgramForm } from "../components/HorseProgramFields";
+import DisciplineHistoryCard from "../components/DisciplineHistory";
+import { lastWorkedByDiscipline } from "../utils/disciplineHistory";
 import WeeklyComments from "../components/WeeklyComments";
 import type { TrainingType } from "../supabase/types";
 import { useQuery } from "../supabase/useQuery";
@@ -359,6 +361,9 @@ export default function HorseDetail() {
           >
             {programLabel(horse.data.training_type)}
           </span>
+          {!isFiveScale && <p style={{ margin: "6px 0 0" }}>
+            Current foundation phase: <strong>{currentPhase?.name ?? (phases.loading ? "Loading…" : "Unavailable")}</strong>
+          </p>}
         </div>
         {dayLabel && (
           <div
@@ -385,6 +390,9 @@ export default function HorseDetail() {
         {horse.data.program_meta?.training_goals?.length ? <p>Goals: {horse.data.program_meta.training_goals.map(taskJobName).join(", ")}</p> : null}
       </div>
       {[phases,sessions,ratings].filter(query=>query.error).map((query,index)=><ErrorState key={index} error={query.error!} onRetry={query.refresh} />)}
+      {isFiveScale && (sessions.data
+        ? <DisciplineHistoryCard history={lastWorkedByDiscipline(sessions.data)} goals={horse.data.program_meta?.training_goals ?? []} />
+        : sessions.loading && <p role="status">Loading discipline history…</p>)}
       <details className="card" style={{marginTop:12}}><summary>All ride history ({allSessions.length})</summary>
         <dl className="ride-stats">
           <div><dt>Rides</dt><dd>{allSessions.length}</dd></div>
@@ -705,7 +713,7 @@ export default function HorseDetail() {
                       marginBottom: 6,
                     }}
                   >
-                    Sessions this phase
+                    {isFiveScale ? "Rides in this program" : "Sessions this phase"}
                   </div>
                   {sortedCurrentPhaseSessions.map((s) => {
                     const pt = points.find((p) => p.sessionId === s.id);

@@ -292,12 +292,21 @@ export async function listRatingsForHorse(
 export async function listSessionsForHorse(
   horseId: ID,
 ): Promise<SessionWithRatings[]> {
-  const res = await sb()
-    .from("sessions")
-    .select("*, ratings(*)")
-    .eq("horse_id", horseId)
-    .order("occurred_at", { ascending: true });
-  return throwIfError(res) ?? [];
+  // A discipline's most recent ride can be on any page of the horse's history.
+  const rides: SessionWithRatings[] = [];
+  const pageSize = 500;
+  for (;;) {
+    const res = await sb()
+      .from("sessions")
+      .select("*, ratings(*)")
+      .eq("horse_id", horseId)
+      .order("occurred_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(rides.length, rides.length + pageSize - 1);
+    const page = throwIfError(res) ?? [];
+    rides.push(...page);
+    if (page.length < pageSize) return rides;
+  }
 }
 
 // Lightweight feed for the Today dashboard: dates only, newest first.

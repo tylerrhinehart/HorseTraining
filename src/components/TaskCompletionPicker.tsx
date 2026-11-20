@@ -1,8 +1,10 @@
 import type { TaskCompletion } from "../supabase/types";
 import { TASK_COMPLETION_GROUPS, TASK_COMPLETION_JOBS, LEGACY_TASK_JOBS, TASK_PHASES, taskJobName, type TaskJob } from "../content/programs";
 import { DISCIPLINE_MATERIALS, PERFORMANCE_STANDARDS } from "../content/disciplineResources";
+import { lastWorkedLabel, type DisciplineHistory } from "../utils/disciplineHistory";
 
 interface Props {
+  history?: DisciplineHistory;
   value: TaskCompletion[];
   onChange: (next: TaskCompletion[]) => void;
   goals?: string[];
@@ -28,7 +30,7 @@ function TaskResources({ job, phase }: TaskCompletion) {
   );
 }
 
-export default function TaskCompletionPicker({ value, onChange, goals = [], readOnly = false }: Props) {
+export default function TaskCompletionPicker({ value, onChange, goals = [], readOnly = false, history }: Props) {
   function toggle(job: string, phase: number) {
     const existing = value.find(task => task.job === job);
     if (!existing) onChange([...value, { job, phase }]);
@@ -49,12 +51,17 @@ export default function TaskCompletionPicker({ value, onChange, goals = [], read
       {jobs.map(job => {
         const selected = value.find(task => task.job === job.code);
         return <div key={job.code} className="task-row">
-          <div className="task-choice"><span>{job.name}</span><div className="task-phases">
-            {TASK_PHASES.map(phase => <button key={phase} type="button"
-              className={`btn btn-sm ${selected?.phase === phase ? "btn-leather" : "btn-ghost"}`}
-              aria-label={`${job.name}, Phase ${phase}`} aria-pressed={selected?.phase === phase}
-              onClick={() => toggle(job.code, phase)}>Phase {phase}</button>)}
-          </div></div>
+          <strong>{job.name}</strong>
+          {history && <p className="discipline-last">Last worked: {lastWorkedLabel(history.get(job.code))}</p>}
+          <div className="task-choice">
+            <span>Phase for this ride{selected ? `: Phase ${selected.phase}` : ""}</span>
+            <div className="task-phases" role="group" aria-label={`${job.name} phase for this ride`}>
+              {TASK_PHASES.map(phase => <button key={phase} type="button"
+                className={`btn btn-sm ${selected?.phase === phase ? "btn-leather" : "btn-ghost"}`}
+                aria-label={`${job.name}, Phase ${phase}`} aria-pressed={selected?.phase === phase}
+                onClick={() => toggle(job.code, phase)}>Phase {phase}</button>)}
+            </div>
+          </div>
           {selected && <TaskResources {...selected} />}
         </div>;
       })}
@@ -69,6 +76,9 @@ export default function TaskCompletionPicker({ value, onChange, goals = [], read
     {agreed.length && agreed.length < TASK_COMPLETION_JOBS.length
       ? <details open={value.some(task => !goals.includes(task.job)) || undefined}><summary>Other disciplines</summary>{others}</details>
       : others}
+    {history && LEGACY_TASK_JOBS.filter(job => history.has(job.code) && !value.some(task => task.job === job.code)).map(job =>
+      <div className="task-row" key={job.code}><strong>{job.name}</strong><p className="discipline-last">Last worked: {lastWorkedLabel(history.get(job.code))}</p></div>
+    )}
     {group("Previously recorded tasks", LEGACY_TASK_JOBS.filter(job => value.some(task => task.job === job.code)))}
   </section>;
 }

@@ -15,6 +15,7 @@ import { qk } from "../supabase/keys";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
 import RidePhaseSelect from "../components/RidePhaseSelect";
 import { hasEntries, prepareRideEntries } from "../utils/rideEntries";
+import { rideWork } from "../utils/rideWork";
 import TaskCompletionPicker from "../components/TaskCompletionPicker";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
@@ -238,7 +239,7 @@ export default function SessionDetail() {
     <div className="view">
       {unsavedDialog}
       <div className="eyebrow">Saved ride · {horse.data?.name ?? "Horse"}</div>
-      <h1 className="h-display">{phase?.name ?? "Session"}</h1>
+      <h1 className="h-display">{rideWork(phase, editing ? tasks : session.data.task_completions)}</h1>
       <p className="muted" style={{ margin: "4px 0 4px", fontSize: 14 }}>
         {formatDateTime(session.data.occurred_at)}
       </p>

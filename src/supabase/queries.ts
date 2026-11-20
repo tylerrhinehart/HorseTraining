@@ -243,16 +243,6 @@ export async function setHorseStatus(id: ID, status: HorseStatus): Promise<void>
   invalidate(["horse", id]);
 }
 
-export async function setHorseCurrentPhase(id: ID, phaseId: ID): Promise<void> {
-  const { error } = await sb()
-    .from("horses")
-    .update({ current_phase_id: phaseId })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-  invalidate(["horses"]);
-  invalidate(["horse", id]);
-}
-
 export async function archiveHorse(id: ID): Promise<void> {
   await setHorseStatus(id, "archived");
 }
@@ -309,16 +299,18 @@ export async function listSessionsForHorse(
   }
 }
 
-// Lightweight feed for the Today dashboard: dates only, newest first.
-export async function listSessionDates(): Promise<
-  { id: ID; horse_id: ID; occurred_at: string }[]
-> {
-  const res = await sb()
-    .from("sessions")
-    .select("id, horse_id, occurred_at")
-    .order("occurred_at", { ascending: false })
-    .limit(500);
-  return throwIfError(res) ?? [];
+// Shared roster feed. Include every page so infrequently ridden horses still have a last-worked summary.
+export async function listSessionDates() {
+  const rows: Pick<Session, "id" | "horse_id" | "occurred_at" | "task_completions">[] = [];
+  const pageSize = 500;
+  for (;;) {
+    const res = await sb().from("sessions").select("id, horse_id, occurred_at, task_completions")
+      .order("occurred_at", {ascending:false}).order("created_at", {ascending:false}).order("id", {ascending:false})
+      .range(rows.length, rows.length + pageSize - 1);
+    const page = throwIfError(res) ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
 }
 
 export async function getSession(id: ID): Promise<SessionWithRatings | null> {

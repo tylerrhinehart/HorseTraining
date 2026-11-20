@@ -12,16 +12,16 @@ try {
   await page.getByRole("button", {name:"Add horse", exact:true}).click();
   await page.getByRole("heading", {name, exact:true}).waitFor();
   const horseUrl = page.url();
-  await page.getByRole("button", {name:"Advance to Phase 1", exact:true}).click();
+  await page.getByRole("button", {name:/Review Phase 1/}).click();
   await page.getByRole("dialog").getByRole("button", {name:"Advance to Phase 1"}).click();
-  await page.getByText("Current foundation phase: Phase 1").waitFor();
-  await page.getByRole("link", {name:`Log a ride for ${name}`}).click();
+  await page.getByRole("heading",{ name:"Phase 1", exact:true }).waitFor();
+  await page.getByRole("link", {name:"Start Ride"}).click();
   const phase = page.getByLabel("Phase worked on this ride");
   await page.getByLabel("When", {exact:true}).fill("2026-10-15T12:00");
   assert.equal(await phase.inputValue(), "");
   assert.equal(await page.getByRole("button", {name:"Save ride",exact:true}).isDisabled(),true);
   await phase.selectOption({label:"Groundwork"});
-  await page.locator("summary").filter({hasText:"Phase score sheet"}).click();
+  await page.locator("summary").filter({hasText:"Optional score sheet"}).click();
   await page.locator('.rating[role="group"]').first().getByRole("button", {name:"Rate +1",exact:true}).click();
   await page.getByRole("button", {name:"+ Add note",exact:true}).nth(1).click();
   await page.getByPlaceholder("Optional comment…").fill("First unscored observation.");
@@ -58,6 +58,6 @@ try {
   await older.getByRole("button",{name:"Save changes",exact:true}).click();
   await older.getByRole("alert").filter({hasText:"This ride changed"}).first().waitFor();
   await page.goto(horseUrl);
-  await page.getByText("Current foundation phase: Phase 1").waitFor();
+  await page.getByRole("heading",{ name:"Phase 1", exact:true }).waitFor();
   console.log("Verified backdating, scored phase correction, unscored observations, stale edits and horse phase.",horseUrl);
 } finally { await browser.close(); }

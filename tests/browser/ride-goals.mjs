@@ -20,14 +20,18 @@ try {
   await page.getByRole("heading", {name, exact:true}).waitFor();
   const horseUrl = page.url();
   await page.getByRole("link", { name: "Start Ride", exact: true }).click();
-  const sheet = page.locator("details").filter({ has: page.locator("summary", {hasText:"Performance warm-up"}) });
-  assert.equal(await sheet.evaluate(element => element.open), true);
-  await sheet.locator('.rating[role="group"]').first().waitFor();
+  const sheet = page.locator("details").filter({ has: page.locator("summary", {hasText:"Optional score sheet"}) });
+  assert.equal(await sheet.evaluate(element => element.open), false);
+
   assert.equal(await page.getByRole("button", { name: "Fence Work, Phase 2" }).textContent(), "Phase 2");
   await page.getByRole("button", {name:"Fence Work, Phase 2", exact:true}).click();
   await page.getByRole("button", {name:"Heading, Phase 3", exact:true}).click();
-  assert.equal(await page.getByRole("link",{name:/Fence Work P2/}).getAttribute("href"), "https://youtu.be/YfVmfI5fQwU");
+  await page.getByRole("button",{name:"Phase guide for Fence Work",exact:true}).click();
+  assert.equal(await page.getByRole("dialog").getByRole("link",{name:/Phase 2 · Judges Corner/}).getAttribute("href"), "https://youtu.be/YfVmfI5fQwU");
+  await page.getByRole("button",{name:"Close",exact:true}).click();
+  await page.getByRole("button",{name:"Phase guide for Heading",exact:true}).click();
   await page.getByText(/Live cattle: put the rope/).waitFor();
+  await page.getByRole("button",{name:"Close",exact:true}).click();
   await page.getByLabel("Ride notes", {exact:true}).fill("Practice ride with two agreed goals.");
   await page.getByRole("button", {name:"Save ride", exact:true}).click();
   await page.waitForURL(horseUrl);
@@ -43,7 +47,7 @@ try {
   await page.getByText("All ride history (1)", {exact:true}).click();
   assert.equal(await scoredCount.textContent(), "1");
   assert.equal(await page.locator(".ride-stats div").filter({ hasText: "Current program average" }).locator("dd").textContent(), "4.0");
-  await page.getByRole("link", { name: `Log a ride for ${name}` }).click();
+  await page.getByRole("link", { name: "Start Ride" }).click();
   await page.getByRole("button", { name: "Fence Work, Phase 1", exact: true }).click();
   await page.getByLabel("Ride notes", { exact: true }).fill("Practice ride ready for you to score.");
   await page.getByRole("button", { name: "Save ride", exact: true }).click();

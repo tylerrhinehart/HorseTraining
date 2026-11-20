@@ -18,6 +18,7 @@ import type {
   TrifectaEvaluationWithScores,
 } from "../../supabase/types";
 import { goalReviews } from "../../utils/goalReview";
+import { rideWork } from "../../utils/rideWork";
 import { formatDateTime, formatHumanDate } from "../../utils/dates";
 import {
   formatAvg,
@@ -34,7 +35,7 @@ import {
 import { SCORE_LEGEND } from "../../content/tqa-template";
 import {
   bitLabel,
-  taskJobName,
+  programLabel,
   FIVE_FOUNDATION_LEGEND,
   FIVE_TEMPERAMENT_LEGEND,
 } from "../../content/programs";
@@ -278,12 +279,12 @@ export function HorseReport({
                 .filter((s) => s.phase_id === phase.id)
                 .sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
               return (
-                <View key={phase.id} style={styles.weekBlock} wrap={false}>
-                  <Text style={styles.h3}>{phase.name}</Text>
+                <View key={phase.id} style={styles.weekBlock}>
+                  <Text style={styles.h3}>{phase.program === "foundation" ? phase.name : programLabel(phase.program)}</Text>
                   <View style={styles.logHeader}>
                     <Text style={{ width: 18 }}>#</Text>
                     <Text style={{ width: 70 }}>Date</Text>
-                    <Text style={{ width: 160 }}>Phase</Text>
+                    <Text style={{ width: 160 }}>Work recorded</Text>
                     <Text style={{ width: 60, textAlign: "right" }}>Foundation</Text>
                     <Text style={{ width: 70, textAlign: "right" }}>
                       Temperament
@@ -298,12 +299,12 @@ export function HorseReport({
                       const f = sessionAverage(s.ratings, "foundation");
                       const t = sessionAverage(s.ratings, "temperament");
                       return (
-                        <View key={s.id} style={styles.logRow}>
+                        <View key={s.id} style={styles.logRow} wrap={false}>
                           <Text style={{ width: 18 }}>{i + 1}</Text>
                           <Text style={{ width: 70 }}>
                             {formatHumanDate(s.occurred_at)}
                           </Text>
-                          <Text style={{ width: 160 }}>{phaseFor(s.phase_id)}</Text>
+                          <Text style={{ width: 160 }}>{rideWork(phase,s.task_completions)}</Text>
                           <Text style={{ width: 60, textAlign: "right" }}>
                             {formatAvg(f, phase.scale)}
                           </Text>
@@ -343,7 +344,7 @@ export function HorseReport({
               key={s.id}
               session={s}
               questions={questions}
-              phaseFor={phaseFor}
+              work={rideWork(phases.find(p => p.id === s.phase_id),s.task_completions)}
               scale={phases.find(phase => phase.id === s.phase_id)?.scale ?? scale}
               program={phases.find((phase) => phase.id === s.phase_id)?.program}
             />
@@ -469,14 +470,14 @@ interface SessionScoreSheetBlockProps {
   program?: string;
   session: SessionWithRatings;
   questions: Question[];
-  phaseFor: (id: string) => string;
+  work: string;
   scale: RatingScaleKind;
 }
 
 function SessionScoreSheetBlock({
   session,
   questions,
-  phaseFor,
+  work,
   scale,
   program,
 }: SessionScoreSheetBlockProps) {
@@ -493,14 +494,13 @@ function SessionScoreSheetBlock({
   return (
     <View wrap={false} style={{ marginBottom: 12 }}>
       <Text style={styles.h3}>
-        {phaseFor(session.phase_id)} · {formatDateTime(session.occurred_at)}
+        {work} · {formatDateTime(session.occurred_at)}
       </Text>
       <Text style={styles.muted}>
         {session.ratings.length ? `Foundation ${formatAvg(fAvg, scale)} · Temperament ${formatAvg(tAvg, scale)}` : "Unscored ride"}
       </Text>
       {session.rider ? <Text style={styles.muted}>Rider: {session.rider}</Text> : null}
       {session.bit ? <Text style={styles.muted}>{bitLabel(session.bit, program)}</Text> : null}
-      {session.task_completions?.length ? <Text style={styles.muted}>Tasks: {session.task_completions.map((task) => `${taskJobName(task.job)} · Phase ${task.phase}`).join("; ")}</Text> : null}
       <View style={styles.twoCol}>
         <View style={styles.colHalf}>
           <Text style={styles.muted}>Foundation / Task Completion</Text>

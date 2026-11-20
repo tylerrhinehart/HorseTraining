@@ -1,3 +1,4 @@
+import DisciplineGuide from "../../components/DisciplineGuide";
 import { useState } from "react";
 import type { Phase, Question, Resource, TrainingType } from "../../supabase/types";
 import {
@@ -259,7 +260,7 @@ export default function PhasesTab({
               }}
             >
               {TASK_COMPLETION_JOBS.map((job) => (
-                <li key={job.code}>{job.name}</li>
+                <li key={job.code} className="task-choice">{job.name}<DisciplineGuide job={job.code} /></li>
               ))}
             </ol>
             {PERFORMANCE_NOTES.map((n, i) => (

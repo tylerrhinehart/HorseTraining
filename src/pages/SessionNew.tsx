@@ -1,6 +1,6 @@
 import useUnsavedChanges from "../hooks/useUnsavedChanges";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   createSession,
   getHorse,
@@ -13,6 +13,7 @@ import { qk } from "../supabase/keys";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
 import RidePhaseSelect from "../components/RidePhaseSelect";
 import { hasEntries, prepareRideEntries } from "../utils/rideEntries";
+import NextRideFocus from "../components/NextRideFocus";
 import TaskCompletionPicker from "../components/TaskCompletionPicker";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
@@ -48,8 +49,6 @@ export default function SessionNew() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const [params] = useSearchParams();
-  const openSheet = params.get("sheet") === "open";
 
   const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
   const phases = useQuery(qk.phases(), () => listPhases());
@@ -151,6 +150,11 @@ export default function SessionNew() {
     );
   }
 
+  if (horse.data.status !== "in_training") {
+    return <div className="view">{unsavedDialog}<h1 className="h-display">{horse.data.name}</h1>
+      <p>Resume training on the horse’s workspace to start a ride.</p><Link className="btn btn-ghost" to={`/horses/${id}`}>Back to horse</Link></div>;
+  }
+
   const currentPhase = phases.data.find((p) => p.id === phaseId) ?? null;
   const foundationPhase = phases.data.find(p => p.id === horse.data?.current_phase_id) ?? phases.data.find(p => p.program === "foundation");
   const rideDay = occurredAt.slice(0, 10);
@@ -219,12 +223,9 @@ export default function SessionNew() {
   return (
     <div className="view">
       {unsavedDialog}
-      <div className="eyebrow">New ride</div>
+      <Link className="workflow-link" to={`/horses/${id}`}>← {horse.data.name}</Link>
+      <div className="eyebrow">{programLabel(horse.data.training_type)}</div>
       <h1 className="h-display">Log a ride</h1>
-      <p className="muted" style={{ margin: "4px 0 14px", fontSize: 14 }}>
-        {horse.data.name}
-      </p>
-
       <div
         className="card"
         style={{
@@ -233,10 +234,8 @@ export default function SessionNew() {
           gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
         }}
       >
-        <div className="field">
-          <span className="label">{isPerformance ? "Training program" : "Current foundation phase"}</span>
-          <div><strong className="pill pill-leather">{isPerformance ? programLabel(horse.data.training_type) : foundationPhase?.name ?? "—"}</strong></div>
-        </div>
+        {!isPerformance && <div className="field"><span className="label">Current foundation phase</span>
+          <strong>{foundationPhase?.name ?? "—"}</strong></div>}
         {!isPerformance && <RidePhaseSelect phases={phases.data} phaseId={phaseId} needsConfirmation={confirmPhase}
           hasEntries={hasEntries(drafts)} disabled={saving || (hasEntries(drafts) && !questions.data)} onChoose={choosePhase} />}
         <div className="field">
@@ -251,7 +250,31 @@ export default function SessionNew() {
             onChange={(e) => setOccurredAt(e.target.value)}
           />
         </div>
-        <>
+
+      </div>
+
+      <NextRideFocus horse={horse.data} />
+      {isPerformance && <>
+        {sessions.error && <ErrorState error={sessions.error} onRetry={sessions.refresh} />}
+        {sessions.loading && <p role="status">Loading discipline history…</p>}
+        <TaskCompletionPicker goals={horse.data.program_meta?.training_goals} value={tasks} onChange={setTasks} history={history} />
+      </>}
+
+      <div className="card">
+        <label className="label" htmlFor="session-notes">
+          Ride notes
+        </label>
+        <textarea
+          id="session-notes"
+          rows={3}
+          className="input"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </div>
+
+      <details className="card"><summary>{isPerformance ? "Rider and bit" : "Rider"}</summary>
+        <div className="field-row">
             <div className="field">
               <label className="label" htmlFor="session-rider">
                 Rider
@@ -282,11 +305,10 @@ export default function SessionNew() {
                 ))}
               </select>
             </div>}
-          </>
-      </div>
-
-      <details className="card" open={openSheet || undefined}>
-        <summary autoFocus={openSheet}>{isPerformance ? "Performance warm-up" : "Phase score sheet"} · {scored} of {total} scored</summary>
+        </div>
+      </details>
+      <details className="card">
+        <summary>Optional score sheet · {scored} of {total} scored</summary>
       {questions.error ? <ErrorState error={questions.error} onRetry={questions.refresh} /> : questions.loading || !phaseId ? (
         <ScoreSheetSkeleton />
       ) : (
@@ -301,25 +323,6 @@ export default function SessionNew() {
       )}
 
       </details>
-      {isPerformance && <>
-        {sessions.error && <ErrorState error={sessions.error} onRetry={sessions.refresh} />}
-        {sessions.loading && <p role="status">Loading discipline history…</p>}
-        <TaskCompletionPicker goals={horse.data.program_meta?.training_goals} value={tasks} onChange={setTasks} history={history} />
-      </>}
-
-      <div className="card">
-        <label className="label" htmlFor="session-notes">
-          Ride notes
-        </label>
-        <textarea
-          id="session-notes"
-          rows={3}
-          className="input"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-        />
-      </div>
-
       {error && (
         <div role="alert" className="alert-error" style={{ marginTop: 10 }}>
           <span className="alert-error-icon" aria-hidden>

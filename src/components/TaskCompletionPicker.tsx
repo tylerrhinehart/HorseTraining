@@ -3,6 +3,8 @@ import { TASK_COMPLETION_GROUPS, TASK_COMPLETION_JOBS, LEGACY_TASK_JOBS, TASK_PH
 import { DISCIPLINE_MATERIALS, PERFORMANCE_STANDARDS } from "../content/disciplineResources";
 import { lastWorkedLabel, type DisciplineHistory } from "../utils/disciplineHistory";
 
+import DisciplineGuide from "./DisciplineGuide";
+
 interface Props {
   history?: DisciplineHistory;
   value: TaskCompletion[];
@@ -51,7 +53,7 @@ export default function TaskCompletionPicker({ value, onChange, goals = [], read
       {jobs.map(job => {
         const selected = value.find(task => task.job === job.code);
         return <div key={job.code} className="task-row">
-          <strong>{job.name}</strong>
+          <div className="task-choice"><strong>{job.name}</strong><DisciplineGuide job={job.code} /></div>
           {history && <p className="discipline-last">Last worked: {lastWorkedLabel(history.get(job.code))}</p>}
           <div className="task-choice">
             <span>Phase for this ride{selected ? `: Phase ${selected.phase}` : ""}</span>
@@ -62,19 +64,20 @@ export default function TaskCompletionPicker({ value, onChange, goals = [], read
                 onClick={() => toggle(job.code, phase)}>Phase {phase}</button>)}
             </div>
           </div>
-          {selected && <TaskResources {...selected} />}
         </div>;
       })}
     </fieldset>;
   }
 
   const agreed = TASK_COMPLETION_JOBS.filter(job => goals.includes(job.code));
-  const others = TASK_COMPLETION_GROUPS.map(({ name, jobs }) => group(name, jobs.filter(job => !goals.includes(job.code))));
+  const recent = TASK_COMPLETION_JOBS.filter(job => !goals.includes(job.code) && history?.has(job.code));
+  const priority = new Set([...agreed, ...recent].map(job => job.code));
+  const others = TASK_COMPLETION_GROUPS.map(({ name, jobs }) => group(name, jobs.filter(job => !priority.has(job.code))));
   return <section className="card"><h2 className="card-title">Task completion</h2>
-    <p>Choose the phase you worked for each job on this ride. Each job has its own phases.</p>
     {group("Agreed training goals", agreed)}
-    {agreed.length && agreed.length < TASK_COMPLETION_JOBS.length
-      ? <details open={value.some(task => !goals.includes(task.job)) || undefined}><summary>Other disciplines</summary>{others}</details>
+    {group("Recently worked", recent)}
+    {priority.size && priority.size < TASK_COMPLETION_JOBS.length
+      ? <details open={value.some(task => !priority.has(task.job)) || undefined}><summary>Other disciplines</summary>{others}</details>
       : others}
     {history && LEGACY_TASK_JOBS.filter(job => history.has(job.code) && !value.some(task => task.job === job.code)).map(job =>
       <div className="task-row" key={job.code}><strong>{job.name}</strong><p className="discipline-last">Last worked: {lastWorkedLabel(history.get(job.code))}</p></div>

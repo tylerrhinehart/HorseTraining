@@ -29,6 +29,8 @@ export interface TaskCompletion {
 
 // Sale-horse target framing + selected performance disciplines.
 export interface ProgramMeta {
+  next_ride_focus?: string;
+  foundation_phase_changes?: { from: ID; to: ID; at: string; action: "advance" | "undo" }[];
   foundation_subtype?: string;
   training_goals?: string[];
   goal_assessments?: Record<string, string>;

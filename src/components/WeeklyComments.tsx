@@ -6,7 +6,7 @@ import { updateHorse } from "../supabase/queries";
 
 export default function WeeklyComments({ horse, onDirtyChange }: { horse: Horse; onDirtyChange?: (dirty: boolean) => void }) {
   const [week, setWeek] = useState(() => format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd"));
-  const [comment, setComment] = useState("");
+  const [comment, setComment] = useState(() => horse.program_meta?.weekly_comments?.[week] ?? "");
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState("");
   const dirty = useRef(false);

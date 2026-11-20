@@ -14,7 +14,7 @@ A Vite + React app backed by Supabase. The observed public pilot is https://tqa.
    ```
    - `VITE_SUPABASE_URL` — your project URL (e.g. `https://xxxx.supabase.co`)
    - `VITE_SUPABASE_ANON_KEY` — the project's publishable / anon API key
-3. For a **fresh disposable database only**, initialize with `supabase/schema.sql`. It drops existing tables. For an existing database, review `supabase/migration_programs.sql` and take a backup before applying changes. Score saving requires its atomic RPC functions. No database changes were made during this inspection.
+3. For a **fresh disposable database only**, initialize with `supabase/schema.sql`. It drops existing tables. For an existing database, review `supabase/migration_programs.sql` and take a backup before applying changes. Score saving requires its atomic RPC functions. For existing installations with the program and integrity migrations, apply `supabase/migration_ride_accuracy.sql` to enable version-checked ride corrections.
 4. Start the dev server:
    ```
    npm run dev

@@ -11,6 +11,8 @@ import {
 import { useQuery } from "../supabase/useQuery";
 import { qk } from "../supabase/keys";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
+import RidePhaseSelect from "../components/RidePhaseSelect";
+import { hasEntries, prepareRideEntries } from "../utils/rideEntries";
 import TaskCompletionPicker from "../components/TaskCompletionPicker";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
@@ -56,6 +58,7 @@ export default function SessionNew() {
   const history = useMemo(() => sessions.data && lastWorkedByDiscipline(sessions.data), [sessions.data]);
 
   const [phaseId, setPhaseId] = useState<string>("");
+  const [confirmedDate, setConfirmedDate] = useState("");
   const [initialOccurredAt, setInitialOccurredAt] = useState(localDateTimeInput);
   const [occurredAt, setOccurredAt] = useState(initialOccurredAt);
   const [drafts, setDrafts] = useState<Record<string, DraftRating>>({});
@@ -71,6 +74,7 @@ export default function SessionNew() {
   // (or the previous horse's phase) into another horse's ride.
   useEffect(() => {
     setPhaseId("");
+    setConfirmedDate("");
     setDrafts({});
     setNotes("");
     setRider("");
@@ -82,8 +86,7 @@ export default function SessionNew() {
     setError(null);
   }, [id]);
 
-  // Sessions are always logged against the horse's current phase. Advancing
-  // through phases happens via the workspace's "Advance to <next>" gate.
+  // Default to the current program sheet when a horse is opened.
   useEffect(() => {
     if (phaseId) return;
     if (horse.loading || !phases.data) return;
@@ -98,17 +101,12 @@ export default function SessionNew() {
     () => listQuestionsForPhase(phaseId),
   );
 
-  // Reset drafts when phase changes (different question set).
-  useEffect(() => {
-    setDrafts({});
-  }, [phaseId]);
-
   // Any entered data makes the session dirty — guard against accidental loss.
   const dirty =
     Object.values(drafts).some(
       (d) => typeof d.score === "number" || !!d.comment,
     ) ||
-    notes.trim() !== "" ||
+    (!!confirmedDate && phaseId !== horse.data?.current_phase_id) || notes.trim() !== "" ||
     rider.trim() !== "" ||
     bit !== "" ||
     tasks.length > 0 || occurredAt !== initialOccurredAt;
@@ -154,7 +152,21 @@ export default function SessionNew() {
   }
 
   const currentPhase = phases.data.find((p) => p.id === phaseId) ?? null;
-  const currentPhaseName = currentPhase?.name ?? "—";
+  const foundationPhase = phases.data.find(p => p.id === horse.data?.current_phase_id) ?? phases.data.find(p => p.program === "foundation");
+  const rideDay = occurredAt.slice(0, 10);
+  const confirmPhase = !isPerformance && rideDay !== localDateTimeInput().slice(0, 10) && confirmedDate !== rideDay;
+  function choosePhase(next: string) {
+    if (next !== phaseId) {
+      try {
+        const kept = prepareRideEntries(questions.data ?? [], drafts, notes, currentPhase?.name);
+        setNotes(kept.notes);
+        setDrafts({});
+      } catch (err) { setError((err as Error).message); return; }
+    }
+    setPhaseId(next);
+    setConfirmedDate(rideDay);
+    setError(null);
+  }
   const scale = currentPhase?.scale ?? "tqa";
 
   const total = questions.data?.length ?? 0;
@@ -178,34 +190,19 @@ export default function SessionNew() {
       setError("Pick a phase first.");
       return;
     }
-    const ratings = (questions.data ?? [])
-      .filter((q) => typeof drafts[q.id]?.score === "number")
-      .map((q) => ({
-        question_id: q.id,
-        axis: q.axis,
-        question_text_snapshot: q.text,
-        score: drafts[q.id]!.score!,
-        comment: drafts[q.id]?.comment ?? null,
-      }));
-    if (ratings.length !== scored) {
-      setError("The score sheet changed. Review your scores before saving.");
-      return;
-    }
-    if (Object.values(drafts).some(draft => draft.comment?.trim() && draft.score == null)) {
-      setError("Add a score for each item with a comment, or move the comment to Ride notes.");
-      return;
-    }
+    if (confirmPhase) { setError("Choose the phase worked on the selected date."); return; }
     setSaving(true);
     try {
+      const entries = prepareRideEntries(questions.data ?? [], drafts, notes);
       await createSession({
         horse_id: id,
         phase_id: phaseId,
         occurred_at: new Date(occurredAt).toISOString(),
-        notes: notes || null,
+        notes: entries.notes || null,
         rider: rider || null,
         bit: isPerformance ? bit || null : null,
         task_completions: isPerformance ? tasks : [],
-        ratings,
+        ratings: entries.ratings,
       });
       toast.success("Ride saved");
       allowLeave();
@@ -238,8 +235,10 @@ export default function SessionNew() {
       >
         <div className="field">
           <span className="label">{isPerformance ? "Training program" : "Current foundation phase"}</span>
-          <div><strong className="pill pill-leather">{isPerformance ? programLabel(horse.data.training_type) : currentPhaseName}</strong></div>
+          <div><strong className="pill pill-leather">{isPerformance ? programLabel(horse.data.training_type) : foundationPhase?.name ?? "—"}</strong></div>
         </div>
+        {!isPerformance && <RidePhaseSelect phases={phases.data} phaseId={phaseId} needsConfirmation={confirmPhase}
+          hasEntries={hasEntries(drafts)} disabled={saving || (hasEntries(drafts) && !questions.data)} onChoose={choosePhase} />}
         <div className="field">
           <label className="label" htmlFor="session-when">
             When
@@ -352,7 +351,7 @@ export default function SessionNew() {
         </button>
         <button
           className="btn btn-leather"
-          disabled={saving || !phaseId}
+          disabled={saving || !phaseId || confirmPhase}
           onClick={submit}
         >
           {saving ? "Saving…" : "Save ride"}

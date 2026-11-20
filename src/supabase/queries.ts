@@ -370,6 +370,7 @@ export async function createSession(input: SessionInput): Promise<Session> {
 }
 
 export interface SessionUpdateInput {
+  expectedUpdatedAt?: string;
   horse_id?: ID;
   phase_id?: ID;
   occurred_at?: string;
@@ -384,11 +385,10 @@ export async function updateSession(
   id: ID,
   input: SessionUpdateInput,
 ): Promise<void> {
-  // Atomic path: the session row plus its full rating set update in one
-  // transaction. notes/rider/bit are always overwritten (the edit form sends
-  // the complete current state); occurred_at/task_completions stay unchanged
-  // when omitted. horse_id/phase_id aren't editable here, so they're not sent.
-  const { error } = await sb().rpc("update_session_with_ratings", {
+  if (input.phase_id && !input.expectedUpdatedAt) throw new Error("Reload the ride before changing its phase.");
+  const versioned = !!input.expectedUpdatedAt;
+  const { error } = await sb().rpc(versioned ? "update_ride_record" : "update_session_with_ratings", {
+    ...(versioned ? { p_expected_updated_at: input.expectedUpdatedAt, p_phase_id: input.phase_id ?? null } : {}),
     p_session_id: id,
     p_occurred_at: input.occurred_at ?? null,
     p_notes: input.notes?.trim() ? input.notes.trim() : null,
@@ -397,6 +397,7 @@ export async function updateSession(
     p_task_completions: input.task_completions ?? null,
     p_ratings: input.ratings ?? null,
   });
+  if (versioned && error?.code === "PGRST202") throw new Error("Ride edits require the ride accuracy database update (migration_ride_accuracy.sql). Your edits are still here.");
   requireAtomicSave(error);
   invalidate(["session", id]);
   invalidate(["sessions"]);

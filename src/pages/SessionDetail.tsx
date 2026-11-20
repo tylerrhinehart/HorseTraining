@@ -10,9 +10,11 @@ import {
   updateSession,
 } from "../supabase/queries";
 import { useQuery } from "../supabase/useQuery";
-import type { TaskCompletion } from "../supabase/types";
+import type { Rating, TaskCompletion } from "../supabase/types";
 import { qk } from "../supabase/keys";
 import PhaseScoreSheet, { type DraftRating } from "../components/PhaseScoreSheet";
+import RidePhaseSelect from "../components/RidePhaseSelect";
+import { hasEntries, prepareRideEntries } from "../utils/rideEntries";
 import TaskCompletionPicker from "../components/TaskCompletionPicker";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
@@ -43,6 +45,10 @@ function ScoreSheetSkeleton() {
   );
 }
 
+function savedDrafts(ratings: Rating[]): Record<string, DraftRating> {
+  return Object.fromEntries(ratings.map(r => [r.question_id, { score: r.score, comment: r.comment ?? undefined }]));
+}
+
 export default function SessionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -52,7 +58,11 @@ export default function SessionDetail() {
 
   const session = useQuery(id ? qk.session(id) : null, () => getSession(id!));
   const horse = useQuery(session.data ? qk.horse(session.data.horse_id) : null, () => getHorse(session.data!.horse_id));
-  const phaseId = session.data?.phase_id;
+  const [editing, setEditing] = useState(false);
+  const [selectedPhase, setSelectedPhase] = useState("");
+  const [confirmedDate, setConfirmedDate] = useState("");
+  const [editVersion, setEditVersion] = useState("");
+  const phaseId = (editing && selectedPhase) || session.data?.phase_id;
   const phases = useQuery(qk.phases(), () => listPhases());
   const phase = phases.data?.find((p) => p.id === phaseId) ?? null;
   const questions = useQuery(
@@ -67,7 +77,6 @@ export default function SessionDetail() {
   const [when, setWhen] = useState("");
   const [tasks, setTasks] = useState<TaskCompletion[]>([]);
   const [saveError, setSaveError] = useState("");
-  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -75,14 +84,10 @@ export default function SessionDetail() {
 
   useEffect(() => {
     if (!session.data) return;
-    const next: Record<string, DraftRating> = {};
-    for (const r of session.data.ratings) {
-      next[r.question_id] = {
-        score: r.score,
-        comment: r.comment ?? undefined,
-      };
-    }
-    setDrafts(next);
+    setEditVersion(session.data.updated_at);
+    setSelectedPhase(session.data.phase_id);
+    setConfirmedDate(localDateTimeInput(new Date(session.data.occurred_at)).slice(0, 10));
+    setDrafts(savedDrafts(session.data.ratings));
     setNotes(session.data.notes ?? "");
     setRider(session.data.rider ?? ""); setBit(session.data.bit ?? "");
     setWhen(localDateTimeInput(new Date(session.data.occurred_at))); setTasks(session.data.task_completions ?? []);
@@ -96,6 +101,7 @@ export default function SessionDetail() {
     editing &&
     !!session.data &&
     ((): boolean => {
+      if (phaseId !== session.data!.phase_id) return true;
       if (rider !== (session.data!.rider ?? "") || bit !== (session.data!.bit ?? "") || when !== localDateTimeInput(new Date(session.data!.occurred_at)) || JSON.stringify(tasks) !== JSON.stringify(session.data!.task_completions ?? [])) return true;
       if (notes !== (session.data!.notes ?? "")) return true;
       for (const q of questions.data ?? []) {
@@ -155,17 +161,20 @@ export default function SessionDetail() {
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], comment } }));
 
   // Restore drafts/notes to the last saved session state.
-  const exitEdit = () => {
+  const resetEdit = () => {
     const s = session.data;
     if (s) {
-      const next: Record<string, DraftRating> = {};
-      for (const r of s.ratings) {
-        next[r.question_id] = { score: r.score, comment: r.comment ?? undefined };
-      }
-      setDrafts(next);
+      setSelectedPhase(s.phase_id);
+      setEditVersion(s.updated_at);
+      setConfirmedDate(localDateTimeInput(new Date(s.occurred_at)).slice(0, 10));
+      setSaveError("");
+      setDrafts(savedDrafts(s.ratings));
       setNotes(s.notes ?? "");
       setRider(s.rider ?? ""); setBit(s.bit ?? ""); setWhen(localDateTimeInput(new Date(s.occurred_at))); setTasks(s.task_completions ?? []);
     }
+  };
+  const exitEdit = () => {
+    resetEdit();
     setEditing(false);
     setConfirmDiscard(false);
   };
@@ -175,21 +184,32 @@ export default function SessionDetail() {
     else exitEdit();
   };
 
+  const rideDay = when.slice(0, 10);
+  const confirmPhase = phase?.program === "foundation" && confirmedDate !== rideDay;
+  function choosePhase(next: string) {
+    if (next !== phaseId) {
+      try {
+        const kept = prepareRideEntries(questions.data ?? [], drafts, notes, phase?.name);
+        setNotes(kept.notes);
+        setDrafts({});
+      } catch (err) { setSaveError((err as Error).message); return; }
+    }
+    setSelectedPhase(next);
+    setConfirmedDate(rideDay);
+    setSaveError("");
+  }
+
   const save = async () => {
+    if (confirmPhase) { setSaveError("Choose the phase worked on the selected date."); return; }
     if (questions.error || !questions.data?.length) { setSaveError("The score sheet is unavailable. Retry before saving."); return; }
     if (!when || Number.isNaN(new Date(when).getTime())) { setSaveError("Enter a valid ride date and time."); return; }
     setSaving(true); setSaveError("");
     try {
-      const ratings = (questions.data ?? [])
-        .filter((q) => typeof drafts[q.id]?.score === "number")
-        .map((q) => ({
-          question_id: q.id,
-          axis: q.axis,
-          question_text_snapshot: q.text,
-          score: drafts[q.id]!.score!,
-          comment: drafts[q.id]?.comment ?? null,
-        }));
-      await updateSession(session.data!.id, { notes, ratings, rider: rider || null, bit: bit || null, occurred_at: new Date(when).toISOString(), task_completions: tasks });
+      const entries = prepareRideEntries(questions.data, drafts, notes);
+      await updateSession(session.data!.id, {
+        ...entries, expectedUpdatedAt: editVersion, phase_id: selectedPhase || session.data!.phase_id,
+        rider: rider || null, bit: bit || null, occurred_at: new Date(when).toISOString(), task_completions: tasks,
+      });
       setEditing(false);
       toast.success("Session updated");
     } catch (err) {
@@ -251,7 +271,7 @@ export default function SessionDetail() {
         {!editing ? (
           <button
             className="btn btn-leather btn-sm"
-            onClick={() => setEditing(true)}
+            onClick={() => { resetEdit(); setEditing(true); }}
           >
             {session.data.ratings.length ? "Edit ride" : "Add scores"}
           </button>
@@ -269,6 +289,8 @@ export default function SessionDetail() {
       </div>
 
       {editing ? <div className="card field-row">
+        {phase?.program === "foundation" && <RidePhaseSelect phases={phases.data ?? []} phaseId={phaseId ?? ""}
+          needsConfirmation={confirmPhase} hasEntries={hasEntries(drafts)} disabled={saving || !questions.data} onChoose={choosePhase} />}
         <div className="field"><label className="label" htmlFor="edit-ride-when">When</label><input id="edit-ride-when" className="input" type="datetime-local" value={when} onChange={e=>setWhen(e.target.value)} /></div>
         <div className="field"><label className="label" htmlFor="edit-ride-rider">Rider</label><input id="edit-ride-rider" className="input" value={rider} onChange={e=>setRider(e.target.value)} /></div>
         {phase?.scale === "five" && <div className="field"><label className="label" htmlFor="edit-ride-bit">Bit</label><select id="edit-ride-bit" className="input" value={bit} onChange={e=>setBit(e.target.value)}><option value="">Not recorded</option>{bitOptions(phase.program).map(option=><option key={option.code} value={option.code}>{option.label}</option>)}</select></div>}
@@ -282,7 +304,7 @@ export default function SessionDetail() {
         <PhaseScoreSheet
           phaseCode={phase?.code}
           questions={questions.data ?? []}
-          drafts={drafts}
+          drafts={editing ? drafts : savedDrafts(session.data.ratings)}
           onScore={setScore}
           onComment={setComment}
           scale={scale}
@@ -326,7 +348,7 @@ export default function SessionDetail() {
           </button>
           <button
             className="btn btn-leather"
-            disabled={saving || !!questions.error || questions.loading || !questions.data?.length}
+            disabled={saving || confirmPhase || !!questions.error || questions.loading || !questions.data?.length}
             onClick={save}
           >
             {saving ? "Saving…" : "Save changes"}

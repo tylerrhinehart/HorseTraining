@@ -1,0 +1,63 @@
+// Local synthetic-auth fixture only.
+import assert from "node:assert/strict";
+const { chromium } = await import(process.env.TQA_PLAYWRIGHT_MODULE || "playwright");
+const browser = await chromium.launch({ executablePath: process.env.TQA_CHROME_PATH || undefined });
+try {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(10000);
+  const name = `Ride correction practice · ${Date.now()}`;
+  await page.goto("http://127.0.0.1:4174/horses/new");
+  await page.getByLabel("Horse name *", {exact:true}).fill(name);
+  await page.getByLabel("Owner name *", {exact:true}).fill("Practice owner");
+  await page.getByRole("button", {name:"Add horse", exact:true}).click();
+  await page.getByRole("heading", {name, exact:true}).waitFor();
+  const horseUrl = page.url();
+  await page.getByRole("button", {name:"Advance to Phase 1", exact:true}).click();
+  await page.getByRole("dialog").getByRole("button", {name:"Advance to Phase 1"}).click();
+  await page.getByText("Current foundation phase: Phase 1").waitFor();
+  await page.getByRole("link", {name:`Log a ride for ${name}`}).click();
+  const phase = page.getByLabel("Phase worked on this ride");
+  await page.getByLabel("When", {exact:true}).fill("2026-10-15T12:00");
+  assert.equal(await phase.inputValue(), "");
+  assert.equal(await page.getByRole("button", {name:"Save ride",exact:true}).isDisabled(),true);
+  await phase.selectOption({label:"Groundwork"});
+  await page.locator("summary").filter({hasText:"Phase score sheet"}).click();
+  await page.locator('.rating[role="group"]').first().getByRole("button", {name:"Rate +1",exact:true}).click();
+  await page.getByRole("button", {name:"+ Add note",exact:true}).nth(1).click();
+  await page.getByPlaceholder("Optional comment…").fill("First unscored observation.");
+  await page.getByRole("button", {name:"Save ride",exact:true}).click();
+  await page.waitForURL(horseUrl);
+  await page.getByText("All ride history (1)", {exact:true}).click();
+  await page.getByRole("link",{name:"Review ride",exact:true}).click();
+  await page.getByRole("heading",{name:"Groundwork",exact:true}).waitFor();
+  await page.getByText(/First unscored observation/).first().waitFor();
+  const rideUrl = page.url();
+  await page.getByRole("button",{name:"Edit ride",exact:true}).click();
+  await phase.selectOption({label:"Phase 1"});
+  await page.getByRole("button",{name:"Keep this sheet"}).click();
+  assert.equal(await phase.locator("option:checked").innerText(),"Groundwork");
+  await phase.selectOption({label:"Phase 1"});
+  await page.getByRole("button",{name:"Change ride phase"}).click();
+  await page.getByRole("heading",{name:"Phase 1",exact:true}).waitFor();
+  assert.match(await page.getByLabel("Ride notes").inputValue(), /Previous sheet · Groundwork/);
+  assert.match(await page.getByLabel("Ride notes").inputValue(), /score 1/);
+  await page.getByRole("button",{name:"+ Add note",exact:true}).first().click();
+  await page.getByPlaceholder("Optional comment…").fill("Second unscored observation.");
+  const older = await browser.newPage();
+  await older.goto(rideUrl);
+  await older.getByRole("button",{name:"Edit ride",exact:true}).click();
+  await page.getByRole("button",{name:"Save changes",exact:true}).click();
+  await page.getByRole("button",{name:"Add scores",exact:true}).waitFor();
+  await page.reload();
+  await page.getByRole("heading",{name:"Phase 1",exact:true}).waitFor();
+  for (const observation of ["First unscored observation.","Previous sheet · Groundwork","Second unscored observation."]) {
+    await page.getByText(observation,{exact:false}).first().waitFor();
+  }
+  assert.equal(await page.locator('.rating button[aria-pressed="true"]').count(),0);
+  await older.getByLabel("Ride notes").fill("Stale edit");
+  await older.getByRole("button",{name:"Save changes",exact:true}).click();
+  await older.getByRole("alert").filter({hasText:"This ride changed"}).first().waitFor();
+  await page.goto(horseUrl);
+  await page.getByText("Current foundation phase: Phase 1").waitFor();
+  console.log("Verified backdating, scored phase correction, unscored observations, stale edits and horse phase.",horseUrl);
+} finally { await browser.close(); }

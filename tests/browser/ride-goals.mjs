@@ -19,7 +19,11 @@ try {
   await page.getByRole("button", {name:"Add horse", exact:true}).click();
   await page.getByRole("heading", {name, exact:true}).waitFor();
   const horseUrl = page.url();
-  await page.getByRole("link", {name:`Log a ride for ${name}`}).click();
+  await page.getByRole("link", {name:"Start ride with score sheet"}).click();
+  const sheet = page.locator("details").filter({ has: page.locator("summary", {hasText:"Performance warm-up"}) });
+  assert.equal(await sheet.evaluate(element => element.open), true);
+  await sheet.locator('.rating[role="group"]').first().waitFor();
+  assert.equal(await page.getByRole("button", { name: "Fence Work, Phase 2" }).textContent(), "Phase 2");
   await page.getByRole("button", {name:"Fence Work, Phase 2", exact:true}).click();
   await page.getByRole("button", {name:"Heading, Phase 3", exact:true}).click();
   assert.equal(await page.getByRole("link",{name:/Fence Work P2/}).getAttribute("href"), "https://youtu.be/YfVmfI5fQwU");

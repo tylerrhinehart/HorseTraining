@@ -419,8 +419,8 @@ export default function HorseDetail() {
         </>
       ) : (
         <>
-          {/* ── 2. Phase progression ribbon ── */}
-          <div className="card" style={{ marginTop: 20 }}>
+          {/* Foundation horses advance through a sequence of phases. */}
+          {!isFiveScale && <div className="card" style={{ marginTop: 20 }}>
             <div className="card-head">
               <h2 className="card-title">Phase progression</h2>
               {currentPhase && (
@@ -529,7 +529,7 @@ export default function HorseDetail() {
                         className="muted"
                         style={{ fontSize: 13, margin: "8px 0 0" }}
                       >
-                        The current phase — full detail below.
+                        <a href="#current-phase">View {phase.name} details</a>
                       </p>
                     ) : phaseSessions.length === 0 ? (
                       <p
@@ -578,15 +578,24 @@ export default function HorseDetail() {
                   </div>
                 );
               })()}
-          </div>
+          </div>}
 
           {/* ── 3. Current phase card ── */}
           {currentPhase && (
-            <div className="card" style={{ marginTop: "var(--gap)" }}>
+            <section id="current-phase" className="card" style={{ marginTop: "var(--gap)", scrollMarginTop: 80 }}>
               <div className="card-head">
-                <h2 className="card-title">{currentPhase.name}</h2>
-                <span className="card-meta">current phase</span>
+                <h2 className="card-title">{isFiveScale ? "Foundation to Finish / Performance Horse" : currentPhase.name}</h2>
+                <span className="card-meta">{isFiveScale ? "Ride score sheet" : "Current phase"}</span>
               </div>
+
+              {isFiveScale && (
+                <div style={{ marginBottom: 16 }}>
+                  <p>Use this sheet for the warm-up and the jobs worked during the ride.</p>
+                  {horse.data.status === "in_training" && <Link className="btn btn-leather" to={`/horses/${id}/sessions/new?sheet=open`}>
+                    Start ride with score sheet
+                  </Link>}
+                </div>
+              )}
 
               {/* Phase running average + trend */}
               {currentPhaseSessions.length > 0 ? (
@@ -657,14 +666,13 @@ export default function HorseDetail() {
                 </div>
               </div>
 
-              {/* Primary CTA */}
-              <Link
+              {!isFiveScale && horse.data.status === "in_training" && <Link
                 to={`/horses/${id}/sessions/new`}
                 className="btn btn-ghost"
                 style={{ marginBottom: 10, display: "inline-flex" }}
               >
                 Log another ride
-              </Link>
+              </Link>}
 
               {/* Secondary CTA: Advance (TQA/Foundation scale only) */}
               {canAdvance && nextP && (
@@ -734,7 +742,7 @@ export default function HorseDetail() {
                   })}
                 </div>
               )}
-            </div>
+            </section>
           )}
         </>
       )}

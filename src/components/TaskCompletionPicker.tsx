@@ -53,7 +53,7 @@ export default function TaskCompletionPicker({ value, onChange, goals = [], read
             {TASK_PHASES.map(phase => <button key={phase} type="button"
               className={`btn btn-sm ${selected?.phase === phase ? "btn-leather" : "btn-ghost"}`}
               aria-label={`${job.name}, Phase ${phase}`} aria-pressed={selected?.phase === phase}
-              onClick={() => toggle(job.code, phase)}>P{phase}</button>)}
+              onClick={() => toggle(job.code, phase)}>Phase {phase}</button>)}
           </div></div>
           {selected && <TaskResources {...selected} />}
         </div>;
@@ -64,7 +64,7 @@ export default function TaskCompletionPicker({ value, onChange, goals = [], read
   const agreed = TASK_COMPLETION_JOBS.filter(job => goals.includes(job.code));
   const others = TASK_COMPLETION_GROUPS.map(({ name, jobs }) => group(name, jobs.filter(job => !goals.includes(job.code))));
   return <section className="card"><h2 className="card-title">Task completion</h2>
-    <p>Select the jobs and phases worked today.</p>
+    <p>Choose the phase you worked for each job on this ride. Each job has its own phases.</p>
     {group("Agreed training goals", agreed)}
     {agreed.length && agreed.length < TASK_COMPLETION_JOBS.length
       ? <details open={value.some(task => !goals.includes(task.job)) || undefined}><summary>Other disciplines</summary>{others}</details>

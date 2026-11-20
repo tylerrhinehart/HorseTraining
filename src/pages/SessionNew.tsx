@@ -1,6 +1,6 @@
 import useUnsavedChanges from "../hooks/useUnsavedChanges";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   createSession,
   getHorse,
@@ -44,6 +44,8 @@ export default function SessionNew() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const [params] = useSearchParams();
+  const openSheet = params.get("sheet") === "open";
 
   const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
   const phases = useQuery(qk.phases(), () => listPhases());
@@ -285,8 +287,8 @@ export default function SessionNew() {
           </>
       </div>
 
-      <details className="card">
-        <summary>{isPerformance ? "Performance warm-up" : "Phase score sheet"} · {scored} of {total} scored</summary>
+      <details className="card" open={openSheet || undefined}>
+        <summary autoFocus={openSheet}>{isPerformance ? "Performance warm-up" : "Phase score sheet"} · {scored} of {total} scored</summary>
       {questions.error ? <ErrorState error={questions.error} onRetry={questions.refresh} /> : questions.loading || !phaseId ? (
         <ScoreSheetSkeleton />
       ) : (

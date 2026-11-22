@@ -16,3 +16,15 @@ test('unexpected anonymous row visibility fails without exposing record values',
 test('rejects another project before transmitting the existing key',async()=>{
  let sent=false;await assert.rejects(checkDatabase({...env,VITE_SUPABASE_URL:'https://example.com'},async()=>{sent=true;}),/Configure/);assert.equal(sent,false);
 });
+
+test('recognizes only the facility schema exact PostgreSQL anonymous denial',async()=>{
+ for (const status of [401,403]) {
+  const result=await checkDatabase(env,async()=>Response.json({code:'42501',message:'permission denied for table horses'},{status}));
+  assert.match(result,/access is denied/);
+ }
+});
+test('does not treat invalid keys, unrelated denials or provider errors as healthy',async()=>{
+ for (const [status,body] of [[401,{message:'Invalid API key'}],[403,{code:'42501',message:'permission denied for schema public'}],[503,{code:'42501',message:'permission denied for table horses'}]]) {
+  await assert.rejects(checkDatabase(env,async()=>Response.json(body,{status})),/HTTP/);
+ }
+});

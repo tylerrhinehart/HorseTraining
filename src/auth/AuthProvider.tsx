@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase, supabaseConfigured } from "../supabase/client";
+import { setFacilityScope } from "../supabase/facilityScope";
 import { clearCache } from "../supabase/cache";
 
 interface AuthContextValue {
@@ -37,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const applySession = (next: Session | null) => {
       if (disposed) return;
       const nextId = next?.user.id ?? null;
-      if (accountId !== nextId) clearCache();
+      if (accountId !== nextId) { setFacilityScope(null); clearCache(); }
       accountId = nextId;
       setSession(next);
       setLoading(false);

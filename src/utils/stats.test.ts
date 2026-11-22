@@ -21,7 +21,7 @@ const mkSession = (
   ratings: RatingSpec[],
 ): SessionWithRatings => ({
   id,
-  user_id: "u",
+  facility_id: "test-facility", user_id: "u",
   horse_id: "h",
   phase_id: "p",
   occurred_at: occurredAt,
@@ -33,7 +33,7 @@ const mkSession = (
   updated_at: occurredAt,
   ratings: ratings.map((r, i) => ({
     id: `${id}-${i}`,
-    user_id: "u",
+    facility_id: "test-facility", user_id: "u",
     session_id: id,
     question_id: r.questionId,
     axis_snapshot: r.axis,
@@ -80,7 +80,7 @@ describe("stats", () => {
     const questions: Question[] = [
       {
         id: "f1",
-        user_id: "u",
+        facility_id: "test-facility", user_id: "u",
         phase_id: "p",
         axis: "foundation",
         position: 0,
@@ -91,7 +91,7 @@ describe("stats", () => {
       },
       {
         id: "t1",
-        user_id: "u",
+        facility_id: "test-facility", user_id: "u",
         phase_id: "p",
         axis: "temperament",
         position: 0,

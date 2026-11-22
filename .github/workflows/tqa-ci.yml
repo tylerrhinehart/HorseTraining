@@ -1,0 +1,37 @@
+name: TQA checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: tqa_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 56432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tqa_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: sh tests/database/run.sh

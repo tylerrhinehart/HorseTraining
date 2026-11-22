@@ -1,0 +1,34 @@
+# Guided scoring (foreground Foundation Phase 1 pilot)
+
+Use a fresh isolated Supabase project only. Apply `schema.sql`, `ride_drafts.sql`, then `guided_voice.sql`. Do not apply these files to the production project or the current Cloudflare preview backend. This PR does not provision or configure providers, deploy functions, or enable voice anywhere.
+
+Required backend-only environment values when a separately authorized staging setup is ready:
+
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY` (normally supplied by Supabase)
+- `OPENAI_API_KEY` for the existing transcription path
+- `TYPESAFE_API_KEY` for required Jev interpretation; never a `VITE_` variable
+- `TQA_VOICE_ALLOWED_ORIGINS`: explicit comma-separated origins, no wildcard
+
+## One question, one confirmed answer
+
+The UI displays the current Phase 1 Foundation rubric question and reads it using an available **local** browser voice. Text and a replay button remain available when speech is unsupported. Nothing listens automatically. Before opening the microphone, `bind_guided_turn` locks the trainer-owned draft, checks version/facility/program/current question, snapshots ordered Foundation question IDs on first use, and binds a unique turn UUID. Starting another turn supersedes the previous one. No score or cursor advances here.
+
+A clip lasts at most eight seconds and 512 KiB. The Edge Function verifies Supabase Auth, validates the exact bound draft/question/version/turn as that user, and rate-limits requests. OpenAI receives audio only. TypeSafe receives only the bounded transcript: no draft, facility, horse, trainer, question IDs, bearer tokens, names, record metadata or rubric records are added to the request. Trainers should answer a **bare signed rating**, e.g. “minus two”, “plus one”, “zero”, optionally prefixed with “score”; avoid names or record details in speech. User-spoken material is necessarily part of the transcript and is sent to the provider. Audio/transcripts are neither logged nor stored by this app; provider handling is governed by its own terms.
+
+Jev interprets a single `choice` question over exactly `minus_three`, `minus_two`, `minus_one`, `zero`, `plus_one`, `plus_two`, `plus_three`, and `needs_clarification`. It never selects a rubric question. Named metrics, unsigned nonzero numbers, conflicting scores, no explicit score, unrelated speech, and qualitative descriptions must clarify. There is **no alias/transcript parser fallback**, no qualitative grading and no automatic confirmation. The model is pinned to `jev-1.14.0`; the endpoint and configuration are fixed in `jev.ts`, and only the server secret is configurable. Output model/type/choice IDs/probability distribution are validated. Confidence and selected probability must both reach 0.90, an intentionally conservative pilot gate, **not a validated accuracy guarantee**. Outages/malformed output fail closed without provider retries.
+
+The Edge Function rechecks the binding after interpretation to reject results that became stale while providers were running. Clarification/failure leaves the same question and writes no rating. A clear proposal reads back the bound rubric text plus signed score and requires **Confirm score** or **Discard proposal**. Manual current-question review/confirmation and the existing manual sheet remain available. Only authenticated trainer confirmation calls `confirm_guided_score`; the model/Edge Function has no scoring write authority. This RPC is intentionally a trainer-editable scoring endpoint, not a cryptographically attested model output.
+
+Confirmation validates the still-active turn/version, persists all current draft fields and the signed rating, advances the cursor, increments version and records the idempotency receipt in one database transaction. Failed writes roll back both score and cursor. An exact retry cannot advance twice and returns the current authorized draft rather than replaying an obsolete cursor; altered payload reuse is rejected. Reload/resume restores the server cursor. Manual draft saves change the version and invalidate in-flight turns. Confirmed draft ratings stay out of ride history until the separate explicit **Save ride** finalization. Facility removal/suspension and trainer isolation reuse the existing locked authorization checks; helpers and turn tables are private.
+
+## Verified and not yet verified
+
+Node 22 app tests cover the typed provider contract, choice validation, ambiguity fixtures (mocked Jev decisions), provider failures, pre-listen binding, clarification, cancellation/background handling, late/stale responses, retry and resume sequencing. Disposable PostgreSQL tests cover exact/historical duplicate confirmations, failed receipt rollback, durable score/cursor, full sequence, explicit final save and permissions; existing facility/ride suites remain included. `deno check` validates the Edge Function entrypoint. These are mock/synthetic checks, not evidence of live provider semantic accuracy.
+
+Before enabling any staging pilot: verify isolated preview/backend configuration; deploy matching SQL and Edge Function only with separate authorization; verify hosted Auth, actual provider model access/latency/ambiguity handling with synthetic speech, and physical iPhone Safari microphone/readback/repeated-recording behavior. No live paid-provider calls, credentials, real iPhone/headset, or production persistence were tested in this change. Stay foreground push-to-talk; background/lock-screen or hands-free riding is not supported.
+
+## Official contract references (checked 2026-11-22)
+
+- [ReDoc](https://api.typesafe.ai/redoc) and its [OpenAPI schema](https://api.typesafe.ai/openapi.json): `POST /v1/systemone`, bearer auth, `state/model/questions`, Choice `criteria`, response `answers.rating.choice/confidence/probabilities`.
+- [Official models](https://docs.typesafe.ai/models): versioned `jev-1.14.0` (October 14 release), avoiding moving aliases.
+- [Official Choice](https://docs.typesafe.ai/primitives/choice) and [confidence](https://docs.typesafe.ai/confidence) references.

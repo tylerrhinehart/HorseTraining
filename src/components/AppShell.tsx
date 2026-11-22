@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { NavLink, useLocation, useMatch } from "react-router-dom";
+import { useFacility } from "../auth/FacilityProvider";
 import { useAuth } from "../auth/AuthProvider";
 import { useActiveHorseId } from "../state/activeHorse";
 import { getHorse, getSession, listInTrainingHorses, listPhases } from "../supabase/queries";
@@ -16,6 +17,7 @@ const AUTH_PATHS = new Set(["/sign-in", "/sign-up"]);
 
 export default function AppShell({ children }: Props) {
   const { user } = useAuth();
+  const { facility } = useFacility();
   const location = useLocation();
   const [activeId, setActiveId] = useActiveHorseId();
   const match = useMatch("/horses/:id/*");
@@ -23,7 +25,7 @@ export default function AppShell({ children }: Props) {
   const ride = useQuery(rideId ? qk.session(rideId) : null, () => getSession(rideId!));
   const routeId = rideId ? ride.data?.horse_id : match?.params.id === "new" ? undefined : match?.params.id;
 
-  const horses = useQuery(qk.horses("in_training"), listInTrainingHorses);
+  const horses = useQuery(facility ? qk.horses("in_training") : null, listInTrainingHorses);
   const selectedId = routeId ?? (rideId ? undefined : activeId);
   const rosterHorse = horses.data?.find(horse => horse.id === selectedId);
   const routeHorse = useQuery(routeId && !rosterHorse ? qk.horse(routeId) : null, () => getHorse(routeId!));
@@ -31,10 +33,10 @@ export default function AppShell({ children }: Props) {
 
   // Prime the cache so first navigations paint instantly.
   useEffect(() => {
-    if (!user) return;
+    if (!user || !facility) return;
     prefetchQuery(qk.horses("in_training"), listInTrainingHorses);
     prefetchQuery(qk.phases(), listPhases);
-  }, [user]);
+  }, [user, facility?.id]);
 
   useEffect(() => {
     if (routeId) {
@@ -74,6 +76,7 @@ export default function AppShell({ children }: Props) {
           </NavLink>
           {user && (
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <NavLink to="/facilities" className="btn btn-ghost">{facility?.name ?? "Choose facility"}</NavLink>
               {activeHorse && (
                 <NavLink
                   to={`/horses/${activeHorse.id}`}

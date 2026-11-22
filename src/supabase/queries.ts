@@ -1,6 +1,6 @@
 import { todayLocal } from "../utils/dates";
 import { invalidate } from "./cache";
-import { requireSupabase } from "./client";
+import { captureFacilityScope } from "./facilityScope";
 import type {
   Horse,
   HorseStatus,
@@ -20,7 +20,6 @@ import type {
   TrifectaScore,
 } from "./types";
 
-const sb = () => requireSupabase();
 
 const throwIfError = <T>(res: { data: T | null; error: { message: string } | null }) => {
   if (res.error) throw new Error(res.error.message);
@@ -38,8 +37,8 @@ function requireAtomicSave(error: { code?: string; message: string } | null): vo
   throw new Error(error.message);
 }
 
-async function currentUserId(): Promise<ID> {
-  const userId = (await sb().auth.getUser()).data.user?.id;
+async function currentUserId(scope: ReturnType<typeof captureFacilityScope>): Promise<ID> {
+  const userId = (await scope.client().auth.getUser()).data.user?.id;
   if (!userId) throw new Error("Not signed in");
   return userId;
 }
@@ -47,9 +46,10 @@ async function currentUserId(): Promise<ID> {
 // ---------- Phases (canonical, read-only after seed) ----------
 
 export async function listPhases(): Promise<Phase[]> {
-  const res = await sb()
+  const scope = captureFacilityScope();
+  const res = await scope.client()
     .from("phases")
-    .select("*")
+    .select("*").eq("facility_id", scope.id).abortSignal(scope.signal)
     .order("position", { ascending: true });
   return throwIfError(res) ?? [];
 }
@@ -57,16 +57,18 @@ export async function listPhases(): Promise<Phase[]> {
 export async function listPhasesForProgram(
   program: TrainingType,
 ): Promise<Phase[]> {
-  const res = await sb()
+  const scope = captureFacilityScope();
+  const res = await scope.client()
     .from("phases")
-    .select("*")
+    .select("*").eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("program", program)
     .order("position", { ascending: true });
   return throwIfError(res) ?? [];
 }
 
 export async function getPhase(id: ID): Promise<Phase | null> {
-  const res = await sb().from("phases").select("*").eq("id", id).maybeSingle();
+  const scope = captureFacilityScope();
+  const res = await scope.client().from("phases").select("*").eq("facility_id", scope.id).abortSignal(scope.signal).eq("id", id).maybeSingle();
   return throwIfError(res);
 }
 
@@ -81,9 +83,10 @@ function currentQuestionText(question: Question): Question {
 }
 
 export async function listQuestionsForPhase(phaseId: ID): Promise<Question[]> {
-  const res = await sb()
+  const scope = captureFacilityScope();
+  const res = await scope.client()
     .from("questions")
-    .select("*")
+    .select("*").eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("phase_id", phaseId)
     .order("axis", { ascending: true })
     .order("position", { ascending: true });
@@ -91,9 +94,10 @@ export async function listQuestionsForPhase(phaseId: ID): Promise<Question[]> {
 }
 
 export async function listAllQuestions(): Promise<Question[]> {
-  const res = await sb()
+  const scope = captureFacilityScope();
+  const res = await scope.client()
     .from("questions")
-    .select("*")
+    .select("*").eq("facility_id", scope.id).abortSignal(scope.signal)
     .order("position", { ascending: true });
   return (throwIfError(res) ?? []).map(currentQuestionText);
 }
@@ -123,7 +127,8 @@ export interface HorseInput {
 }
 
 export async function listHorses(opts?: { statuses?: HorseStatus[] }): Promise<Horse[]> {
-  let q = sb().from("horses").select("*");
+  const scope = captureFacilityScope();
+  let q = scope.client().from("horses").select("*").eq("facility_id", scope.id).abortSignal(scope.signal);
   if (opts?.statuses) q = q.in("status", opts.statuses);
   q = q.order("created_at", { ascending: false });
   const { data, error } = await q;
@@ -132,9 +137,10 @@ export async function listHorses(opts?: { statuses?: HorseStatus[] }): Promise<H
 }
 
 export async function listInTrainingHorses(): Promise<Horse[]> {
-  const { data, error } = await sb()
+  const scope = captureFacilityScope();
+  const { data, error } = await scope.client()
     .from("horses")
-    .select("*")
+    .select("*").eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("status", "in_training")
     .order("arrival_date", { ascending: true, nullsFirst: false });
   if (error) throw new Error(error.message);
@@ -142,12 +148,15 @@ export async function listInTrainingHorses(): Promise<Horse[]> {
 }
 
 export async function getHorse(id: ID): Promise<Horse | null> {
-  const res = await sb().from("horses").select("*").eq("id", id).maybeSingle();
+  const scope = captureFacilityScope();
+  const res = await scope.client().from("horses").select("*").eq("facility_id", scope.id).abortSignal(scope.signal).eq("id", id).maybeSingle();
   return throwIfError(res);
 }
 
 export async function createHorse(input: HorseInput): Promise<Horse> {
-  const userId = await currentUserId();
+  const scope = captureFacilityScope();
+  const userId = await currentUserId(scope);
+  scope.assertCurrent();
   const today = todayLocal();
   const trainingType: TrainingType = input.training_type ?? "foundation";
   // Start the horse on the first phase of its chosen program (Groundwork for
@@ -155,10 +164,11 @@ export async function createHorse(input: HorseInput): Promise<Horse> {
   const phases = await listPhasesForProgram(trainingType);
   const firstPhase = phases[0] ?? null;
 
-  const { data, error } = await sb()
+  const { data, error } = await scope.client()
     .from("horses")
     .insert({
       user_id: userId,
+      facility_id: scope.id,
       name: input.name,
       owner_name: input.owner_name ?? null,
       owner_contact: input.owner_contact ?? null,
@@ -173,9 +183,10 @@ export async function createHorse(input: HorseInput): Promise<Horse> {
       program_meta: input.program_meta ?? {},
       current_phase_id: firstPhase?.id ?? null,
     })
-    .select()
+    .select().eq("facility_id", scope.id).abortSignal(scope.signal)
     .single();
   if (error) throw new Error(error.message);
+  scope.assertCurrent();
   invalidate(["horses"]);
   return data as Horse;
 }
@@ -202,14 +213,17 @@ export async function updateHorse(
   >,
   expectedUpdatedAt?: string,
 ): Promise<void> {
-  let query = sb().from("horses").update(patch).eq("id", id);
+  const scope = captureFacilityScope();
+  let query = scope.client().from("horses").update(patch).eq("facility_id", scope.id).abortSignal(scope.signal).eq("id", id);
   if (expectedUpdatedAt) query = query.eq("updated_at", expectedUpdatedAt);
-  const res = await query.select("id").maybeSingle();
+  const res = await query.select("id").eq("facility_id", scope.id).abortSignal(scope.signal).maybeSingle();
   if (res.error) throw new Error(res.error.message);
   if (!res.data) {
+    scope.assertCurrent();
     invalidate(["horse", id]);
     throw new Error("This horse changed or is unavailable. Review the latest details and retry.");
   }
+  scope.assertCurrent();
   invalidate(["horses"]);
   invalidate(["horse", id]);
 }
@@ -220,25 +234,29 @@ export async function setHorseTrainingType(
   id: ID,
   trainingType: TrainingType,
 ): Promise<void> {
+  const scope = captureFacilityScope();
   const phases = await listPhasesForProgram(trainingType);
   const firstPhase = phases[0] ?? null;
-  const { error } = await sb()
+  const { error } = await scope.client()
     .from("horses")
-    .update({ training_type: trainingType, current_phase_id: firstPhase?.id ?? null })
+    .update({ training_type: trainingType, current_phase_id: firstPhase?.id ?? null }).eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("id", id);
   if (error) throw new Error(error.message);
+  scope.assertCurrent();
   invalidate(["horses"]);
   invalidate(["horse", id]);
 }
 
 export async function setHorseStatus(id: ID, status: HorseStatus): Promise<void> {
-  const { error } = await sb()
+  const scope = captureFacilityScope();
+  const { error } = await scope.client()
     .from("horses")
-    .update({ status })
+    .update({ status }).eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("id", id)
-    .select("id")
+    .select("id").eq("facility_id", scope.id).abortSignal(scope.signal)
     .single();
   if (error) throw new Error(error.message);
+  scope.assertCurrent();
   invalidate(["horses"]);
   invalidate(["horse", id]);
 }
@@ -252,8 +270,10 @@ export async function unarchiveHorse(id: ID): Promise<void> {
 }
 
 export async function deleteHorse(id: ID): Promise<void> {
-  const res = await sb().from("horses").delete().eq("id", id);
+  const scope = captureFacilityScope();
+  const res = await scope.client().from("horses").delete().eq("facility_id", scope.id).abortSignal(scope.signal).eq("id", id);
   if (res.error) throw new Error(res.error.message);
+  scope.assertCurrent();
   invalidate(["horses"]);
   invalidate(["horse", id]);
   invalidate(["sessions", id]);
@@ -265,9 +285,10 @@ export async function deleteHorse(id: ID): Promise<void> {
 export async function listRatingsForHorse(
   horseId: ID,
 ): Promise<{ session_id: ID; phase_id: ID; score: number }[]> {
-  const { data, error } = await sb()
+  const scope = captureFacilityScope();
+  const { data, error } = await scope.client()
     .from("ratings")
-    .select("session_id, score, sessions!inner(phase_id, horse_id)")
+    .select("session_id, score, sessions!inner(phase_id, horse_id)").eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("sessions.horse_id", horseId);
   if (error) throw new Error(error.message);
   return (data ?? []).map((r: any) => ({
@@ -282,13 +303,14 @@ export async function listRatingsForHorse(
 export async function listSessionsForHorse(
   horseId: ID,
 ): Promise<SessionWithRatings[]> {
+  const scope = captureFacilityScope();
   // A discipline's most recent ride can be on any page of the horse's history.
   const rides: SessionWithRatings[] = [];
   const pageSize = 500;
   for (;;) {
-    const res = await sb()
+    const res = await scope.client()
       .from("sessions")
-      .select("*, ratings(*)")
+      .select("*, ratings(*)").eq("facility_id", scope.id).abortSignal(scope.signal)
       .eq("horse_id", horseId)
       .order("occurred_at", { ascending: true })
       .order("id", { ascending: true })
@@ -301,10 +323,11 @@ export async function listSessionsForHorse(
 
 // Shared roster feed. Include every page so infrequently ridden horses still have a last-worked summary.
 export async function listSessionDates() {
+  const scope = captureFacilityScope();
   const rows: Pick<Session, "id" | "horse_id" | "occurred_at" | "task_completions">[] = [];
   const pageSize = 500;
   for (;;) {
-    const res = await sb().from("sessions").select("id, horse_id, occurred_at, task_completions")
+    const res = await scope.client().from("sessions").select("id, horse_id, occurred_at, task_completions").eq("facility_id", scope.id).abortSignal(scope.signal)
       .order("occurred_at", {ascending:false}).order("created_at", {ascending:false}).order("id", {ascending:false})
       .range(rows.length, rows.length + pageSize - 1);
     const page = throwIfError(res) ?? [];
@@ -314,9 +337,10 @@ export async function listSessionDates() {
 }
 
 export async function getSession(id: ID): Promise<SessionWithRatings | null> {
-  const res = await sb()
+  const scope = captureFacilityScope();
+  const res = await scope.client()
     .from("sessions")
-    .select("*, ratings(*)")
+    .select("*, ratings(*)").eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("id", id)
     .maybeSingle();
   return throwIfError(res);
@@ -342,8 +366,11 @@ export interface SessionInput {
 }
 
 export async function createSession(input: SessionInput): Promise<Session> {
+  const scope = captureFacilityScope();
+  if (!await getHorse(input.horse_id)) throw new Error("Horse unavailable in this facility.");
+  scope.assertCurrent();
   // Atomic path: one transaction so a malformed rating can't orphan a session.
-  const { data, error } = await sb().rpc("create_session_with_ratings", {
+  const { data, error } = await scope.client().rpc("create_session_with_ratings", {
     p_horse_id: input.horse_id,
     p_phase_id: input.phase_id,
     p_occurred_at: input.occurred_at,
@@ -352,7 +379,8 @@ export async function createSession(input: SessionInput): Promise<Session> {
     p_bit: input.bit ?? null,
     p_task_completions: input.task_completions ?? [],
     p_ratings: input.ratings,
-  });
+  }).abortSignal(scope.signal);
+  scope.assertCurrent();
   requireAtomicSave(error);
   const session = data as Session;
   invalidate(["sessions", input.horse_id]);
@@ -377,9 +405,12 @@ export async function updateSession(
   id: ID,
   input: SessionUpdateInput,
 ): Promise<void> {
+  const scope = captureFacilityScope();
   if (input.phase_id && !input.expectedUpdatedAt) throw new Error("Reload the ride before changing its phase.");
+  if (!await getSession(id)) throw new Error("Ride unavailable in this facility.");
+  scope.assertCurrent();
   const versioned = !!input.expectedUpdatedAt;
-  const { error } = await sb().rpc(versioned ? "update_ride_record" : "update_session_with_ratings", {
+  const { error } = await scope.client().rpc(versioned ? "update_ride_record" : "update_session_with_ratings", {
     ...(versioned ? { p_expected_updated_at: input.expectedUpdatedAt, p_phase_id: input.phase_id ?? null } : {}),
     p_session_id: id,
     p_occurred_at: input.occurred_at ?? null,
@@ -388,8 +419,9 @@ export async function updateSession(
     p_bit: input.bit || null,
     p_task_completions: input.task_completions ?? null,
     p_ratings: input.ratings ?? null,
-  });
+  }).abortSignal(scope.signal);
   if (versioned && error?.code === "PGRST202") throw new Error("Ride edits require the ride accuracy database update (migration_ride_accuracy.sql). Your edits are still here.");
+  scope.assertCurrent();
   requireAtomicSave(error);
   invalidate(["session", id]);
   invalidate(["sessions"]);
@@ -397,8 +429,10 @@ export async function updateSession(
 }
 
 export async function deleteSession(id: ID): Promise<void> {
-  const res = await sb().from("sessions").delete().eq("id", id);
+  const scope = captureFacilityScope();
+  const res = await scope.client().from("sessions").delete().eq("facility_id", scope.id).abortSignal(scope.signal).eq("id", id);
   if (res.error) throw new Error(res.error.message);
+  scope.assertCurrent();
   invalidate(["session", id]);
   invalidate(["sessions"]);
   invalidate(["ratings"]);
@@ -407,9 +441,10 @@ export async function deleteSession(id: ID): Promise<void> {
 // ---------- Export helpers (all rows for the signed-in user) ----------
 
 export async function listAllSessionsWithRatings(): Promise<SessionWithRatings[]> {
-  const res = await sb()
+  const scope = captureFacilityScope();
+  const res = await scope.client()
     .from("sessions")
-    .select("*, ratings(*)")
+    .select("*, ratings(*)").eq("facility_id", scope.id).abortSignal(scope.signal)
     .order("occurred_at", { ascending: true });
   return throwIfError(res) ?? [];
 }
@@ -419,16 +454,17 @@ export async function listAllSessionsWithRatings(): Promise<SessionWithRatings[]
 export async function getTrifectaForHorse(
   horseId: ID,
 ): Promise<{ evaluation: TrifectaEvaluation; scores: TrifectaScore[] } | null> {
-  const { data: evaluation, error: evaluationError } = await sb()
+  const scope = captureFacilityScope();
+  const { data: evaluation, error: evaluationError } = await scope.client()
     .from("trifecta_evaluations")
-    .select("*")
+    .select("*").eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("horse_id", horseId)
     .maybeSingle();
   if (evaluationError) throw new Error(evaluationError.message);
   if (!evaluation) return null;
-  const { data: scores, error: scoresError } = await sb()
+  const { data: scores, error: scoresError } = await scope.client()
     .from("trifecta_scores")
-    .select("*")
+    .select("*").eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("evaluation_id", evaluation.id);
   if (scoresError) throw new Error(scoresError.message);
   return {
@@ -454,8 +490,11 @@ export interface TrifectaEvaluationInput {
 export async function upsertTrifectaEvaluation(
   input: TrifectaEvaluationInput,
 ): Promise<TrifectaEvaluation> {
+  const scope = captureFacilityScope();
+  if (!await getHorse(input.horse_id)) throw new Error("Horse unavailable in this facility.");
+  scope.assertCurrent();
   // Atomic path: evaluation upsert + score replacement in one transaction.
-  const { data, error } = await sb().rpc("upsert_trifecta_with_scores", {
+  const { data, error } = await scope.client().rpc("upsert_trifecta_with_scores", {
     p_horse_id: input.horse_id,
     p_notes: input.notes ?? null,
     p_scores: input.scores.map((s) => ({
@@ -465,7 +504,8 @@ export async function upsertTrifectaEvaluation(
       score: s.score,
       comment: s.comment?.trim() || null,
     })),
-  });
+  }).abortSignal(scope.signal);
+  scope.assertCurrent();
   requireAtomicSave(error);
   const evaluation = data as TrifectaEvaluation;
   invalidate(["trifecta", input.horse_id]);
@@ -473,14 +513,16 @@ export async function upsertTrifectaEvaluation(
 }
 
 export async function deleteTrifectaEvaluation(id: ID): Promise<void> {
-  const res = await sb().from("trifecta_evaluations").delete().eq("id", id);
+  const scope = captureFacilityScope();
+  const res = await scope.client().from("trifecta_evaluations").delete().eq("facility_id", scope.id).abortSignal(scope.signal).eq("id", id);
   if (res.error) throw new Error(res.error.message);
 }
 
 export async function listAllTrifectas(): Promise<TrifectaEvaluationWithScores[]> {
-  const res = await sb()
+  const scope = captureFacilityScope();
+  const res = await scope.client()
     .from("trifecta_evaluations")
-    .select("*, trifecta_scores(*)");
+    .select("*, trifecta_scores(*)").eq("facility_id", scope.id).abortSignal(scope.signal);
   const rows = throwIfError(res) ?? [];
   return (rows as (TrifectaEvaluation & { trifecta_scores: TrifectaScore[] })[]).map(
     ({ trifecta_scores, ...evaluation }) => ({
@@ -493,18 +535,20 @@ export async function listAllTrifectas(): Promise<TrifectaEvaluationWithScores[]
 // ---------- Resources ----------
 
 export async function listResourcesForPhase(phaseId: ID): Promise<Resource[]> {
-  const res = await sb()
+  const scope = captureFacilityScope();
+  const res = await scope.client()
     .from("resources")
-    .select("*")
+    .select("*").eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("phase_id", phaseId)
     .order("position", { ascending: true });
   return throwIfError(res) ?? [];
 }
 
 export async function listResourcesForQuestion(questionId: ID): Promise<Resource[]> {
-  const res = await sb()
+  const scope = captureFacilityScope();
+  const res = await scope.client()
     .from("resources")
-    .select("*")
+    .select("*").eq("facility_id", scope.id).abortSignal(scope.signal)
     .eq("question_id", questionId)
     .order("position", { ascending: true });
   return throwIfError(res) ?? [];
@@ -518,14 +562,16 @@ export async function createResource(input: {
   kind: "youtube" | "link";
   notes?: string;
 }): Promise<Resource> {
-  const userId = await currentUserId();
+  const scope = captureFacilityScope();
+  const userId = await currentUserId(scope);
   if ((!input.phaseId && !input.questionId) || (input.phaseId && input.questionId)) {
     throw new Error("Resource must target exactly one of phase or question");
   }
-  const res = await sb()
+  const res = await scope.client()
     .from("resources")
     .insert({
       user_id: userId,
+      facility_id: scope.id,
       phase_id: input.phaseId ?? null,
       question_id: input.questionId ?? null,
       title: input.title.trim(),
@@ -533,9 +579,10 @@ export async function createResource(input: {
       kind: input.kind,
       notes: input.notes?.trim() || null,
     })
-    .select()
+    .select().eq("facility_id", scope.id).abortSignal(scope.signal)
     .single();
   const resource = throwIfError(res);
+  scope.assertCurrent();
   invalidate(["resources"]);
   return resource;
 }
@@ -544,13 +591,17 @@ export async function updateResource(
   id: ID,
   patch: Partial<Pick<Resource, "title" | "url" | "kind" | "notes" | "position">>,
 ): Promise<void> {
-  const res = await sb().from("resources").update(patch).eq("id", id);
+  const scope = captureFacilityScope();
+  const res = await scope.client().from("resources").update(patch).eq("facility_id", scope.id).abortSignal(scope.signal).eq("id", id);
   if (res.error) throw new Error(res.error.message);
+  scope.assertCurrent();
   invalidate(["resources"]);
 }
 
 export async function deleteResource(id: ID): Promise<void> {
-  const res = await sb().from("resources").delete().eq("id", id);
+  const scope = captureFacilityScope();
+  const res = await scope.client().from("resources").delete().eq("facility_id", scope.id).abortSignal(scope.signal).eq("id", id);
   if (res.error) throw new Error(res.error.message);
+  scope.assertCurrent();
   invalidate(["resources"]);
 }

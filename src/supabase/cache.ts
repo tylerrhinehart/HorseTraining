@@ -88,6 +88,7 @@ export function fetchQuery<T>(
     let lastErr: unknown;
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
+        if (requestGeneration !== generation) throw new Error("Query scope changed");
         const data = await fn();
         if (requestGeneration === generation) {
           cache.set(k, { data, updatedAt: Date.now() });
@@ -96,6 +97,7 @@ export function fetchQuery<T>(
         return data;
       } catch (e) {
         lastErr = e;
+        if (requestGeneration !== generation) throw e;
         if (attempt < retries) {
           const d = delays[Math.min(attempt, delays.length - 1)] ?? 0;
           if (d > 0) await new Promise((res) => setTimeout(res, d));

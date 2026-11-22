@@ -1,5 +1,11 @@
 import React, { Suspense, useEffect } from "react";
-import { Route, Routes, useLocation, useNavigationType } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
+import { FacilityProvider, RequireFacility, useFacility } from "./auth/FacilityProvider";
+import { useAuth } from "./auth/AuthProvider";
+import { pendingInvite } from "./facilities/pendingInvite";
+import Facilities from "./pages/Facilities";
+import FacilitySettings from "./pages/FacilitySettings";
+import PlatformAdmin from "./pages/PlatformAdmin";
 import AppShell from "./components/AppShell";
 import RequireAuth from "./auth/RequireAuth";
 import Today from "./pages/Today";
@@ -21,7 +27,7 @@ import { SkeletonCard } from "./components/Skeleton";
 const Reference = React.lazy(() => import("./pages/Reference"));
 const HorseReport = React.lazy(() => import("./pages/HorseReport"));
 
-const guarded = (element: React.ReactNode) => <RequireAuth>{element}</RequireAuth>;
+const guarded = (element: React.ReactNode) => <RequireAuth><RequireFacility>{element}</RequireFacility></RequireAuth>;
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -33,6 +39,18 @@ function ScrollToTop() {
 }
 
 export default function App() {
+  return <FacilityProvider><ScopedApp /></FacilityProvider>;
+}
+
+function ScopedApp() {
+  const { facility } = useFacility();
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+  if (user && ["/", "/sign-up", "/sign-in"].includes(pathname) && pendingInvite()) return <Navigate replace to="/facilities" />;
+  return <AppContents key={`${user?.id ?? "guest"}:${facility?.id ?? "none"}`} />;
+}
+
+function AppContents() {
   return (
     <ToastProvider>
       <AppShell>
@@ -48,6 +66,9 @@ export default function App() {
             <Route path="/sign-in" element={<SignIn />} />
             <Route path="/sign-up" element={<SignUp />} />
 
+            <Route path="/facilities" element={<RequireAuth><Facilities /></RequireAuth>} />
+            <Route path="/facility-settings" element={guarded(<FacilitySettings />)} />
+            <Route path="/platform" element={<RequireAuth><PlatformAdmin /></RequireAuth>} />
             <Route path="/" element={guarded(<Today />)} />
             <Route path="/horses" element={guarded(<HorsesList />)} />
             <Route path="/horses/new" element={guarded(<HorseNew />)} />

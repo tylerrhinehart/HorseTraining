@@ -58,7 +58,8 @@ export type HorseStatus = 'in_training' | 'complete' | 'archived';
 
 export interface Horse {
   id: ID;
-  user_id: ID;
+  facility_id: ID;
+  user_id: ID | null;
   name: string;
   breed: string | null;
   dob: string | null;
@@ -82,7 +83,8 @@ export interface Horse {
 
 export interface Phase {
   id: ID;
-  user_id: ID;
+  facility_id: ID;
+  user_id: ID | null;
   code: PhaseCode;
   program: TrainingType;
   scale: RatingScaleKind;
@@ -93,7 +95,8 @@ export interface Phase {
 
 export interface Question {
   id: ID;
-  user_id: ID;
+  facility_id: ID;
+  user_id: ID | null;
   phase_id: ID;
   axis: Axis;
   position: number;
@@ -105,7 +108,8 @@ export interface Question {
 
 export interface Session {
   id: ID;
-  user_id: ID;
+  facility_id: ID;
+  user_id: ID | null;
   horse_id: ID;
   phase_id: ID;
   occurred_at: string;
@@ -120,7 +124,8 @@ export interface Session {
 
 export interface Rating {
   id: ID;
-  user_id: ID;
+  facility_id: ID;
+  user_id: ID | null;
   session_id: ID;
   question_id: ID;
   axis_snapshot: Axis;
@@ -136,7 +141,8 @@ export interface SessionWithRatings extends Session {
 
 export interface TrifectaEvaluation {
   id: ID;
-  user_id: ID;
+  facility_id: ID;
+  user_id: ID | null;
   horse_id: ID;
   evaluated_at: string;
   notes: string | null;
@@ -146,7 +152,8 @@ export interface TrifectaEvaluation {
 
 export interface TrifectaScore {
   id: ID;
-  user_id: ID;
+  facility_id: ID;
+  user_id: ID | null;
   evaluation_id: ID;
   axis: TrifectaAxisDb;
   item_code: string;
@@ -161,7 +168,8 @@ export interface TrifectaEvaluationWithScores extends TrifectaEvaluation {
 
 export interface Resource {
   id: ID;
-  user_id: ID;
+  facility_id: ID;
+  user_id: ID | null;
   phase_id: ID | null;
   question_id: ID | null;
   title: string;
@@ -171,3 +179,7 @@ export interface Resource {
   position: number;
   created_at: string;
 }
+
+export type FacilityRole = "owner" | "admin" | "trainer";
+export interface Facility { id: ID; name: string; status: "active" | "suspended"; voice_enabled: boolean; created_at: string; }
+export interface FacilityMembership { facility_id: ID; user_id: ID; role: FacilityRole; created_at: string; facility: Facility; }

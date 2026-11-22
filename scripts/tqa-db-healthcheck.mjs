@@ -10,7 +10,17 @@ export async function checkDatabase(env = process.env, request = fetch) {
     headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json", "Cache-Control": "no-cache" },
     signal: AbortSignal.timeout(20_000),
   });
-  if (!response.ok) throw new Error(`TQA database read failed (HTTP ${response.status}).`);
+  if (!response.ok) {
+    // The facility schema revokes SELECT from anon. This exact Postgres denial
+    // proves the request reached the database without exposing any horse rows.
+    let denied;
+    try { denied = await response.json(); } catch { /* Fail closed below. */ }
+    if ([401, 403].includes(response.status) && denied?.code === "42501" &&
+        denied?.message === "permission denied for table horses") {
+      return "TQA database check passed; anonymous horse access is denied.";
+    }
+    throw new Error(`TQA database read failed (HTTP ${response.status}).`);
+  }
   let rows;
   try { rows = await response.json(); } catch { throw new Error("TQA database returned invalid JSON."); }
   if (!Array.isArray(rows)) throw new Error("TQA database returned an unexpected response.");

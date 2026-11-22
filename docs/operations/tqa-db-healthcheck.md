@@ -53,3 +53,5 @@ node scripts/tqa-db-healthcheck.mjs
 ```
 
 Do not paste keys into logs or command arguments. There are no database migrations in this change.
+
+With the facility schema, anonymous SELECT is revoked. The check also accepts only the exact PostgreSQL `42501` / `permission denied for table horses` response at HTTP 401 or 403 as proof of database reachability with no record exposure. Invalid keys, other denials and server failures still fail. No grants or RLS policies are relaxed.

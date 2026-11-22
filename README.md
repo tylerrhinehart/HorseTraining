@@ -14,7 +14,7 @@ A Vite + React app backed by Supabase. The observed public pilot is https://tqa.
    ```
    - `VITE_SUPABASE_URL` — your project URL (e.g. `https://xxxx.supabase.co`)
    - `VITE_SUPABASE_ANON_KEY` — the project's publishable / anon API key
-3. Use a **new local or staging Supabase project**. Apply `supabase/schema.sql`, then `supabase/ride_drafts.sql` in that order, with a privileged database connection. This branch intentionally has no path for migrating legacy data. The old `migration_*.sql` files are retained as history only; do not apply them after the new schema. Do not point local tests or provisioning at a live project.
+3. Use a **new local or staging Supabase project**. Apply `supabase/schema.sql`, then `supabase/ride_drafts.sql`, then `supabase/guided_voice.sql` in that order, with a privileged database connection. This branch intentionally has no path for migrating legacy data. The old `migration_*.sql` files are retained as history only; do not apply them after the new schema. Do not point local tests or provisioning at a live project.
 4. Start the dev server:
    ```
    npm run dev
@@ -26,8 +26,8 @@ A Vite + React app backed by Supabase. The observed public pilot is https://tqa.
 
 - Verify your Supabase Auth email, then register a facility. Facility owners invite coworkers by generating a one-time signup link for the coworker's verified email address. A facility link or ID alone does not grant access.
 - Use a separate platform operator account for facility management. Follow [facility setup](supabase/facilities.md) to grant this role, then enroll and verify its TOTP factor before using the platform console. Never give an operator grant through the public signup flow.
-- Voice is opt-in per facility. Deploy the `transcribe-ride-turn` Supabase Edge Function to staging, set `OPENAI_API_KEY` as a backend-only function secret and `TQA_VOICE_ALLOWED_ORIGINS` to the approved frontend origins, and enable voice for the test facility using the platform console. The browser must be on HTTPS (or localhost) and the user must explicitly allow the microphone. The UI shows readback and requires confirmation; the app does not retain raw audio or transcripts. Test with synthetic speech before using real barn audio.
-- Voice starts with foreground push-to-talk for the Foundation column of Phase 1. Choose a horse and phase, say the metric and signed score, confirm it into the recoverable draft, and save the ride to publish it to history. Manual entry remains available. Background listening, lock-screen capture, and live arena readiness are not claimed.
+- Voice is opt-in per facility. Deploy the `transcribe-ride-turn` Supabase Edge Function to staging, set `OPENAI_API_KEY` and `TYPESAFE_API_KEY` as backend-only function secrets and `TQA_VOICE_ALLOWED_ORIGINS` to the approved frontend origins, and enable voice for the test facility using the platform console. The browser must be on HTTPS (or localhost) and the user must explicitly allow the microphone. The UI shows readback and requires confirmation; the app does not retain raw audio or transcripts. Test with synthetic speech before using real barn audio.
+- Voice starts with foreground push-to-talk for the Foundation column of Phase 1. Choose a horse and phase. The app asks one rubric question at a time; answer only its signed score (for example “minus two” or “zero”), confirm the current question and score into the recoverable draft, then explicitly save the ride to publish it to history. Naming a metric, unclear sign, conflicting scores or qualitative feedback requires clarification on the same question. The server binds each turn before listening and atomically saves confirmed scores with the next-question cursor. See [guided voice setup and test limits](supabase/functions/transcribe-ride-turn/README.md). Manual entry remains available. Background listening, lock-screen capture, and live arena readiness are not claimed.
 
 ## Verification
 

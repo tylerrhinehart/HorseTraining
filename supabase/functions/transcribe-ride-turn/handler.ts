@@ -1,3 +1,4 @@
+import type { ScoreChoice } from "./jev.ts";
 const MAX_AUDIO = 512 * 1024;
 const MAX_BODY = MAX_AUDIO + 4096;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -5,10 +6,13 @@ const FORMATS: Record<string, string> = {
   "audio/webm": "webm", "audio/mp4": "mp4", "audio/ogg": "ogg",
 };
 
+export interface TurnBinding { draft_id: string; question_id: string; version: number; turn_id: string }
+
 export interface Dependencies {
   origins: readonly string[];
   authenticate: (authorization: string, signal: AbortSignal) => Promise<boolean>;
-  authorize: (authorization: string, draft: string, signal: AbortSignal) => Promise<boolean>;
+  authorize: (authorization: string, binding: TurnBinding, consume: boolean, signal: AbortSignal) => Promise<boolean>;
+  interpret: (transcript: string, signal: AbortSignal) => Promise<ScoreChoice>;
   transcribe: (clip: Blob, extension: string, signal: AbortSignal) => Promise<string>;
 }
 
@@ -80,23 +84,28 @@ export function createHandler(deps: Dependencies) {
       }
       const draft = form.get("draft_id");
       const turn = form.get("turn_id");
+      const question = form.get("question_id");
+      const version = Number(form.get("version"));
       const audio = form.get("audio");
-      if ([...form.keys()].length !== 3 || typeof draft !== "string" || !UUID.test(draft) ||
-          typeof turn !== "string" || !UUID.test(turn) || !(audio instanceof Blob) ||
+      if ([...form.keys()].length !== 5 || typeof draft !== "string" || !UUID.test(draft) ||
+          typeof turn !== "string" || !UUID.test(turn) || typeof question !== "string" || !UUID.test(question) || !Number.isSafeInteger(version) || version < 1 || !(audio instanceof Blob) ||
           audio.size < 12 || audio.size > MAX_AUDIO)
         return respond(400, { error: "Invalid clip upload." });
       const mediaType = audio.type.split(";")[0].trim().toLowerCase();
       const extension = Object.hasOwn(FORMATS, mediaType) ? FORMATS[mediaType] : undefined;
       if (!extension || !await hasContainerSignature(audio, extension))
         return respond(415, { error: "Unsupported recording format." });
-      if (!await deps.authorize(auth, draft, signal))
+      const binding = { draft_id: draft, question_id: question, version, turn_id: turn };
+      if (!await deps.authorize(auth, binding, true, signal))
         return respond(403, { error: "Voice is unavailable for this draft or its current limits." });
       const transcript = (await deps.transcribe(audio, extension, signal)).trim();
       if (transcript.length > 200) return respond(422, { error: "Use a single short scoring command." });
-      return respond(200, { turn_id: turn, transcript });
+      const choice = await deps.interpret(transcript, signal);
+      if (!await deps.authorize(auth, binding, false, signal)) return respond(409, { error: "The active question changed. Reload the saved draft." });
+      return respond(200, { ...binding, transcript, choice });
     } catch {
       // No audio, transcript, credentials, or upstream response in logs or errors.
-      return respond(503, { error: "Transcription is unavailable." });
+      return respond(503, { error: "Voice interpretation is unavailable. Try again or enter the score manually." });
     }
   };
 }

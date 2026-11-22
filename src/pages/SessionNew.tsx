@@ -27,7 +27,7 @@ import { localDateTimeInput } from "../utils/dates";
 import { useAuth } from "../auth/AuthProvider";
 import { useFacility } from "../auth/FacilityProvider";
 import RideAlongPanel from "../features/ride-along/RideAlongPanel";
-import { closeDraft, getDraft, openDraft, saveDraft, type RideDraft } from "../features/ride-along/draftClient";
+import { closeDraft, confirmGuidedScore, getDraft, openDraft, saveDraft, type RideDraft } from "../features/ride-along/draftClient";
 import { VOICE_PHASE, type VoiceScore } from "../features/ride-along/voiceCommand";
 import type { TaskCompletion } from "../supabase/types";
 
@@ -215,7 +215,7 @@ export default function SessionNew() {
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], comment } }));
 
   const voiceEligible = facility?.voice_enabled === true && !isPerformance &&
-    currentPhase?.code === VOICE_PHASE && currentPhase?.scale === "tqa" && !confirmPhase;
+    currentPhase?.program === "foundation" && currentPhase?.code === VOICE_PHASE && currentPhase?.scale === "tqa" && !confirmPhase;
 
   function payload(nextDrafts = drafts): SessionInput {
     if (!occurredAt || Number.isNaN(new Date(occurredAt).getTime())) throw new Error("Enter a valid ride date and time.");
@@ -315,7 +315,14 @@ export default function SessionNew() {
     if (!voiceDraft || !voiceEligible || !question || !Number.isInteger(proposal.score) || Math.abs(proposal.score) > 3)
       throw new Error("This score no longer matches the ride sheet.");
     const next = { ...drafts, [question.id]: { ...drafts[question.id], score: proposal.score } };
-    const saved = await draftAction(() => persist(voiceDraft, "voice:" + request, payload(next), request));
+    const key = "voice:" + request;
+    if (proposal.binding.draft_id !== voiceDraft.id || proposal.binding.question_id !== question.id || proposal.binding.version !== voiceDraft.version)
+      throw new Error("The active question changed. Reload the saved draft.");
+    const operation = pending.current?.key === key ? pending.current : { key, request, input: payload(next) };
+    if (pending.current && pending.current.key !== key) throw new Error("Resolve the pending save first.");
+    pending.current = operation;
+    const saved = await draftAction(() => confirmGuidedScore(voiceDraft, proposal, operation.input!));
+    pending.current = undefined;
     restore(saved);
   }
 
@@ -453,7 +460,7 @@ export default function SessionNew() {
       </section>}
       {voiceDraft && <section className="space-y-2">
         <p className="muted">Confirmed voice scores are saved to the draft. Manual edits are saved with the next confirmed score or when you save the ride.</p>
-        {voiceEligible && <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draftId={voiceDraft.id}
+        {voiceEligible && <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draft={voiceDraft}
           questions={questions.data ?? []} disabled={draftOperation || saving || !questions.data?.length}
           onBusy={setVoiceBusy} onConfirm={confirmVoice} />}
         <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving}

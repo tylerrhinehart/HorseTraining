@@ -30,6 +30,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { useFacility } from "../auth/FacilityProvider";
 import type { Phase } from "../supabase/types";
 
 interface EditFormValues extends HorseProgramForm {
@@ -46,6 +47,7 @@ interface EditFormValues extends HorseProgramForm {
 
 export default function HorseDetail() {
   const { id } = useParams();
+  const { facility } = useFacility();
   const navigate = useNavigate();
   const toast = useToast();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -252,7 +254,12 @@ export default function HorseDetail() {
           <p className="muted">Owner: {horse.data.owner_name ?? "—"}{dayLabel && ` · ${dayLabel}`}</p>
           {horse.data.status !== "in_training" && <span className="pill">{horse.data.status === "complete" ? "Complete" : "Archived"}</span>}
         </div>
-        {horse.data.status === "in_training" && <Link className="btn btn-leather" to={`/horses/${id}/sessions/new`}>Start Ride</Link>}
+        {horse.data.status === "in_training" && <div className="flex flex-wrap gap-2">
+          <Link className="btn btn-leather" to={`/horses/${id}/sessions/new`}>Start Ride</Link>
+          {facility?.voice_enabled && !isFiveScale && (
+            <Link className="btn" to={`/horses/${id}/sessions/new?mode=voice`}>Ride-along scorer</Link>
+          )}
+        </div>}
       </header>
       {[phases,sessions].filter(query=>query.error).map((query,index)=><ErrorState key={index} error={query.error!} onRetry={query.refresh} />)}
       <section className="card workflow-panel">
@@ -260,7 +267,7 @@ export default function HorseDetail() {
           ? sessions.data ? <DisciplineHistoryCard history={lastWorkedByDiscipline(sessions.data)} goals={horse.data.program_meta?.training_goals ?? []} /> : <p>{sessions.error ? "Discipline history unavailable." : "Loading discipline history…"}</p>
           : currentPhase ? <FoundationWorkflow key={horse.data.id} horse={horse.data} current={currentPhase} phases={allPhases} /> : <p>{phases.error ? "Phase unavailable." : "Loading phase…"}</p>}
         {!isFiveScale && !!horse.data.program_meta?.training_goals?.length && <p>Goals: {horse.data.program_meta.training_goals.map(taskJobName).join(", ")}</p>}
-        <NextRideFocus key={horse.data.id} horse={horse.data} onDirty={setFocusDirty} />
+        <NextRideFocus key={`focus-${horse.data.id}`} horse={horse.data} onDirty={setFocusDirty} />
       </section>
       <section className="card workflow-panel"><h2 className="card-title">Recent rides</h2>
         {recent.length ? recent.map(ride => <div key={ride.id} className="recent-ride">

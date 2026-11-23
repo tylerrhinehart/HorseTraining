@@ -81,7 +81,7 @@ function FacilityCard({ facility, change, pending, error, revision }: {
       <div className="platform-control">
         <div>
           <h4>Voice scoring <span className={`platform-badge ${voice ? "platform-badge-on" : ""}`}>{voice ? "On" : "Off"}</span></h4>
-          <p>{!active && voice ? "Available again when access is restored." : "For Foundation Phase 1 rides."}</p>
+          <p>{!active && voice ? "Available again when access is restored." : "On a Foundation horse’s page, choose Ride-along scorer."}</p>
         </div>
         <button type="button" className={`btn ${!voice ? "btn-primary" : ""}`} disabled={!!pending} aria-describedby={heading}
           onClick={() => void change("voice", !voice)}>

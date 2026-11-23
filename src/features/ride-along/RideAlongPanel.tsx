@@ -199,7 +199,7 @@ export default function RideAlongPanel({ draft, questions, disabled, onBusy, onC
 
   return <section className="card space-y-2" aria-label="Ride-along voice scoring">
     <h2 className="card-title">Voice scoring · Phase 1 pilot</h2>
-    <p className="muted">Use only when stopped and safe. The mic is off between clips. Clips last up to eight seconds and are sent to OpenAI for transcription, then the transcript is sent to TypeSafe Jev to interpret your explicit score. Check the readback before confirming. Manual scoring remains available.</p>
+    <p className="muted">Use only when stopped and safe. The mic is off between clips. Clips last up to eight seconds and are sent through OpenRouter to OpenAI for transcription, then the transcript is sent through OpenRouter to TypeSafe Jev to interpret your explicit score. Check the readback before confirming. Manual scoring remains available.</p>
     {question ? <p aria-live="polite"><strong>Question {draft.guided_cursor + 1} of {sequence.length}: {question.text}</strong><br />What signed score, minus three to plus three, or zero?</p> : <p role="status">Guided questions complete. Review the sheet and choose Save ride when ready.</p>}
     {question && <button type="button" className="btn btn-ghost" disabled={stage !== "idle" || !!proposal} onClick={() => speak(`${question.text}. What signed score?`)}>Read current question</button>}
     {stage === "recording" ? <>

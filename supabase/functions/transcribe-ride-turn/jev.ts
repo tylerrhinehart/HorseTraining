@@ -1,6 +1,8 @@
-// Contract: https://api.typesafe.ai/openapi.json and https://docs.typesafe.ai/models
+// Contract: https://openrouter.ai/docs/api/api-reference/systemone/submit-a-system-one-request
+// Catalog: /api/v1/models?output_modalities=decisions (versioned Jev 1.14 only).
 // Versioned model, one Choice, no metric selection and no score inference.
-export const JEV_MODEL = "jev-1.14.0";
+export const JEV_MODEL = "typesafe/jev-1.14";
+export const JEV_CANONICAL_MODEL = "typesafe/jev-1.14-20261014";
 export const CHOICES = ["minus_three", "minus_two", "minus_one", "zero", "plus_one", "plus_two", "plus_three", "needs_clarification"] as const;
 export type ScoreChoice = typeof CHOICES[number];
 export interface JevRequest {
@@ -29,7 +31,7 @@ export function jevRequest(transcript: string): JevRequest {
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const probability = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1;
 export function readJevChoice(value: unknown): ScoreChoice {
-  if (!object(value) || value.model !== JEV_MODEL || !object(value.answers) || Object.keys(value.answers).join() !== "rating") throw new Error("Invalid Jev response");
+  if (!object(value) || (value.model !== JEV_MODEL && value.model !== JEV_CANONICAL_MODEL) || !object(value.answers) || Object.keys(value.answers).join() !== "rating") throw new Error("Invalid Jev response");
   const a = value.answers.rating;
   if (!object(a) || a.type !== "choice" || !CHOICES.includes(a.choice as ScoreChoice) || !probability(a.confidence) || !object(a.probabilities)) throw new Error("Invalid Jev choice");
   const probs = a.probabilities;
@@ -40,8 +42,8 @@ export function readJevChoice(value: unknown): ScoreChoice {
   return a.confidence >= 0.9 && (probs[a.choice as ScoreChoice] as number) >= 0.9 ? a.choice as ScoreChoice : "needs_clarification";
 }
 export async function interpretScore(transcript: string, key: string, signal: AbortSignal, request: typeof fetch = fetch): Promise<ScoreChoice> {
-  if (!key) throw new Error("Jev not configured");
-  const response = await request("https://api.typesafe.ai/v1/systemone", {
+  if (!key) throw new Error("OpenRouter not configured");
+  const response = await request("https://openrouter.ai/api/v1/systemone", {
     method: "POST", signal, headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify(jevRequest(transcript)),
   });

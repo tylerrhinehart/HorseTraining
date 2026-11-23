@@ -21,3 +21,8 @@ export interface FacilityTransition {
 export async function getFacilityTransition(): Promise<FacilityTransition> {
   return check(await requireSupabase().rpc("facility_transition_status"));
 }
+
+export interface PlatformAccess { assigned: boolean; mfa_verified: boolean }
+export async function getPlatformAccess(): Promise<PlatformAccess> {
+  return check(await requireSupabase().rpc("platform_access_status"));
+}

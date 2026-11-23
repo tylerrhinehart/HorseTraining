@@ -24,3 +24,5 @@ Platform functions require the account to exist in that table **and** a Supabase
 ## Focused verification
 
 On a disposable PostgreSQL database with the repository's test Auth stub, load `tests/database/bootstrap.sql`, `supabase/schema.sql`, then `supabase/tests/facilities.sql`. The focused fixture rolls its data back. Never point the test fixture at production.
+
+The platform screen distinguishes a missing platform role from a session that still needs MFA. `platform_access_status()` returns only the signed-in caller’s assignment and AAL2 status; it never grants a role. After a trusted administrator assigns the role, use **Refresh access**. A previously verified authenticator can be reused.

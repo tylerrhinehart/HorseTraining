@@ -1,6 +1,6 @@
 # Fresh TQA facility database
 
-Run `supabase/schema.sql` once against a **new Supabase database without TQA tables or existing TQA Auth users**, then apply the separately documented ride-draft schema if using that feature. It initializes in one transaction and does not drop application tables. The older per-user migration SQL is not part of this installation. No legacy migration or reset is required or supported by this setup.
+Run `supabase/schema.sql` once against a **new Supabase database without TQA tables or existing TQA Auth users**, then apply the separately documented ride-draft schema if using that feature. It initializes in one transaction and does not drop application tables. The older per-user migration SQL is not part of this installation. For an existing per-user database, follow the [non-destructive facility transition](facility-transition.md). For an existing facility-aware database, apply only the additive transition migration; do not reset or replay this fresh installer.
 
 ## App calls and access
 

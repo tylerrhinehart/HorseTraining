@@ -257,7 +257,7 @@ export default function HorseDetail() {
         {horse.data.status === "in_training" && <div className="flex flex-wrap gap-2">
           <Link className="btn btn-leather" to={`/horses/${id}/sessions/new`}>Start Ride</Link>
           {facility?.voice_enabled && !isFiveScale && (
-            <Link className="btn" to={`/horses/${id}/sessions/new?mode=voice`}>Ride-along scorer</Link>
+            <Link className="btn" to={`/horses/${id}/sessions/new?mode=voice`}>Score with voice</Link>
           )}
         </div>}
       </header>

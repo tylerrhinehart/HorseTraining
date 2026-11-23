@@ -12,5 +12,5 @@ export const choiceScores: Record<string, number> = { minus_three: -3, minus_two
 export function scoreReadback(proposal: VoiceScore) {
   const value = ["zero", "one", "two", "three"][Math.abs(proposal.score)];
   const sign = proposal.score === 0 ? "" : proposal.score < 0 ? "minus " : "plus ";
-  return `For ${proposal.label}, I have ${sign}${value}. Is that right?`;
+  return `For ${proposal.label}, I have ${sign}${value}. Say yes to confirm, or try again.`;
 }

@@ -9,6 +9,7 @@ const fixtures = vi.hoisted(() => ({
   enabled: true,
   program: "foundation",
   open: vi.fn(),
+  openMic: vi.fn(),
   refreshed: vi.fn(),
   queryError: null as Error | null,
 }));
@@ -17,6 +18,7 @@ vi.mock("../auth/FacilityProvider", () => ({
   useFacility: () => ({ facility: { id: "facility", voice_enabled: fixtures.enabled } }),
 }));
 vi.mock("../components/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock("../features/ride-along/voiceCapture", () => ({ openVoiceCapture: fixtures.openMic }));
 vi.mock("../features/ride-along/draftClient", () => ({
   closeDraft: vi.fn(), confirmGuidedScore: vi.fn(), getDraft: vi.fn(), openDraft: fixtures.open,
   saveDraft: vi.fn(), bindTurn: vi.fn(), interpretTurn: vi.fn(),
@@ -55,6 +57,7 @@ beforeEach(() => {
   fixtures.enabled = true;
   fixtures.program = "foundation";
   fixtures.queryError = null;
+  fixtures.openMic.mockResolvedValue({ close: vi.fn(), pause: vi.fn(), listen: vi.fn() });
   fixtures.open.mockResolvedValue({
     id: "draft", facility_id: "facility", horse_id: "horse", phase_id: "one", status: "draft",
     occurred_at: new Date().toISOString(), notes: "", rider: "", ratings: [], version: 1,
@@ -97,7 +100,9 @@ it("opens the scorer from the horse page even when the horse is on Groundwork", 
   expect(screen.getByLabelText("Phase worked on this ride")).toHaveValue("one");
   expect(fixtures.open).not.toHaveBeenCalled();
   fireEvent.click(start);
-  expect(await screen.findByRole("button", { name: "Turn on mic" })).toBeEnabled();
+  expect(await screen.findByRole("button", { name: "Mute" })).toBeEnabled();
+  expect(fixtures.openMic).toHaveBeenCalledTimes(1);
+  expect(fixtures.openMic.mock.invocationCallOrder[0]).toBeLessThan(fixtures.open.mock.invocationCallOrder[0]);
   expect(fixtures.open).toHaveBeenCalledWith("facility", "horse", "one", expect.any(String));
   expect(screen.getByRole("heading", { name: "Ride-along scorer" })).toHaveFocus();
 });

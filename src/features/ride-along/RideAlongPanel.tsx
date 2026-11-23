@@ -1,8 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import type { Question } from "../../supabase/types";
-import { bindTurn, interpretTurn, type RideDraft } from "./draftClient";
+import { bindTurn, interpretConfirmation, interpretTurn, type RideDraft } from "./draftClient";
 import { scoreReadback, type TurnBinding, type VoiceScore } from "./voiceCommand";
-import { openVoiceCapture, type VoiceCapture } from "./voiceCapture";
+import type { VoiceCapture } from "./voiceCapture";
+import type { VoiceCall } from "./useVoiceCall";
 import "./rideAlong.css";
 
 const MAX_ANSWER = 200;
@@ -19,17 +20,17 @@ interface Props {
   disabled: boolean;
   returnFocus: RefObject<HTMLElement>;
   onReview: () => void;
+  microphone: VoiceCall;
   onBusy: (busy: boolean) => void;
   onConfirm: (proposal: VoiceScore, requestId: string) => Promise<void>;
 }
 
 type Stage = "idle" | "opening" | "thinking" | "confirming";
-type Mic = "off" | "starting" | "on";
 type Message = { author: "scorer" | "you"; text: string };
 
-export default function RideAlongPanel({ draft, horseName, questions, open, disabled, returnFocus, onReview, onBusy, onConfirm }: Props) {
+export default function RideAlongPanel({ draft, horseName, questions, open, disabled, returnFocus, onReview, onBusy, onConfirm, microphone }: Props) {
   const [stage, setStage] = useState<Stage>("idle");
-  const [mic, setMic] = useState<Mic>("off");
+  const [showControls, setShowControls] = useState(false);
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [proposal, setProposal] = useState<VoiceScore>();
@@ -40,13 +41,12 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   const [retryOnly, setRetryOnly] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const answerId = useId();
   const resources = useRef<{
     generation: number; stage: Stage; audioTurn?: boolean; armed?: boolean;
-    capture?: VoiceCapture; micRequest?: AbortController; abort?: AbortController;
+    capture?: VoiceCapture; abort?: AbortController;
     speech?: SpeechSynthesisUtterance; speechTimer?: number;
   }>({ generation: 0, stage: "idle" });
   const busyCallback = useRef(onBusy);
@@ -133,47 +133,16 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     r.audioTurn = false;
   }
 
-  function closeMic() {
-    const r = resources.current;
-    r.capture?.close();
-    r.capture = undefined;
-    r.micRequest?.abort();
-    r.micRequest = undefined;
-  }
-
-  function pauseMic() {
-    const wasAudioTurn = resources.current.audioTurn;
-    closeMic();
-    if (wasAudioTurn && resources.current.stage !== "confirming") {
+  function stopListening() {
+    if (resources.current.audioTurn && resources.current.stage !== "confirming") {
       release();
       changeStage("idle");
     }
-    setMic("off");
   }
 
-  async function enableMic() {
-    const r = resources.current;
-    if (!canAnswer || r.capture || r.micRequest || document.hidden) return;
-    const request = new AbortController();
-    r.micRequest = request;
-    setMic("starting");
-    const unavailable = () => {
-      if (r.micRequest !== request) return;
-      pauseMic();
-      reply("I couldn't listen. Check microphone access, type, or pick a score.");
-    };
-    try {
-      const capture = await openVoiceCapture(request.signal, unavailable);
-      if (request.signal.aborted || document.hidden || !dialogRef.current?.open) {
-        capture.close();
-        if (r.micRequest === request) pauseMic();
-        return;
-      }
-      r.capture = capture;
-      setMic("on");
-    } catch {
-      unavailable();
-    }
+  function muteMic() {
+    stopListening();
+    microphone.stop();
   }
 
   function isCurrent(generation: number) {
@@ -217,7 +186,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
       leaveChat();
     };
     const leaveChat = () => {
-      pauseMic();
+      stopListening();
       stopSpeaking();
       if (resources.current.stage !== "idle" && resources.current.stage !== "confirming") {
         release();
@@ -229,7 +198,6 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     return () => {
       document.removeEventListener("visibilitychange", background);
       window.removeEventListener("pagehide", leaveChat);
-      closeMic();
       release();
       stopSpeaking();
       busyCallback.current(false);
@@ -237,8 +205,13 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   }, [draft.id]);
 
   useEffect(() => {
-    if (!open || draft.guided_cursor >= sequence.length) pauseMic();
+    if (!open || draft.guided_cursor >= sequence.length) muteMic();
   }, [open, draft.guided_cursor, sequence.length]);
+
+  useEffect(() => {
+    if (microphone.state === "off" || microphone.state === "unavailable") stopListening();
+    if (microphone.state === "unavailable") setShowControls(true);
+  }, [microphone.state]);
 
   useEffect(() => {
     release();
@@ -262,15 +235,11 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     if (open && log) log.scrollTop = log.scrollHeight;
   }, [open, context, messages, stage]);
 
-  useLayoutEffect(() => {
-    if (open && proposal) confirmRef.current?.focus();
-  }, [open, proposal]);
-
   function propose(score: number, binding: TurnBinding, readAloud: boolean) {
     if (!question) return;
     const next = { questionId: question.id, label: question.text, score, binding };
     setProposal(next);
-    reply(`I have ${formatScore(score)} for this question. Is that right?`);
+    reply(`I have ${formatScore(score)}. Say “yes” to confirm, or “try again.”`);
     if (readAloud) say(scoreReadback(next));
   }
 
@@ -298,20 +267,60 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     }
   }
 
+  const confirmationPrompt = "Say yes to confirm, or try again.";
+
+  function retryScore() {
+    if (retryOnly) {
+      reply("The save is pending. Say yes to retry saving this score.", true);
+      return;
+    }
+    release();
+    stopSpeaking();
+    setProposal(undefined);
+    reply("Let's try that question again.", true);
+  }
+
+  async function checkConfirmation(proposed: VoiceScore, recording: Blob, generation: number) {
+    const r = resources.current;
+    changeStage("thinking");
+    const abort = new AbortController();
+    r.abort = abort;
+    const timeout = window.setTimeout(() => abort.abort(), 20_000);
+    try {
+      const result = await interpretConfirmation(proposed.binding, recording, abort.signal);
+      if (!isCurrent(generation)) return;
+      if (result.transcript.trim()) append("you", result.transcript);
+      changeStage("idle");
+      if (result.command === "confirm") void confirm(result.transcript);
+      else if (result.command === "retry") retryScore();
+      else reply(`I didn't catch your confirmation. ${confirmationPrompt}`, true);
+    } catch {
+      if (isCurrent(generation)) {
+        reply(`I couldn't check that confirmation. ${confirmationPrompt}`, true);
+        changeStage("idle");
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (isCurrent(generation)) r.abort = undefined;
+    }
+  }
+
   async function armMic() {
     const r = resources.current;
-    const capture = r.capture;
+    const capture = microphone.capture;
     if (!question || !capture || r.armed || r.speech || r.stage !== "idle" || document.hidden) return;
     if (navigator.onLine === false) {
-      pauseMic();
-      reply("You're offline. Turn the mic on again when you're connected.");
+      muteMic();
+      reply("You're offline. Unmute when you're connected.");
       return;
     }
     const generation = ++r.generation;
+    r.capture = capture;
     r.audioTurn = true;
     changeStage("opening");
     try {
-      const binding = await bindTurn(draft, question.id, crypto.randomUUID());
+      // Confirmation belongs to the same proposal turn, so don't replace its binding.
+      const binding = proposal?.binding ?? await bindTurn(draft, question.id, crypto.randomUUID());
       if (!isCurrent(generation)) return;
       if (!dialogRef.current?.open || r.speech) {
         r.audioTurn = false;
@@ -321,14 +330,16 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
       capture.listen(recording => {
         if (!isCurrent(generation) || !dialogRef.current?.open || !r.armed) return;
         pauseCapture();
-        void checkAnswer(binding, recording, generation);
+        if (proposal) void checkConfirmation(proposal, recording, generation);
+        else void checkAnswer(binding, recording, generation);
       });
       r.armed = true;
       setListening(true);
       changeStage("idle");
     } catch {
       if (!isCurrent(generation)) return;
-      pauseMic();
+      muteMic();
+      setShowControls(true);
       reply(RETRY);
     }
   }
@@ -354,19 +365,23 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     }
   }
 
-  async function confirm() {
+  async function confirm(spoken?: string) {
     if (disabled || !proposal || resources.current.stage !== "idle") return;
+    // Cancel any queued microphone response before the durable write.
+    release();
     const generation = resources.current.generation;
     stopSpeaking();
     changeStage("confirming");
     try {
       await onConfirm(proposal, proposal.binding.turn_id);
-      setConfirmedMessages(previous => ({ ...previous, [proposal.questionId]: messages }));
+      const exchange: Message[] = spoken?.trim() ? [...messages, { author: "you", text: spoken }] : messages;
+      setConfirmedMessages(previous => ({ ...previous, [proposal.questionId]: exchange }));
       // The updated draft resets this stage and opens the next question.
     } catch {
       if (contextRef.current !== context || resources.current.generation !== generation) return;
       setRetryOnly(true);
-      reply("I couldn't confirm the score. Try confirming it again.");
+      setShowControls(true);
+      reply("I couldn't confirm the score. Say yes again, or choose Retry confirmation.");
       changeStage("idle");
     }
   }
@@ -383,15 +398,23 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     void send(answer.trim());
   }
 
-  const canAnswer = open && !disabled && !!question && !proposal && stage === "idle";
+  const canConverse = open && !disabled && !!question && stage === "idle";
+  const canAnswer = canConverse && !proposal;
   const complete = draft.guided_cursor >= sequence.length;
   const busy = stage !== "idle";
   const stageMessage = stage === "confirming" ? "Saving score…" : "One moment…";
-  const readyToListen = canAnswer && mic === "on" && !speaking && !answer && !pickScore;
+  const readyToListen = canConverse && microphone.state === "on" && !speaking && (!showControls || (!answer && !pickScore));
+  const micStatus = listening ? (proposal ? "Listening for confirmation" : "Listening for your score")
+    : microphone.state === "starting" ? "Connecting…"
+    : microphone.state === "unavailable" ? "Microphone unavailable"
+    : microphone.state === "off" ? "Microphone muted"
+    : speaking ? "Scorer speaking"
+    : stage === "confirming" ? "Saving score…"
+    : stage === "thinking" ? "Checking your reply…" : "Mic connected";
   useEffect(() => {
     if (readyToListen) void armMic();
     else if (resources.current.armed) pauseCapture();
-  }, [readyToListen, context, stage, listening]);
+  }, [readyToListen, context, stage, listening, proposal]);
 
   return (
     <dialog className="ride-chat" ref={dialogRef} aria-labelledby={titleId} onCancel={event => {
@@ -427,8 +450,11 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
               <p className="ride-chat-author">Question {draft.guided_cursor + 1} of {sequence.length}</p>
               <h3>{question.text}</h3>
               <p>What score would you give, from −3 to +3?</p>
-              <button type="button" className="ride-chat-replay" disabled={busy || !!proposal} onClick={() => questionPrompt && say(questionPrompt)}>
-                <ChatIcon name="speaker" /> Read aloud
+              <button type="button" className="ride-chat-replay" disabled={busy} onClick={() => {
+                const prompt = proposal ? scoreReadback(proposal) : questionPrompt;
+                if (prompt) say(prompt);
+              }}>
+                <ChatIcon name="speaker" /> Repeat
               </button>
             </div>
           </div>}
@@ -441,28 +467,30 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
 
       <footer className="ride-chat-footer">
         <div className="ride-chat-width">
-          {question && <div className="ride-chat-mic">
-            <span className="ride-chat-mic-status" role="status" data-listening={listening}>
-              {listening ? "Listening" : mic === "starting" ? "Connecting mic…" : mic === "on" ? "Mic paused" : "Mic off"}
-            </span>
-            <button type="button" className="btn ride-chat-control" disabled={mic === "off" && !canAnswer}
-              onClick={() => mic === "off" ? void enableMic() : pauseMic()}>
-              <ChatIcon name="mic" /> {mic === "off" ? "Turn on mic" : "Turn off mic"}
-            </button>
-          </div>}
-          {complete ? <button type="button" className="btn btn-leather ride-chat-control" onClick={onReview}>Review scores and save</button> :
-            proposal ? <div className="ride-chat-confirm">
-              <button ref={confirmRef} type="button" className="btn btn-leather ride-chat-control" disabled={disabled || busy} onClick={() => void confirm()}>
+          {complete ? (
+            <button type="button" className="btn btn-leather ride-chat-control" onClick={onReview}>Review scores and save</button>
+          ) : question && <>
+            <div className="ride-chat-call">
+              <button type="button" className="btn ride-chat-control ride-chat-mute"
+                data-muted={microphone.state === "off" || microphone.state === "unavailable"}
+                disabled={!canConverse && microphone.state !== "on" && microphone.state !== "starting"}
+                onClick={() => microphone.state === "on" || microphone.state === "starting" ? muteMic() : microphone.start()}>
+                <ChatIcon name="mic" /> {microphone.state === "on" || microphone.state === "starting" ? "Mute" : "Unmute"}
+              </button>
+              <div className="ride-chat-call-text">
+                <span className="ride-chat-mic-status" role="status" data-listening={listening}>{micStatus}</span>
+                {proposal && <span className="ride-chat-command">Say “yes” or “try again.”</span>}
+              </div>
+              <button type="button" className="ride-chat-replay ride-chat-manual" aria-expanded={showControls}
+                onClick={() => setShowControls(current => !current)}>{showControls ? "Hide controls" : "Manual controls"}</button>
+            </div>
+            {showControls && (proposal ? <div className="ride-chat-confirm">
+              <button type="button" className="btn btn-leather ride-chat-control" disabled={!canConverse} onClick={() => void confirm()}>
                 {stage === "confirming" ? "Confirming…" : retryOnly ? "Retry confirmation" : "Confirm score"}
               </button>
-              <button type="button" className="btn ride-chat-control" disabled={disabled || busy || retryOnly} onClick={() => {
-                release();
-                stopSpeaking();
-                setProposal(undefined);
-                reply("Let's try that question again.");
-              }}>Try again</button>
-            </div> :
-            <form onSubmit={submit} className="ride-chat-composer">
+              <button type="button" className="btn ride-chat-control" disabled={!canConverse || retryOnly}
+                onClick={retryScore}>Try again</button>
+            </div> : <form onSubmit={submit} className="ride-chat-composer">
               <div className="ride-chat-input-row">
                 <label className="sr-only" htmlFor={answerId}>Your answer</label>
                 <input id={answerId} className="input ride-chat-input" placeholder="Type a score, e.g. +2" value={answer}
@@ -484,7 +512,8 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
                 {SCORE_OPTIONS.map(score => <button key={score} type="button" className="btn ride-chat-control" disabled={!canAnswer}
                   onClick={() => void send(formatScore(score), score)}>{formatScore(score)}</button>)}
               </div>}
-            </form>}
+            </form>)}
+          </>}
         </div>
       </footer>
     </dialog>

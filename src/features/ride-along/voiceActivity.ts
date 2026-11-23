@@ -56,7 +56,7 @@ export function createVoiceActivity() {
     }
     if (silent >= END_SILENCE || recording.length >= MAX_FRAMES) {
       // Remove most of the trailing silence but retain soft word endings.
-      const speech = silent >= END_SILENCE && voiced >= 6
+      const speech = silent >= END_SILENCE && voiced >= 5
         ? recording.slice(0, recording.length - silent + 6)
         : undefined;
       waitingForQuiet = recording.length >= MAX_FRAMES && silent < END_SILENCE;

@@ -1,6 +1,6 @@
 import useUnsavedChanges from "../hooks/useUnsavedChanges";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import {
   createSession,
   getHorse,
@@ -28,7 +28,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { useFacility } from "../auth/FacilityProvider";
 import RideAlongPanel from "../features/ride-along/RideAlongPanel";
 import { closeDraft, confirmGuidedScore, getDraft, openDraft, saveDraft, type RideDraft } from "../features/ride-along/draftClient";
-import { VOICE_PHASE, type VoiceScore } from "../features/ride-along/voiceCommand";
+import { isRideAlongPhase, type VoiceScore } from "../features/ride-along/voiceCommand";
 import type { TaskCompletion } from "../supabase/types";
 
 /** Two-column ghost of the score sheet (8 Foundation + 6 Temperament rows). */
@@ -55,12 +55,15 @@ function ScoreSheetSkeleton() {
 export default function SessionNew() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const wantsVoice = searchParams.get("mode") === "voice";
   const toast = useToast();
   const { facility } = useFacility();
   const { user } = useAuth();
 
   const horse = useQuery(id ? qk.horse(id) : null, () => getHorse(id!));
   const phases = useQuery(qk.phases(), () => listPhases());
+  const voicePhase = phases.data?.find(isRideAlongPhase);
   const isPerformance = !!horse.data && horse.data.training_type !== "foundation";
   const sessions = useQuery(id && isPerformance ? qk.sessions(id) : null, () => listSessionsForHorse(id!));
   const history = useMemo(() => sessions.data && lastWorkedByDiscipline(sessions.data), [sessions.data]);
@@ -76,8 +79,13 @@ export default function SessionNew() {
   const [tasks, setTasks] = useState<TaskCompletion[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [voiceStartError, setVoiceStartError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState<RideDraft>();
+  const scorerHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (voiceDraft?.id) scorerHeading.current?.focus();
+  }, [voiceDraft?.id]);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voicePanelRevision, setVoicePanelRevision] = useState(0);
   const [draftOperation, setDraftOperation] = useState(false);
@@ -109,6 +117,7 @@ export default function SessionNew() {
     setInitialOccurredAt(initialDate);
     setOccurredAt(initialDate);
     setError(null);
+    setVoiceStartError(null);
   }, [id]);
 
   // Default to the current program sheet when a horse is opened.
@@ -117,24 +126,29 @@ export default function SessionNew() {
     if (horse.loading || !phases.data) return;
     if (!horse.data) return;
     const programPhases = phases.data.filter((phase) => phase.program === horse.data!.training_type).sort((a, b) => a.position - b.position);
+    if (wantsVoice && facility?.voice_enabled && horse.data.training_type === "foundation" && voicePhase) {
+      setPhaseId(voicePhase.id);
+      return;
+    }
     const current = programPhases.find((phase) => phase.id === horse.data!.current_phase_id);
     setPhaseId(current?.id ?? programPhases[0]?.id ?? "");
-  }, [horse.data, horse.loading, phases.data, phaseId]);
+  }, [horse.data, horse.loading, phases.data, phaseId, wantsVoice, facility?.voice_enabled, voicePhase]);
 
   const questions = useQuery(
     phaseId ? qk.questions(phaseId) : null,
     () => listQuestionsForPhase(phaseId),
   );
 
-  // Any entered data makes the session dirty — guard against accidental loss.
-  const dirty =
+  // Opening a saved voice draft restores its fields. A phase choice alone is safe.
+  const hasManualEdits =
     Object.values(drafts).some(
       (d) => typeof d.score === "number" || !!d.comment,
     ) ||
-    (!!confirmedDate && phaseId !== horse.data?.current_phase_id) || notes.trim() !== "" ||
+    notes.trim() !== "" ||
     rider.trim() !== "" ||
     bit !== "" ||
     tasks.length > 0 || occurredAt !== initialOccurredAt;
+  const dirty = hasManualEdits || (!!confirmedDate && phaseId !== horse.data?.current_phase_id);
 
   const voiceChanged = voiceDraft && (
     notes !== (voiceDraft.notes ?? "") || rider !== (voiceDraft.rider ?? "") ||
@@ -203,6 +217,7 @@ export default function SessionNew() {
     setPhaseId(next);
     setConfirmedDate(rideDay);
     setError(null);
+    setVoiceStartError(null);
   }
   const scale = currentPhase?.scale ?? "tqa";
 
@@ -214,8 +229,10 @@ export default function SessionNew() {
   const setComment = (qid: string, comment: string) =>
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], comment } }));
 
-  const voiceEligible = facility?.voice_enabled === true && !isPerformance &&
-    currentPhase?.program === "foundation" && currentPhase?.code === VOICE_PHASE && currentPhase?.scale === "tqa" && !confirmPhase;
+  const voiceEnabled = facility?.voice_enabled === true;
+  const voiceEligible = voiceEnabled && !isPerformance && phaseId === voicePhase?.id && !confirmPhase;
+  const hasVoiceQuestions = questions.data?.some(question => question.phase_id === phaseId && question.axis === "foundation") === true;
+  const voiceStartBlocked = hasManualEdits || saving || draftOperation;
 
   function payload(nextDrafts = drafts): SessionInput {
     if (!occurredAt || Number.isNaN(new Date(occurredAt).getTime())) throw new Error("Enter a valid ride date and time.");
@@ -267,8 +284,8 @@ export default function SessionNew() {
   }
 
   async function beginVoice() {
-    if (actionLock.current || !voiceEligible || !facility || dirty || !questions.data?.length) return;
-    setError(null);
+    if (actionLock.current || !voiceEligible || !facility || voiceStartBlocked || !hasVoiceQuestions || questions.error) return;
+    setVoiceStartError(null);
     try {
       const interrupted = terminalToCheck();
       if (interrupted) {
@@ -293,7 +310,7 @@ export default function SessionNew() {
       restore(d);
       pending.current = undefined;
     } catch (err) {
-      if (currentScope.current === scope) setError((err as Error).message);
+      if (currentScope.current === scope) setVoiceStartError((err as Error).message);
     }
   }
 
@@ -424,6 +441,47 @@ export default function SessionNew() {
       <Link className="workflow-link" to={`/horses/${id}`}>← {horse.data.name}</Link>
       <div className="eyebrow">{programLabel(horse.data.training_type)}</div>
       <h1 className="h-display">Log a ride</h1>
+      {(voiceEnabled || wantsVoice) && !voiceDraft && (
+        <section className="card space-y-2" aria-labelledby="ride-along-title">
+          <h2 id="ride-along-title" className="card-title">Ride-along scorer</h2>
+          {!voiceEnabled ? <p>Ask your platform administrator to enable voice for this facility.</p>
+            : isPerformance ? <p>Voice scoring is available for Foundation Phase 1 rides. Use the manual score sheet for this horse’s program.</p>
+            : !voicePhase ? <p>The Foundation Phase 1 score sheet is missing from this facility.</p>
+            : <>
+              <p>Say your scores and confirm each one as you work through the Foundation Phase 1 questions.</p>
+              {voiceEligible ? (
+                <button type="button" className="btn btn-primary"
+                  disabled={voiceStartBlocked || !hasVoiceQuestions || !!questions.error}
+                  onClick={() => void beginVoice()}>
+                  {draftOperation ? "Opening scorer…" : "Start or resume ride-along"}
+                </button>
+              ) : (
+                <button type="button" className="btn btn-primary" disabled={voiceStartBlocked}
+                  onClick={() => choosePhase(voicePhase.id)}>Use Phase 1 for this ride</button>
+              )}
+              {hasManualEdits && <p className="muted">Start the scorer from a new ride before changing the date or entering scores or notes. Finish this ride manually to keep your edits.</p>}
+              {voiceEligible && !hasVoiceQuestions && !questions.error &&
+                <p role="status">{questions.loading ? "Loading Phase 1 questions…" : "This score sheet has no Foundation questions."}</p>}
+              {voiceEligible && questions.error && <ErrorState error={questions.error} onRetry={questions.refresh} />}
+              {voiceStartError && <p className="alert-error" role="alert">{voiceStartError}</p>}
+            </>}
+        </section>
+      )}
+      {voiceDraft && <section className="space-y-2">
+        {voiceEligible && <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draft={voiceDraft}
+          questions={questions.data ?? []} disabled={draftOperation || saving || !hasVoiceQuestions || !!questions.error}
+          headingRef={scorerHeading} onBusy={setVoiceBusy} onConfirm={confirmVoice} />}
+        {!voiceEnabled && <p role="status">Voice was disabled for this facility. You can still review and save your draft manually.</p>}
+        <p className="muted">Confirmed voice scores are saved to the draft. Manual edits are saved with the next confirmed score or when you save the ride.</p>
+        <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving}
+          onClick={() => { if (window.confirm("Reload the saved draft and replace unsaved edits on this screen?")) void reloadVoice(); }}>
+          Reload saved draft
+        </button>
+        <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving || !!(pending.current && pending.current.key !== "discard")}
+          onClick={() => { if (window.confirm("Discard this saved draft and its scores?")) void discardVoice(); }}>
+          Discard saved draft
+        </button>
+      </section>}
       <div
         className="card"
         style={{
@@ -452,26 +510,6 @@ export default function SessionNew() {
 
       </div>
 
-      {voiceEligible && !voiceDraft && <section className="card space-y-2">
-        <h2 className="card-title">Voice scoring · Phase 1 pilot</h2>
-        <button type="button" className="btn btn-ghost" disabled={dirty || draftOperation || !questions.data?.length}
-          onClick={() => void beginVoice()}>Start or resume voice draft</button>
-        {dirty && <p className="muted">Start voice scoring before entering manual scores or notes. This keeps an existing draft from replacing your unsaved edits.</p>}
-      </section>}
-      {voiceDraft && <section className="space-y-2">
-        <p className="muted">Confirmed voice scores are saved to the draft. Manual edits are saved with the next confirmed score or when you save the ride.</p>
-        {voiceEligible && <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draft={voiceDraft}
-          questions={questions.data ?? []} disabled={draftOperation || saving || !questions.data?.length}
-          onBusy={setVoiceBusy} onConfirm={confirmVoice} />}
-        <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving}
-          onClick={() => { if (window.confirm("Reload the saved draft and replace unsaved edits on this screen?")) void reloadVoice(); }}>
-          Reload saved draft
-        </button>
-        <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving || !!(pending.current && pending.current.key !== "discard")}
-          onClick={() => { if (window.confirm("Discard this saved draft and its scores?")) void discardVoice(); }}>
-          Discard saved draft
-        </button>
-      </section>}
       <NextRideFocus horse={horse.data} />
       {isPerformance && <>
         {sessions.error && <ErrorState error={sessions.error} onRetry={sessions.refresh} />}

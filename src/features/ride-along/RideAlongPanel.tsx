@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import type { Question } from "../../supabase/types";
 import { bindTurn, transcribeTurn, type RideDraft } from "./draftClient";
 import { scoreReadback, type VoiceScore } from "./voiceCommand";
@@ -9,13 +9,14 @@ interface Props {
   draft: RideDraft;
   questions: Question[];
   disabled: boolean;
+  headingRef?: Ref<HTMLHeadingElement>;
   onBusy: (busy: boolean) => void;
   onConfirm: (proposal: VoiceScore, requestId: string) => Promise<void>;
 }
 type Stage = "idle" | "starting" | "recording" | "transcribing" | "confirming";
 const stopTracks = (stream: MediaStream | null) => stream?.getTracks().forEach(track => track.stop());
 
-export default function RideAlongPanel({ draft, questions, disabled, onBusy, onConfirm }: Props) {
+export default function RideAlongPanel({ draft, questions, disabled, headingRef, onBusy, onConfirm }: Props) {
   const [stage, setStage] = useState<Stage>("idle");
   const [proposal, setProposal] = useState<{ score: VoiceScore; turn: string }>();
   const [message, setMessage] = useState("");
@@ -198,7 +199,7 @@ export default function RideAlongPanel({ draft, questions, disabled, onBusy, onC
   }
 
   return <section className="card space-y-2" aria-label="Ride-along voice scoring">
-    <h2 className="card-title">Voice scoring · Phase 1 pilot</h2>
+    <h2 className="card-title" ref={headingRef} tabIndex={-1}>Ride-along scorer</h2>
     <p className="muted">Use only when stopped and safe. The mic is off between clips. Clips last up to eight seconds and are sent through OpenRouter to OpenAI for transcription, then the transcript is sent through OpenRouter to TypeSafe Jev to interpret your explicit score. Check the readback before confirming. Manual scoring remains available.</p>
     {question ? <p aria-live="polite"><strong>Question {draft.guided_cursor + 1} of {sequence.length}: {question.text}</strong><br />What signed score, minus three to plus three, or zero?</p> : <p role="status">Guided questions complete. Review the sheet and choose Save ride when ready.</p>}
     {question && <button type="button" className="btn btn-ghost" disabled={stage !== "idle" || !!proposal} onClick={() => speak(`${question.text}. What signed score?`)}>Read current question</button>}

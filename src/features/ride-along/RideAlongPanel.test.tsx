@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Question } from "../../supabase/types";
 import RideAlongPanel from "./RideAlongPanel";
 import { bindTurn, interpretTurn, type RideDraft } from "./draftClient";
+import { openVoiceCapture } from "./voiceCapture";
 
 vi.mock("./draftClient", () => ({ bindTurn: vi.fn(), interpretTurn: vi.fn() }));
 
@@ -10,36 +11,27 @@ const question: Question = {
   id: "q-doubling", facility_id: "facility", user_id: "trainer", phase_id: "phase", position: 5,
   axis: "foundation", text: "Doubling Walking, Trotting and Loping", low_label: "", high_label: "", created_at: "",
 };
-const trackStop = vi.fn();
-class Recorder {
-  static isTypeSupported = () => true;
-  state = "inactive";
-  ondataavailable?: (e: { data: Blob }) => void;
-  onstop?: () => void;
-  start() { this.state = "recording"; }
-  stop() {
-    this.state = "inactive";
-    this.ondataavailable?.({ data: new Blob(["sample"]) });
-    this.onstop?.();
-  }
-}
+vi.mock("./voiceCapture", () => ({ openVoiceCapture: vi.fn() }));
+let deliver: ((audio: Blob) => void) | undefined;
+const listen = vi.fn((callback: (audio: Blob) => void) => { deliver = callback; });
+const pause = vi.fn(() => { deliver = undefined; });
+const close = vi.fn(() => { deliver = undefined; });
 
 beforeEach(() => {
   vi.mocked(interpretTurn).mockReset();
   vi.mocked(bindTurn).mockReset().mockImplementation(async (d,q,t) => ({ draft_id:d.id, question_id:q, version:d.version, turn_id:t }));
-  trackStop.mockClear();
-  vi.stubGlobal("MediaRecorder", Recorder);
-  vi.stubGlobal("crypto", { randomUUID: () => "utterance-1" });
-  Object.defineProperty(navigator, "mediaDevices", {
-    value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: trackStop }] })) },
-    configurable: true,
-  });
+  vi.mocked(openVoiceCapture).mockReset().mockResolvedValue({ listen, pause, close });
+  listen.mockClear();
+  pause.mockClear();
+  close.mockClear();
+  deliver = undefined;
+  let turn = 0;
+  vi.stubGlobal("crypto", { randomUUID: () => `utterance-${++turn}` });
   Object.defineProperty(document, "hidden", { value: false, configurable: true });
 });
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  Reflect.deleteProperty(navigator, "mediaDevices");
   Reflect.deleteProperty(document, "hidden");
 });
 
@@ -57,18 +49,27 @@ function mount(onConfirm = vi.fn(async () => {})) {
   return { ...view, onConfirm };
 }
 
-async function record() {
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Speak" })); });
-  const stop = await screen.findByRole("button", { name: "Done" });
-  await act(async () => { fireEvent.click(stop); });
+async function turnOnMic() {
+  fireEvent.click(screen.getByRole("button", { name: "Turn on mic" }));
+  await screen.findByText("Listening", { exact: true });
 }
 
-it("turns off the microphone before applying a score and requires explicit confirmation", async () => {
+async function answerByVoice() {
+  await screen.findByText("Listening", { exact: true });
+  await act(async () => { deliver?.(new Blob(["sample"], { type: "audio/wav" })); });
+}
+
+async function record() {
+  await turnOnMic();
+  await answerByVoice();
+}
+
+it("pauses the microphone before interpreting a score and requires explicit confirmation", async () => {
   vi.mocked(interpretTurn).mockResolvedValue({ transcript: "minus two", score: -2 });
   const { onConfirm } = mount();
   await record();
   const confirm = await screen.findByRole("button", { name: "Confirm score" });
-  expect(trackStop).toHaveBeenCalled();
+  expect(pause).toHaveBeenCalled();
   expect(onConfirm).not.toHaveBeenCalled();
   expect(screen.getByText(/I have −2 for this question/)).toBeInTheDocument();
   await act(async () => { fireEvent.click(confirm); });
@@ -89,20 +90,19 @@ it("ignores late transcription even when an upstream mock does not honor abort",
 
 it("stops capture without uploading when the document goes into the background", async () => {
   mount();
-  fireEvent.click(screen.getByRole("button", { name: "Speak" }));
-  await screen.findByRole("button", { name: "Done" });
+  await turnOnMic();
   Object.defineProperty(document, "hidden", { value: true, configurable: true });
   fireEvent(document, new Event("visibilitychange"));
-  expect(trackStop).toHaveBeenCalled();
+  expect(close).toHaveBeenCalled();
   expect(interpretTurn).not.toHaveBeenCalled();
 });
 
-it("binds the active question before opening the microphone", async () => {
+it("binds the active question before listening or accepting any audio", async () => {
   vi.mocked(bindTurn).mockRejectedValue(new Error("stale"));
   mount();
-  fireEvent.click(screen.getByRole("button", {name:"Speak"}));
+  fireEvent.click(screen.getByRole("button", { name: "Turn on mic" }));
   await screen.findByText(/couldn.t check that answer/i);
-  expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+  expect(listen).not.toHaveBeenCalled();
   expect(interpretTurn).not.toHaveBeenCalled();
 });
 it("clarification preserves the current question without confirming", async () => {
@@ -155,6 +155,7 @@ it("discards a proposal without persistence or cursor advance",async()=>{
  vi.mocked(interpretTurn).mockResolvedValue({transcript:"plus three",score:3});
  const {onConfirm}=mount();await record();
  fireEvent.click(await screen.findByRole("button",{name:"Try again"}));
+ await screen.findByText("Listening", { exact: true });
  expect(onConfirm).not.toHaveBeenCalled();expect(screen.getByText(/Question 1 of 1/)).toBeInTheDocument();
 });
 it("allows only one in-flight confirmation even on repeated clicks",async()=>{
@@ -184,6 +185,65 @@ it("shows the question, typed reply and scorer response in one conversation", as
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(await screen.findByText("I have +2 for this question. Is that right?")).toBeInTheDocument();
   expect(interpretTurn).toHaveBeenLastCalledWith(expect.objectContaining({ question_id: question.id }), "plus two", expect.any(AbortSignal));
-  expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+  expect(openVoiceCapture).not.toHaveBeenCalled();
   expect(onConfirm).not.toHaveBeenCalled();
+});
+
+it("keeps one microphone session through clarification and the next confirmed question", async () => {
+  const second = { ...question, id: "q2", text: "Second rubric item" };
+  const twoQuestions = { ...draft, guided_question_ids: [question.id, second.id] };
+  const onConfirm = vi.fn(async () => {});
+  const view = render(<RideAlongPanel {...dialogProps} draft={twoQuestions} questions={[question, second]}
+    disabled={false} onBusy={vi.fn()} onConfirm={onConfirm} />);
+  vi.mocked(interpretTurn)
+    .mockResolvedValueOnce({ transcript: "two", score: null })
+    .mockResolvedValueOnce({ transcript: "plus two", score: 2 });
+
+  await record();
+  await screen.findByText(/I need one signed score/);
+  await answerByVoice();
+  fireEvent.click(await screen.findByRole("button", { name: "Confirm score" }));
+  await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+
+  view.rerender(<RideAlongPanel {...dialogProps} draft={{ ...twoQuestions, version: 2, guided_cursor: 1 }}
+    questions={[question, second]} disabled={false} onBusy={vi.fn()} onConfirm={onConfirm} />);
+  await screen.findByText("Listening", { exact: true });
+  expect(openVoiceCapture).toHaveBeenCalledTimes(1);
+  expect(interpretTurn).toHaveBeenCalledTimes(2);
+  expect(bindTurn).toHaveBeenLastCalledWith(expect.objectContaining({ version: 2 }), "q2", "utterance-3");
+  expect(vi.mocked(bindTurn).mock.invocationCallOrder[2]).toBeLessThan(listen.mock.invocationCallOrder[2]);
+});
+
+it("does not listen over readback and restarts after it ends", async () => {
+  let playback: { onend?: () => void } = {};
+  vi.stubGlobal("SpeechSynthesisUtterance", class {});
+  vi.stubGlobal("speechSynthesis", {
+    getVoices: () => [{ localService: true, lang: "en-US" }],
+    cancel: vi.fn(),
+    speak: (utterance: typeof playback) => { playback = utterance; },
+  });
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Turn on mic" }));
+  await screen.findByText("Mic paused", { exact: true });
+  expect(listen).not.toHaveBeenCalled();
+  act(() => playback.onend?.());
+  await screen.findByText("Listening", { exact: true });
+
+  fireEvent.click(screen.getByRole("button", { name: "Read aloud" }));
+  expect(pause).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Mic paused", { exact: true })).toBeVisible();
+  act(() => playback.onend?.());
+  await screen.findByText("Listening", { exact: true });
+  expect(openVoiceCapture).toHaveBeenCalledTimes(1);
+});
+
+it("turns off the mic on demand and ignores any queued answer", async () => {
+  mount();
+  await turnOnMic();
+  const stale = deliver;
+  fireEvent.click(screen.getByRole("button", { name: "Turn off mic" }));
+  expect(close).toHaveBeenCalled();
+  expect(screen.getByText("Mic off")).toBeVisible();
+  await act(async () => { stale?.(new Blob(["stale"])); });
+  expect(interpretTurn).not.toHaveBeenCalled();
 });

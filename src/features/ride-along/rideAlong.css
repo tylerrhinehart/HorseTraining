@@ -181,3 +181,29 @@ body:has(.ride-chat[open]) { overflow: hidden; }
 @media (max-width: 360px) {
   .ride-chat .ride-chat-control { padding-inline: .55rem; }
 }
+
+.ride-chat-mic {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .65rem;
+}
+
+.ride-chat-mic-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  color: var(--muted);
+  font-size: .88rem;
+  font-weight: 650;
+}
+
+.ride-chat-mic-status::before {
+  content: "";
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ride-chat-mic-status[data-listening="true"] { color: var(--ok); }

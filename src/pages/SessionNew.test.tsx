@@ -97,7 +97,7 @@ it("opens the scorer from the horse page even when the horse is on Groundwork", 
   expect(screen.getByLabelText("Phase worked on this ride")).toHaveValue("one");
   expect(fixtures.open).not.toHaveBeenCalled();
   fireEvent.click(start);
-  expect(await screen.findByRole("button", { name: "Speak" })).toBeEnabled();
+  expect(await screen.findByRole("button", { name: "Turn on mic" })).toBeEnabled();
   expect(fixtures.open).toHaveBeenCalledWith("facility", "horse", "one", expect.any(String));
   expect(screen.getByRole("heading", { name: "Ride-along scorer" })).toHaveFocus();
 });

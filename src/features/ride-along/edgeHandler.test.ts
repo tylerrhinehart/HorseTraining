@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { createHandler, type Dependencies } from "../../../supabase/functions/transcribe-ride-turn/handler";
+import { encodeVoiceWav } from "./voiceActivity";
 
 const id = "00000000-0000-4000-8000-000000000001";
 const origin = "https://sample.test";
@@ -28,6 +29,18 @@ function deps(overrides?: Partial<Dependencies>) {
   };
 }
 describe("transcribe-ride-turn", () => {
+  it("accepts only the expected bounded PCM layout for WAV input", async () => {
+    const implementation = deps();
+    const handle = createHandler(implementation);
+    const wav = new Uint8Array(await encodeVoiceWav([new Float32Array(320)]).arrayBuffer());
+    const invalidWav = wav.slice();
+    invalidWav[22] = 2;
+    expect((await handle(post({ format: "audio/wav", bytes: [...invalidWav] }))).status).toBe(415);
+    expect(implementation.authorize).not.toHaveBeenCalled();
+    expect((await handle(post({ format: "audio/wav", bytes: [...wav] }))).status).toBe(200);
+    expect(implementation.transcribe).toHaveBeenCalledWith(expect.any(Blob), "wav", expect.any(AbortSignal));
+  });
+
   it("checks typed answers against the same bound question without audio transcription", async () => {
     const implementation = deps();
     const res = await createHandler(implementation)(post({ answer: "  minus two  " }));

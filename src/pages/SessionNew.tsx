@@ -452,7 +452,7 @@ export default function SessionNew() {
             : isPerformance ? <p>Voice scoring is available for Foundation Phase 1 rides. Use the manual score sheet for this horse’s program.</p>
             : !voicePhase ? <p>The Foundation Phase 1 score sheet is missing from this facility.</p>
             : <>
-              <p>Work through the Foundation Phase 1 questions one at a time. Speak or type each score.</p>
+              <p>Work through the Foundation Phase 1 questions one at a time. Turn on the mic once, or type each score.</p>
               {voiceEligible ? (
                 <button type="button" className="btn btn-primary"
                   disabled={voiceStartBlocked || !hasVoiceQuestions || !!questions.error}

@@ -4,7 +4,7 @@ const MAX_BODY = MAX_AUDIO + 4096;
 const MAX_ANSWER = 200;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FORMATS: Record<string, string> = {
-  "audio/webm": "webm", "audio/mp4": "mp4", "audio/ogg": "ogg",
+  "audio/webm": "webm", "audio/mp4": "mp4", "audio/ogg": "ogg", "audio/wav": "wav",
 };
 
 export interface TurnBinding { draft_id: string; question_id: string; version: number; turn_id: string }
@@ -43,8 +43,17 @@ async function readLimited(body: ReadableStream<Uint8Array>, signal: AbortSignal
 }
 
 async function hasContainerSignature(file: Blob, extension: string) {
-  const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const bytes = new Uint8Array(await file.slice(0, extension === "wav" ? 44 : 12).arrayBuffer());
   const ascii = new TextDecoder();
+  if (extension === "wav") {
+    if (file.size < 46 || file.size > 44 + 8 * 16_000 * 2 || file.size % 2 !== 0) return false;
+    const header = new DataView(bytes.buffer);
+    return ascii.decode(bytes.slice(0, 4)) === "RIFF" && header.getUint32(4, true) === file.size - 8 &&
+      ascii.decode(bytes.slice(8, 16)) === "WAVEfmt " && header.getUint32(16, true) === 16 &&
+      header.getUint16(20, true) === 1 && header.getUint16(22, true) === 1 && header.getUint32(24, true) === 16_000 &&
+      header.getUint32(28, true) === 32_000 && header.getUint16(32, true) === 2 && header.getUint16(34, true) === 16 &&
+      ascii.decode(bytes.slice(36, 40)) === "data" && header.getUint32(40, true) === file.size - 44;
+  }
   if (extension === "webm") return [0x1a, 0x45, 0xdf, 0xa3].every((v, i) => bytes[i] === v);
   if (extension === "mp4") return ascii.decode(bytes.slice(4, 8)) === "ftyp";
   return ascii.decode(bytes.slice(0, 4)) === "OggS";

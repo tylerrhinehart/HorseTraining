@@ -2,16 +2,14 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, ty
 import type { Question } from "../../supabase/types";
 import { bindTurn, interpretTurn, type RideDraft } from "./draftClient";
 import { scoreReadback, type TurnBinding, type VoiceScore } from "./voiceCommand";
+import { openVoiceCapture, type VoiceCapture } from "./voiceCapture";
 import "./rideAlong.css";
 
-const LIMIT_MS = 8000;
-const MAX_AUDIO_BYTES = 512 * 1024;
 const MAX_ANSWER = 200;
 const SCORE_OPTIONS = [-3, -2, -1, 0, 1, 2, 3];
 const CLARIFY = "I need one signed score. Try “plus two,” “minus one,” or “zero.”";
 const RETRY = "I couldn't check that answer. Try again or pick a score.";
 const formatScore = (score: number) => score > 0 ? `+${score}` : String(score).replace("-", "−");
-const stopTracks = (stream: MediaStream | null) => stream?.getTracks().forEach(track => track.stop());
 
 interface Props {
   draft: RideDraft;
@@ -25,11 +23,15 @@ interface Props {
   onConfirm: (proposal: VoiceScore, requestId: string) => Promise<void>;
 }
 
-type Stage = "idle" | "opening" | "listening" | "thinking" | "confirming";
+type Stage = "idle" | "opening" | "thinking" | "confirming";
+type Mic = "off" | "starting" | "on";
 type Message = { author: "scorer" | "you"; text: string };
 
 export default function RideAlongPanel({ draft, horseName, questions, open, disabled, returnFocus, onReview, onBusy, onConfirm }: Props) {
   const [stage, setStage] = useState<Stage>("idle");
+  const [mic, setMic] = useState<Mic>("off");
+  const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [proposal, setProposal] = useState<VoiceScore>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [confirmedMessages, setConfirmedMessages] = useState<Record<string, Message[]>>({});
@@ -43,9 +45,10 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   const titleId = useId();
   const answerId = useId();
   const resources = useRef<{
-    generation: number; stage: Stage; timer?: number; recorder?: MediaRecorder;
-    stream: MediaStream | null; abort?: AbortController; speech?: SpeechSynthesisUtterance;
-  }>({ generation: 0, stage: "idle", stream: null });
+    generation: number; stage: Stage; audioTurn?: boolean; armed?: boolean;
+    capture?: VoiceCapture; micRequest?: AbortController; abort?: AbortController;
+    speech?: SpeechSynthesisUtterance; speechTimer?: number;
+  }>({ generation: 0, stage: "idle" });
   const busyCallback = useRef(onBusy);
   busyCallback.current = onBusy;
   const sequence = draft.guided_question_ids ?? questions.filter(q => q.axis === "foundation")
@@ -55,23 +58,55 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   const contextRef = useRef(context);
   contextRef.current = context;
 
+  function pauseCapture() {
+    const r = resources.current;
+    if (r.armed) r.capture?.pause();
+    r.armed = false;
+    setListening(false);
+  }
+
   function say(text: string) {
-    if (typeof SpeechSynthesisUtterance === "undefined" || !window.speechSynthesis) return;
+    if (typeof SpeechSynthesisUtterance === "undefined" || !window.speechSynthesis || document.hidden) return;
     try {
       const voice = window.speechSynthesis.getVoices().find(v => v.localService && v.lang.startsWith("en"));
       if (!voice) return;
-      window.speechSynthesis.cancel();
+      stopSpeaking();
+      pauseCapture();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.voice = voice;
       utterance.lang = "en-US";
-      resources.current.speech = utterance;
+      const r = resources.current;
+      r.speech = utterance;
+      setSpeaking(true);
+      const finish = () => {
+        if (r.speech !== utterance) return;
+        window.clearTimeout(r.speechTimer);
+        // Allow audio from the speaker to decay before opening the next turn.
+        r.speechTimer = window.setTimeout(() => {
+          if (r.speech === utterance) {
+            r.speech = undefined;
+            setSpeaking(false);
+          }
+        }, 250);
+      };
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      r.speechTimer = window.setTimeout(() => {
+        if (r.speech === utterance) stopSpeaking();
+      }, 25_000);
       window.speechSynthesis.speak(utterance);
-    } catch { /* The conversation is also visible. */ }
+    } catch {
+      stopSpeaking();
+    }
   }
 
   function stopSpeaking() {
-    if (resources.current.speech) window.speechSynthesis?.cancel();
-    resources.current.speech = undefined;
+    const r = resources.current;
+    const wasSpeaking = Boolean(r.speech);
+    r.speech = undefined;
+    window.clearTimeout(r.speechTimer);
+    if (wasSpeaking) window.speechSynthesis?.cancel();
+    setSpeaking(false);
   }
 
   function append(author: Message["author"], text: string) {
@@ -92,14 +127,53 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   function release() {
     const r = resources.current;
     ++r.generation;
-    window.clearTimeout(r.timer);
+    pauseCapture();
     r.abort?.abort();
-    if (r.recorder?.state === "recording") r.recorder.stop();
-    stopTracks(r.stream);
-    stopSpeaking();
-    r.recorder = undefined;
-    r.stream = null;
     r.abort = undefined;
+    r.audioTurn = false;
+  }
+
+  function closeMic() {
+    const r = resources.current;
+    r.capture?.close();
+    r.capture = undefined;
+    r.micRequest?.abort();
+    r.micRequest = undefined;
+  }
+
+  function pauseMic() {
+    const wasAudioTurn = resources.current.audioTurn;
+    closeMic();
+    if (wasAudioTurn && resources.current.stage !== "confirming") {
+      release();
+      changeStage("idle");
+    }
+    setMic("off");
+  }
+
+  async function enableMic() {
+    const r = resources.current;
+    if (!canAnswer || r.capture || r.micRequest || document.hidden) return;
+    const request = new AbortController();
+    r.micRequest = request;
+    setMic("starting");
+    const unavailable = () => {
+      if (r.micRequest !== request) return;
+      pauseMic();
+      reply("I couldn't listen. Check microphone access, type, or pick a score.");
+    };
+    try {
+      const capture = await openVoiceCapture(request.signal, unavailable);
+      if (request.signal.aborted || document.hidden || !dialogRef.current?.open) {
+        capture.close();
+        if (r.micRequest === request) pauseMic();
+        return;
+      }
+      r.capture = capture;
+      setMic("on");
+    } catch {
+      unavailable();
+    }
   }
 
   function isCurrent(generation: number) {
@@ -140,22 +214,35 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   useEffect(() => {
     const background = () => {
       if (!document.hidden) return;
+      leaveChat();
+    };
+    const leaveChat = () => {
+      pauseMic();
       stopSpeaking();
-      if (resources.current.stage === "idle" || resources.current.stage === "confirming") return;
-      release();
-      changeStage("idle");
-      reply("I'm here when you're ready to answer again.");
+      if (resources.current.stage !== "idle" && resources.current.stage !== "confirming") {
+        release();
+        changeStage("idle");
+      }
     };
     document.addEventListener("visibilitychange", background);
+    window.addEventListener("pagehide", leaveChat);
     return () => {
       document.removeEventListener("visibilitychange", background);
+      window.removeEventListener("pagehide", leaveChat);
+      closeMic();
       release();
+      stopSpeaking();
       busyCallback.current(false);
     };
   }, [draft.id]);
 
   useEffect(() => {
+    if (!open || draft.guided_cursor >= sequence.length) pauseMic();
+  }, [open, draft.guided_cursor, sequence.length]);
+
+  useEffect(() => {
     release();
+    stopSpeaking();
     changeStage("idle");
     setProposal(undefined);
     setMessages([]);
@@ -211,74 +298,45 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     }
   }
 
-  async function startListening() {
-    if (!canAnswer || !question || document.hidden || resources.current.stage !== "idle") return;
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      reply("I can't hear you on this device. You can type or pick a score.");
-      return;
-    }
-    release();
-    setPickScore(false);
-    if (navigator.onLine === false) {
-      reply("You're offline. Try again when you're connected.");
-      return;
-    }
+  async function armMic() {
     const r = resources.current;
-    const generation = r.generation;
+    const capture = r.capture;
+    if (!question || !capture || r.armed || r.speech || r.stage !== "idle" || document.hidden) return;
+    if (navigator.onLine === false) {
+      pauseMic();
+      reply("You're offline. Turn the mic on again when you're connected.");
+      return;
+    }
+    const generation = ++r.generation;
+    r.audioTurn = true;
     changeStage("opening");
-    let microphoneRequested = false;
     try {
       const binding = await bindTurn(draft, question.id, crypto.randomUUID());
       if (!isCurrent(generation)) return;
-      microphoneRequested = true;
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      if (!isCurrent(generation)) {
-        stopTracks(stream);
+      if (!dialogRef.current?.open || r.speech) {
+        r.audioTurn = false;
+        changeStage("idle");
         return;
       }
-      r.stream = stream;
-      const mimeType = ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus"].find(type => MediaRecorder.isTypeSupported(type));
-      if (!mimeType) throw new Error("Unsupported browser");
-      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 32000 });
-      const chunks: Blob[] = [];
-      r.recorder = recorder;
-      recorder.ondataavailable = event => { if (event.data.size > 0) chunks.push(event.data); };
-      recorder.onerror = () => {
-        if (!isCurrent(generation)) return;
-        release();
-        changeStage("idle");
-        reply("I couldn't hear that. Try again, type, or pick a score.");
-      };
-      recorder.onstop = () => {
-        stopTracks(stream);
-        if (!isCurrent(generation)) return;
-        r.stream = null;
-        window.clearTimeout(r.timer);
-        const recording = new Blob(chunks, { type: mimeType });
-        chunks.length = 0;
-        if (!recording.size || recording.size > MAX_AUDIO_BYTES) {
-          changeStage("idle");
-          reply("I couldn't hear a score. Try again, type, or pick one.");
-          return;
-        }
+      capture.listen(recording => {
+        if (!isCurrent(generation) || !dialogRef.current?.open || !r.armed) return;
+        pauseCapture();
         void checkAnswer(binding, recording, generation);
-      };
-      recorder.start();
-      changeStage("listening");
-      r.timer = window.setTimeout(() => {
-        if (recorder.state === "recording") recorder.stop();
-      }, LIMIT_MS);
+      });
+      r.armed = true;
+      setListening(true);
+      changeStage("idle");
     } catch {
       if (!isCurrent(generation)) return;
-      release();
-      changeStage("idle");
-      reply(microphoneRequested ? "I couldn't listen. Check microphone access, type, or pick a score." : RETRY);
+      pauseMic();
+      reply(RETRY);
     }
   }
 
   async function send(text: string, selected?: number) {
     if (!text || !canAnswer || !question || document.hidden || resources.current.stage !== "idle") return;
     release();
+    stopSpeaking();
     setAnswer("");
     setPickScore(false);
     append("you", text);
@@ -304,21 +362,18 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     try {
       await onConfirm(proposal, proposal.binding.turn_id);
       setConfirmedMessages(previous => ({ ...previous, [proposal.questionId]: messages }));
-      if (contextRef.current !== context || resources.current.generation !== generation) return;
-      setProposal(undefined);
-      setRetryOnly(false);
-      reply("Score saved.");
+      // The updated draft resets this stage and opens the next question.
     } catch {
       if (contextRef.current !== context || resources.current.generation !== generation) return;
       setRetryOnly(true);
       reply("I couldn't confirm the score. Try confirming it again.");
-    } finally {
-      if (contextRef.current === context && resources.current.generation === generation) changeStage("idle");
+      changeStage("idle");
     }
   }
 
   function cancelAnswer() {
     release();
+    stopSpeaking();
     changeStage("idle");
     reply("Go ahead when you're ready.");
   }
@@ -331,7 +386,12 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   const canAnswer = open && !disabled && !!question && !proposal && stage === "idle";
   const complete = draft.guided_cursor >= sequence.length;
   const busy = stage !== "idle";
-  const stageMessage = stage === "listening" ? "Listening…" : stage === "confirming" ? "Saving score…" : "One moment…";
+  const stageMessage = stage === "confirming" ? "Saving score…" : "One moment…";
+  const readyToListen = canAnswer && mic === "on" && !speaking && !answer && !pickScore;
+  useEffect(() => {
+    if (readyToListen) void armMic();
+    else if (resources.current.armed) pauseCapture();
+  }, [readyToListen, context, stage, listening]);
 
   return (
     <dialog className="ride-chat" ref={dialogRef} aria-labelledby={titleId} onCancel={event => {
@@ -367,7 +427,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
               <p className="ride-chat-author">Question {draft.guided_cursor + 1} of {sequence.length}</p>
               <h3>{question.text}</h3>
               <p>What score would you give, from −3 to +3?</p>
-              <button type="button" className="ride-chat-replay" disabled={busy} onClick={() => questionPrompt && say(questionPrompt)}>
+              <button type="button" className="ride-chat-replay" disabled={busy || !!proposal} onClick={() => questionPrompt && say(questionPrompt)}>
                 <ChatIcon name="speaker" /> Read aloud
               </button>
             </div>
@@ -381,6 +441,15 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
 
       <footer className="ride-chat-footer">
         <div className="ride-chat-width">
+          {question && <div className="ride-chat-mic">
+            <span className="ride-chat-mic-status" role="status" data-listening={listening}>
+              {listening ? "Listening" : mic === "starting" ? "Connecting mic…" : mic === "on" ? "Mic paused" : "Mic off"}
+            </span>
+            <button type="button" className="btn ride-chat-control" disabled={mic === "off" && !canAnswer}
+              onClick={() => mic === "off" ? void enableMic() : pauseMic()}>
+              <ChatIcon name="mic" /> {mic === "off" ? "Turn on mic" : "Turn off mic"}
+            </button>
+          </div>}
           {complete ? <button type="button" className="btn btn-leather ride-chat-control" onClick={onReview}>Review scores and save</button> :
             proposal ? <div className="ride-chat-confirm">
               <button ref={confirmRef} type="button" className="btn btn-leather ride-chat-control" disabled={disabled || busy} onClick={() => void confirm()}>
@@ -388,6 +457,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
               </button>
               <button type="button" className="btn ride-chat-control" disabled={disabled || busy || retryOnly} onClick={() => {
                 release();
+                stopSpeaking();
                 setProposal(undefined);
                 reply("Let's try that question again.");
               }}>Try again</button>
@@ -396,21 +466,19 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
               <div className="ride-chat-input-row">
                 <label className="sr-only" htmlFor={answerId}>Your answer</label>
                 <input id={answerId} className="input ride-chat-input" placeholder="Type a score, e.g. +2" value={answer}
-                  maxLength={MAX_ANSWER} readOnly={!canAnswer} onChange={event => setAnswer(event.target.value)} />
+                  maxLength={MAX_ANSWER} readOnly={!canAnswer} onChange={event => {
+                    if (event.target.value) pauseCapture();
+                    setAnswer(event.target.value);
+                  }} />
                 <button type="submit" className="btn ride-chat-control" disabled={!canAnswer || !answer.trim()}>Send</button>
-                {stage === "listening" ?
-                  <button type="button" className="btn btn-leather ride-chat-control" onClick={() => {
-                    const recorder = resources.current.recorder;
-                    if (recorder?.state === "recording") recorder.stop();
-                  }}>Done</button> :
-                  <button type="button" className="btn btn-leather ride-chat-control" disabled={!canAnswer} onClick={() => void startListening()}>
-                    <ChatIcon name="mic" /> Speak
-                  </button>}
               </div>
               <div className="ride-chat-options">
                 {busy ? <button type="button" className="ride-chat-replay" onClick={cancelAnswer}>Cancel answer</button> :
                   <button type="button" className="ride-chat-replay" disabled={!canAnswer} aria-expanded={pickScore}
-                    onClick={() => setPickScore(selected => !selected)}>Pick a score</button>}
+                    onClick={() => {
+                      if (!pickScore) pauseCapture();
+                      setPickScore(selected => !selected);
+                    }}>Pick a score</button>}
               </div>
               {pickScore && <div className="ride-chat-score-options" role="group" aria-label="Choose a score">
                 {SCORE_OPTIONS.map(score => <button key={score} type="button" className="btn ride-chat-control" disabled={!canAnswer}

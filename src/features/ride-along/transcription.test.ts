@@ -1,7 +1,7 @@
 // @vitest-environment node
 import {expect,it,vi} from "vitest";
 import {TRANSCRIPTION_MODEL,transcribeClip} from "../../../supabase/functions/transcribe-ride-turn/transcription";
-it.each(["webm","mp4","ogg"])("uses OpenRouter multipart transcription for %s with no draft identifiers",async extension=>{
+it.each(["webm","mp4","ogg","wav"])("uses OpenRouter multipart transcription for %s with no draft identifiers",async extension=>{
  const key="synthetic-openrouter-key", signal=new AbortController().signal;
  const clip=new Blob(["synthetic clip"],{type:`audio/${extension}`});
  const request=vi.fn(async()=>Response.json({text:" minus two "})) as unknown as typeof fetch;

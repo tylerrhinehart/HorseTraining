@@ -1,12 +1,13 @@
 import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {MemoryRouter} from "react-router-dom";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
-const mocks=vi.hoisted(()=>({state:{memberships:[] as unknown[],facility:null,transition:{counts:{} as Record<string,number>,has_pending_data:false,completed_facility_id:null},loading:false,error:null,refresh:vi.fn(),selectFacility:vi.fn()},create:vi.fn(),join:vi.fn(),navigate:vi.fn()}));
+const mocks=vi.hoisted(()=>({state:{memberships:[] as unknown[],facility:null as Facility | null,transition:{counts:{} as Record<string,number>,has_pending_data:false,completed_facility_id:null},loading:false,error:null,refresh:vi.fn(),selectFacility:vi.fn()},create:vi.fn(),join:vi.fn(),navigate:vi.fn()}));
 vi.mock("../auth/FacilityProvider",()=>({useFacility:()=>mocks.state}));
 vi.mock("../auth/AuthProvider",()=>({useAuth:()=>({signOut:vi.fn()})}));
 vi.mock("../facilities/api",()=>({createFacility:mocks.create,redeemInvite:mocks.join}));
 vi.mock("react-router-dom",async original=>({...await original<typeof import("react-router-dom")>(),useNavigate:()=>mocks.navigate}));
 import Facilities from "./Facilities";
+import type { Facility } from "../supabase/types";
 beforeEach(()=>{vi.clearAllMocks();mocks.state.transition={counts:{},has_pending_data:false,completed_facility_id:null};mocks.state.refresh.mockResolvedValue(undefined);mocks.create.mockResolvedValue({id:"new-facility"});});
 afterEach(cleanup);
 function mount(){return render(<MemoryRouter><Facilities/></MemoryRouter>);}
@@ -38,4 +39,16 @@ it("does not navigate when an old request finishes after the screen unmounts",as
  let finish!:(v:unknown)=>void;mocks.create.mockReturnValue(new Promise(resolve=>{finish=resolve;}));const view=mount();
  fireEvent.change(screen.getByLabelText("Facility name"),{target:{value:"Facility"}});fireEvent.click(screen.getByRole("button",{name:"Create facility"}));view.unmount();finish({id:"old-facility"});
  await new Promise(resolve=>setTimeout(resolve,0));expect(mocks.navigate).not.toHaveBeenCalled();expect(mocks.state.refresh).not.toHaveBeenCalled();
+});
+
+
+it("keeps platform administration out of Facilities, including when a facility is active", () => {
+  mocks.state.facility = { id: "f", name: "Cedar Ranch", status: "active", voice_enabled: true, created_at: "" };
+  try {
+    mount();
+    expect(screen.getByRole("link", { name: "Manage facility" })).toHaveAttribute("href", "/facility-settings");
+    expect(screen.queryByRole("link", { name: /platform administration/i })).not.toBeInTheDocument();
+  } finally {
+    mocks.state.facility = null;
+  }
 });

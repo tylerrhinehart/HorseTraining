@@ -7,15 +7,15 @@ const id = "00000000-0000-4000-8000-000000000001";
 const origin = "https://sample.test";
 function post({
   bearer = "Bearer sample", format = "audio/webm", bytes = [0x1a, 0x45, 0xdf, 0xa3, ...Array(12).fill(0)],
-  requestOrigin = origin, answer, both = false,
-}: { bearer?: string; format?: string; bytes?: number[]; requestOrigin?: string; answer?: string; both?: boolean } = {}) {
+  requestOrigin = origin, answer, both = false, confirmation = false,
+}: { bearer?: string; format?: string; bytes?: number[]; requestOrigin?: string; answer?: string; both?: boolean; confirmation?: boolean } = {}) {
   const form = new FormData();
   form.set("draft_id", id);
   form.set("turn_id", id);
   form.set("question_id", id);
   form.set("version", "1");
   if (answer !== undefined) form.set("answer", answer);
-  if (answer === undefined || both) form.set("audio", new Blob([Uint8Array.from(bytes)], { type: format }), "test");
+  if (answer === undefined || both) form.set(confirmation ? "confirmation_audio" : "audio", new Blob([Uint8Array.from(bytes)], { type: format }), "test");
   return new Request("https://edge.test", { method: "POST", headers: { authorization: bearer, origin: requestOrigin }, body: form });
 }
 function deps(overrides?: Partial<Dependencies>) {
@@ -29,6 +29,26 @@ function deps(overrides?: Partial<Dependencies>) {
   };
 }
 describe("transcribe-ride-turn", () => {
+  it.each([["Yes.", "confirm"], ["Yes, that’s right.", "confirm"], ["Try again!", "retry"],
+    ["No.", "retry"], ["Yes, but wait.", "needs_clarification"], ["Yes?", "needs_clarification"],
+    ["She said yes.", "needs_clarification"]])("checks spoken command %s without sending it to Jev", async (transcript, command) => {
+    const implementation = deps({ transcribe: vi.fn(async () => transcript) });
+    const res = await createHandler(implementation)(post({ confirmation: true }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ draft_id: id, question_id: id, turn_id: id, version: 1, transcript, command });
+    expect(implementation.authorize).toHaveBeenCalledTimes(2);
+    expect(implementation.interpret).not.toHaveBeenCalled();
+  });
+
+  it("rejects a spoken yes when the original proposal became stale during transcription", async () => {
+    const implementation = deps({
+      transcribe: async () => "Yes.",
+      authorize: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false),
+    });
+    const res = await createHandler(implementation)(post({ confirmation: true }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).not.toHaveProperty("command");
+  });
   it("accepts only the expected bounded PCM layout for WAV input", async () => {
     const implementation = deps();
     const handle = createHandler(implementation);

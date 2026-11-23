@@ -182,12 +182,23 @@ body:has(.ride-chat[open]) { overflow: hidden; }
   .ride-chat .ride-chat-control { padding-inline: .55rem; }
 }
 
-.ride-chat-mic {
+.ride-chat-call {
   display: flex;
   align-items: center;
   gap: .75rem;
-  margin-bottom: .65rem;
+  min-height: 3.25rem;
+  padding: .25rem 0;
 }
+.ride-chat-call + * { margin-top: .7rem; }
+.ride-chat-call-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.ride-chat-command { color: var(--ink-2); font-size: .84rem; }
+.ride-chat .ride-chat-mute { border-radius: 999px; padding-inline: .85rem; }
+.ride-chat .ride-chat-mute[data-muted="false"] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.ride-chat-manual { justify-self: end; text-align: right; }
 
 .ride-chat-mic-status {
   display: inline-flex;

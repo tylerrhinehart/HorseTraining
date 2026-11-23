@@ -27,6 +27,7 @@ import { localDateTimeInput } from "../utils/dates";
 import { useAuth } from "../auth/AuthProvider";
 import { useFacility } from "../auth/FacilityProvider";
 import RideAlongPanel from "../features/ride-along/RideAlongPanel";
+import { useVoiceCall } from "../features/ride-along/useVoiceCall";
 import { closeDraft, confirmGuidedScore, getDraft, openDraft, saveDraft, type RideDraft } from "../features/ride-along/draftClient";
 import { isRideAlongPhase, type VoiceScore } from "../features/ride-along/voiceCommand";
 import type { TaskCompletion } from "../supabase/types";
@@ -83,6 +84,11 @@ export default function SessionNew() {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState<RideDraft>();
   const [chatOpen, setChatOpen] = useState(false);
+  const microphone = useVoiceCall();
+  useEffect(() => () => microphone.stop(), [id, facility?.id, user?.id, microphone.stop]);
+  useEffect(() => {
+    if (facility?.voice_enabled !== true || (horse.data && horse.data.status !== "in_training")) microphone.stop();
+  }, [facility?.voice_enabled, horse.data?.status, microphone.stop]);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voicePanelRevision, setVoicePanelRevision] = useState(0);
@@ -285,6 +291,8 @@ export default function SessionNew() {
   async function beginVoice() {
     if (actionLock.current || !voiceEligible || !facility || voiceStartBlocked || !hasVoiceQuestions || questions.error) return;
     setVoiceStartError(null);
+    const connection = microphone.start();
+    let opened = false;
     try {
       const interrupted = terminalToCheck();
       if (interrupted) {
@@ -303,6 +311,7 @@ export default function SessionNew() {
         if (recovered.status === "draft") {
           restore(recovered);
           setChatOpen(true);
+          opened = true;
           return;
         }
       }
@@ -312,9 +321,12 @@ export default function SessionNew() {
       const d = await draftAction(() => openDraft(facility.id, id!, phaseId, request));
       restore(d);
       setChatOpen(true);
+      opened = true;
       pending.current = undefined;
     } catch (err) {
       if (currentScope.current === scope) setVoiceStartError((err as Error).message);
+    } finally {
+      if (!opened && connection) microphone.stop(connection);
     }
   }
 
@@ -452,7 +464,7 @@ export default function SessionNew() {
             : isPerformance ? <p>Voice scoring is available for Foundation Phase 1 rides. Use the manual score sheet for this horse’s program.</p>
             : !voicePhase ? <p>The Foundation Phase 1 score sheet is missing from this facility.</p>
             : <>
-              <p>Work through the Foundation Phase 1 questions one at a time. Turn on the mic once, or type each score.</p>
+              <p>Work through the Foundation Phase 1 questions one at a time. The mic opens with the conversation. You can also type a score.</p>
               {voiceEligible ? (
                 <button type="button" className="btn btn-primary"
                   disabled={voiceStartBlocked || !hasVoiceQuestions || !!questions.error}
@@ -477,11 +489,11 @@ export default function SessionNew() {
       {voiceDraft && <section className="space-y-2">
         {voiceEligible && <>
           <button type="button" className="btn btn-primary" disabled={draftOperation || saving}
-            onClick={() => setChatOpen(true)}>Back to conversation</button>
+            onClick={() => { microphone.start(); setChatOpen(true); }}>Back to conversation</button>
           <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draft={voiceDraft} horseName={horse.data.name}
-            questions={questions.data ?? []} open={chatOpen && !navigationBlocked}
+            questions={questions.data ?? []} open={chatOpen && !navigationBlocked} microphone={microphone}
             disabled={draftOperation || saving || !hasVoiceQuestions || !!questions.error}
-            returnFocus={reviewHeading} onReview={() => setChatOpen(false)} onBusy={setVoiceBusy} onConfirm={confirmVoice} />
+            returnFocus={reviewHeading} onReview={() => { microphone.stop(); setChatOpen(false); }} onBusy={setVoiceBusy} onConfirm={confirmVoice} />
         </>}
         {!voiceEnabled && <p role="status">Voice was disabled for this facility. You can still review and save your draft manually.</p>}
         <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving}

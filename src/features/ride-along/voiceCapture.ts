@@ -69,7 +69,6 @@ export async function openVoiceCapture(signal: AbortSignal, onInterrupted: () =>
     function pause() {
       if (closed) return;
       acceptFrame = acceptAnswer = undefined;
-      track.enabled = false;
       worklet.port.postMessage({ epoch: ++epoch, active: false });
     }
 

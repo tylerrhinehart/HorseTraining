@@ -17,5 +17,5 @@ export default function useUnsavedChanges(dirty: boolean) {
     body="Your unsaved changes will be lost." confirmLabel="Leave without saving" cancelLabel="Keep editing" danger
     onConfirm={() => { if (blocker.state === 'blocked') blocker.proceed(); }}
     onCancel={() => { if (blocker.state === 'blocked') blocker.reset(); }} />;
-  return { dialog, allowLeave };
+  return { dialog, allowLeave, navigationBlocked: blocker.state === 'blocked' };
 }

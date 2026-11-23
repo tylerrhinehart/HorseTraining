@@ -82,10 +82,8 @@ export default function SessionNew() {
   const [voiceStartError, setVoiceStartError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState<RideDraft>();
-  const scorerHeading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    if (voiceDraft?.id) scorerHeading.current?.focus();
-  }, [voiceDraft?.id]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const reviewHeading = useRef<HTMLHeadingElement>(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voicePanelRevision, setVoicePanelRevision] = useState(0);
   const [draftOperation, setDraftOperation] = useState(false);
@@ -106,6 +104,7 @@ export default function SessionNew() {
   useEffect(() => {
     setPhaseId("");
     setVoiceDraft(undefined);
+    setChatOpen(false);
     pending.current = undefined;
     setConfirmedDate("");
     setDrafts({});
@@ -156,7 +155,7 @@ export default function SessionNew() {
       voiceDraft.ratings.map(r => [r.question_id, { score: r.score, comment: r.comment ?? undefined }]),
     ))
   );
-  const { dialog: unsavedDialog, allowLeave } = useUnsavedChanges((voiceDraft ? !!voiceChanged : dirty) && !saving);
+  const { dialog: unsavedDialog, allowLeave, navigationBlocked } = useUnsavedChanges((voiceDraft ? !!voiceChanged : dirty) && !saving);
 
   if (!id) return null;
 
@@ -301,13 +300,18 @@ export default function SessionNew() {
           return;
         }
         rememberTerminal();
-        if (recovered.status === "draft") { restore(recovered); return; }
+        if (recovered.status === "draft") {
+          restore(recovered);
+          setChatOpen(true);
+          return;
+        }
       }
       const key = "open:" + scope;
       const request = pending.current?.key === key ? pending.current.request : crypto.randomUUID();
       pending.current = { key, request };
       const d = await draftAction(() => openDraft(facility.id, id!, phaseId, request));
       restore(d);
+      setChatOpen(true);
       pending.current = undefined;
     } catch (err) {
       if (currentScope.current === scope) setVoiceStartError((err as Error).message);
@@ -440,7 +444,7 @@ export default function SessionNew() {
       {unsavedDialog}
       <Link className="workflow-link" to={`/horses/${id}`}>← {horse.data.name}</Link>
       <div className="eyebrow">{programLabel(horse.data.training_type)}</div>
-      <h1 className="h-display">Log a ride</h1>
+      <h1 className="h-display" ref={reviewHeading} tabIndex={-1}>{voiceDraft ? "Review ride" : "Log a ride"}</h1>
       {(voiceEnabled || wantsVoice) && !voiceDraft && (
         <section className="card space-y-2" aria-labelledby="ride-along-title">
           <h2 id="ride-along-title" className="card-title">Ride-along scorer</h2>
@@ -448,7 +452,7 @@ export default function SessionNew() {
             : isPerformance ? <p>Voice scoring is available for Foundation Phase 1 rides. Use the manual score sheet for this horse’s program.</p>
             : !voicePhase ? <p>The Foundation Phase 1 score sheet is missing from this facility.</p>
             : <>
-              <p>Say your scores and confirm each one as you work through the Foundation Phase 1 questions.</p>
+              <p>Work through the Foundation Phase 1 questions one at a time. Speak or type each score.</p>
               {voiceEligible ? (
                 <button type="button" className="btn btn-primary"
                   disabled={voiceStartBlocked || !hasVoiceQuestions || !!questions.error}
@@ -471,11 +475,15 @@ export default function SessionNew() {
         </section>
       )}
       {voiceDraft && <section className="space-y-2">
-        {voiceEligible && <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draft={voiceDraft}
-          questions={questions.data ?? []} disabled={draftOperation || saving || !hasVoiceQuestions || !!questions.error}
-          headingRef={scorerHeading} onBusy={setVoiceBusy} onConfirm={confirmVoice} />}
+        {voiceEligible && <>
+          <button type="button" className="btn btn-primary" disabled={draftOperation || saving}
+            onClick={() => setChatOpen(true)}>Back to conversation</button>
+          <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draft={voiceDraft} horseName={horse.data.name}
+            questions={questions.data ?? []} open={chatOpen && !navigationBlocked}
+            disabled={draftOperation || saving || !hasVoiceQuestions || !!questions.error}
+            returnFocus={reviewHeading} onReview={() => setChatOpen(false)} onBusy={setVoiceBusy} onConfirm={confirmVoice} />
+        </>}
         {!voiceEnabled && <p role="status">Voice was disabled for this facility. You can still review and save your draft manually.</p>}
-        <p className="muted">Confirmed voice scores are saved to the draft. Manual edits are saved with the next confirmed score or when you save the ride.</p>
         <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving}
           onClick={() => { if (window.confirm("Reload the saved draft and replace unsaved edits on this screen?")) void reloadVoice(); }}>
           Reload saved draft
@@ -569,8 +577,8 @@ export default function SessionNew() {
             </div>}
         </div>
       </details>
-      <details className="card">
-        <summary>Optional score sheet · {scored} of {total} scored</summary>
+      <details className="card" open={voiceDraft ? true : undefined}>
+        <summary>{voiceDraft ? "Score sheet" : "Optional score sheet"} · {scored} of {total} scored</summary>
       {questions.error ? <ErrorState error={questions.error} onRetry={questions.refresh} /> : questions.loading || !phaseId ? (
         <ScoreSheetSkeleton />
       ) : (

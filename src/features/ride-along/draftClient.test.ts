@@ -2,7 +2,7 @@ import {beforeEach,expect,it,vi} from "vitest";
 const db=vi.hoisted(()=>({rpc:vi.fn(),functions:{invoke:vi.fn()}}));
 vi.mock("../../supabase/client",()=>({requireSupabase:()=>db}));
 import {setFacilityScope} from "../../supabase/facilityScope";
-import {bindTurn,transcribeTurn,type RideDraft} from "./draftClient";
+import {bindTurn,interpretTurn,type RideDraft} from "./draftClient";
 const binding={draft_id:"draft",question_id:"question",version:3,turn_id:"turn"};
 beforeEach(()=>{vi.clearAllMocks();setFacilityScope(null);setFacilityScope("facility");});
 it("checks the exact server binding before returning permission to listen",async()=>{
@@ -14,22 +14,28 @@ it("checks the exact server binding before returning permission to listen",async
 });
 it.each(["draft_id","question_id","version","turn_id"])("rejects a mismatched response %s",async key=>{
  db.functions.invoke.mockResolvedValue({data:{...binding,[key]:"stale",transcript:"plus two",choice:"plus_two"},error:null});
- await expect(transcribeTurn(binding,new Blob(["fixture"]),new AbortController().signal)).rejects.toThrow();
+ await expect(interpretTurn(binding,new Blob(["fixture"]),new AbortController().signal)).rejects.toThrow();
 });
 it("rejects unknown choice ids without parsing transcript as fallback",async()=>{
  db.functions.invoke.mockResolvedValue({data:{...binding,transcript:"plus two",choice:"question-two"},error:null});
- await expect(transcribeTurn(binding,new Blob(["fixture"]),new AbortController().signal)).rejects.toThrow();
+ await expect(interpretTurn(binding,new Blob(["fixture"]),new AbortController().signal)).rejects.toThrow();
 });
 it("keeps clarification distinct from zero and sends every binding field",async()=>{
  db.functions.invoke.mockResolvedValue({data:{...binding,transcript:"two",choice:"needs_clarification"},error:null});
- expect(await transcribeTurn(binding,new Blob(["fixture"]),new AbortController().signal)).toEqual({transcript:"two",score:null});
+ expect(await interpretTurn(binding,new Blob(["fixture"]),new AbortController().signal)).toEqual({transcript:"two",score:null});
  const body=db.functions.invoke.mock.calls[0][1].body as FormData;
  expect(Object.fromEntries([...body.entries()].filter(([k])=>k!=="audio"))).toEqual({...binding,version:"3"});
 });
 it("rejects a late result after the facility switches",async()=>{
  let finish!:(r:unknown)=>void;
  db.functions.invoke.mockReturnValue(new Promise(resolve=>{finish=resolve;}));
- const pending=transcribeTurn(binding,new Blob(["fixture"]),new AbortController().signal);
+ const pending=interpretTurn(binding,new Blob(["fixture"]),new AbortController().signal);
  setFacilityScope("other");finish({data:{...binding,transcript:"plus two",choice:"plus_two"},error:null});
  await expect(pending).rejects.toThrow("Facility changed");
+});
+it("sends a typed answer with the exact binding and no audio", async () => {
+  db.functions.invoke.mockResolvedValue({ data: { ...binding, transcript: "+2", choice: "plus_two" }, error: null });
+  await expect(interpretTurn(binding, "+2", new AbortController().signal)).resolves.toEqual({ transcript: "+2", score: 2 });
+  const body = db.functions.invoke.mock.calls[0][1].body as FormData;
+  expect(Object.fromEntries(body)).toEqual({ ...binding, version: "3", answer: "+2" });
 });

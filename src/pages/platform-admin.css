@@ -1,0 +1,99 @@
+.platform-admin {
+  max-width: 960px;
+  margin-inline: auto;
+  padding-bottom: 32px;
+}
+
+.platform-header, .platform-toolbar-heading, .platform-facility-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+}
+
+.platform-header {
+  padding-block: 8px 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.platform-header h1 {
+  font-family: var(--font-display);
+  font-size: clamp(25px, 4vw, 38px);
+  line-height: 1.12;
+}
+
+.platform-header p, .platform-secondary, .platform-control p, .platform-events time {
+  color: var(--muted);
+}
+
+.platform-header p { margin-top: 6px; }
+.platform-admin h2 { font-size: 21px; font-weight: 700; }
+.platform-admin h3 { font-size: 19px; font-weight: 700; overflow-wrap: anywhere; }
+.platform-admin h4 { font-weight: 700; }
+.platform-total { font-size: 0.8em; color: var(--muted); margin-left: 4px; }
+
+.platform-filters, .platform-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.platform-filters { margin-block: 14px 16px; }
+.platform-filters label, .platform-mfa label { display: grid; gap: 5px; font-weight: 600; }
+.platform-filters .input, .platform-mfa .input { width: 100%; min-width: 0; }
+.platform-facilities { display: grid; gap: 14px; }
+.platform-facilities .card + .card { margin-top: 0; }
+.platform-facility-heading { margin-bottom: 13px; }
+
+.platform-control {
+  display: grid;
+  justify-items: start;
+  align-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+.platform-control p { font-size: 0.9em; margin-top: 4px; }
+
+.platform-badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 650;
+  vertical-align: middle;
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.platform-badge-on { background: #e5f0df; color: #314a29; border-color: #b9ccb2; }
+.platform-badge-paused { background: #f6e7dd; color: #6c3321; border-color: #ddbdac; }
+
+.platform-feedback { margin-top: 12px; }
+.platform-feedback .btn { margin-top: 8px; }
+.platform-error { color: var(--bad); }
+.platform-activity { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 9px; }
+.platform-activity summary { width: fit-content; cursor: pointer; padding: 6px 2px; font-weight: 600; }
+.platform-events { list-style: none; margin: 8px 0 0; padding: 0; max-height: 300px; overflow: auto; }
+.platform-events li { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; padding: 8px 0; }
+.platform-events li + li { border-top: 1px solid var(--line); }
+
+.platform-dialog { width: min(450px, calc(100% - 28px)); margin: auto; }
+.platform-dialog::backdrop { background: rgb(26 20 15 / 55%); }
+.platform-dialog p { margin-block: 8px 16px; }
+.platform-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.platform-access { max-width: 510px; display: grid; gap: 12px; justify-items: start; }
+.platform-mfa { display: grid; gap: 12px; justify-items: start; }
+.platform-mfa img { background: white; border-radius: var(--radius); max-width: 100%; height: auto; }
+
+@media (max-width: 600px) {
+  .platform-controls, .platform-filters { grid-template-columns: minmax(0, 1fr); }
+  .platform-activity summary { min-height: 44px; align-content: center; }
+  .platform-control { grid-template-columns: minmax(0, 1fr); }
+}
+
+.platform-save-status { margin-bottom: 12px; color: var(--ink); font-weight: 600; }

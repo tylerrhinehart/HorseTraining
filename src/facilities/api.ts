@@ -12,7 +12,30 @@ export async function setMemberRole(id: string, user: string, role: FacilityRole
 export async function removeMember(id: string,user:string) { check(await requireSupabase().rpc("remove_facility_member",{p_facility_id:id,p_user_id:user})); }
 export async function isSuperAdmin():Promise<boolean> { return !!check(await requireSupabase().rpc("platform_is_super_admin")); }
 export async function listPlatformFacilities():Promise<Facility[]> { return check(await requireSupabase().rpc("platform_list_facilities")) ?? []; }
-export async function setControls(id:string,status:Facility["status"],voice:boolean,reason:string) { check(await requireSupabase().rpc("platform_set_facility_controls",{p_facility_id:id,p_status:status,p_voice_enabled:voice,p_reason:reason})); }
+export type PlatformFacilityControl = "status" | "voice";
+type PlatformFacilityState = Pick<Facility, "status" | "voice_enabled">;
+export interface PlatformFacilityAudit {
+  id: number;
+  actor_id: string | null;
+  facility_id: string;
+  action: string;
+  reason: string;
+  before_state: PlatformFacilityState;
+  after_state: PlatformFacilityState;
+  created_at: string;
+}
+export async function updatePlatformFacility(id: string, control: PlatformFacilityControl, enabled: boolean): Promise<Facility> {
+  return check(await requireSupabase().rpc("platform_update_facility", {
+    p_facility_id: id,
+    p_control: control,
+    p_enabled: enabled,
+  }));
+}
+export async function listPlatformFacilityAudit(id: string, signal?: AbortSignal): Promise<PlatformFacilityAudit[]> {
+  const request = requireSupabase().rpc("platform_list_facility_audit", { p_facility_id: id });
+  if (signal) request.abortSignal(signal);
+  return check(await request) ?? [];
+}
 export interface FacilityTransition {
   counts: Record<string, number>;
   has_pending_data: boolean;

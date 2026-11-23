@@ -19,7 +19,7 @@ insert into public.platform_super_admins (user_id)
 values ('<verified-staff-auth-user-uuid>');
 ```
 
-Platform functions require the account to exist in that table **and** a Supabase JWT at `aal2`. Enroll and verify MFA through Supabase Auth, then refresh the current session before attempting platform access. Platform role alone does not grant training-record visibility. `platform_list_facilities` provides the facility inventory; `platform_set_facility_controls` sets active/suspended status and the voice flag with a required reason and an atomic before/after audit entry. `platform_list_facility_audit` supplies up to the latest 100 audit entries for a facility. Voice is disabled by default, and facility controls are not writable through the normal app client.
+Platform functions require the account to exist in that table **and** a Supabase JWT at `aal2`. Enroll and verify MFA through Supabase Auth, then refresh the current session before attempting platform access. Platform role alone does not grant training-record visibility. `platform_list_facilities` provides the facility inventory; `platform_update_facility` changes access status or voice independently and writes an automatic before/after audit entry when the setting changes. `platform_list_facility_audit` supplies up to the latest 100 audit entries for a facility. Voice is disabled by default, and facility controls are not writable through the normal app client.
 
 ## Focused verification
 

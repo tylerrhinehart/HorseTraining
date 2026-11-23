@@ -44,7 +44,7 @@ revoke all on all sequences in schema tqa_legacy from public,anon,authenticated;
 revoke all on all functions in schema tqa_legacy from public,anon,authenticated;
 `;
 const strip=s=>s.replace(/^\s*(begin|commit);\s*$/gmi,'');
-const files=['schema.sql','ride_drafts.sql','guided_voice.sql','facility_transition.sql','platform_access_status.sql'];
+const files=['schema.sql','ride_drafts.sql','guided_voice.sql','facility_transition.sql','platform_access_status.sql','platform_facility_controls.sql'];
 const body=files.map(f=>`\n-- ${f}\n`+strip(fs.readFileSync(path.join(root,'supabase',f),'utf8'))).join('\n');
 const suffix=`
 -- Preserve every Auth account and its original profile. Training rows remain

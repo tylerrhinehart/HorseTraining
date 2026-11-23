@@ -15,6 +15,7 @@ import { SkeletonCard } from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
 import { differenceInCalendarDays, format, parseISO, subDays } from "date-fns";
 import { useRosterWork } from "../hooks/useRosterWork";
+import { useFacility } from "../auth/FacilityProvider";
 import { programLabel } from "../content/programs";
 import type { Horse, Phase } from "../supabase/types";
 
@@ -73,6 +74,7 @@ function EmptyState() {
 }
 
 function MultiHorseToday({ horses }: { horses: Horse[] }) {
+  const { facility } = useFacility();
   const phases = useQuery(qk.phases(), () => listPhases());
   const {rides:sessionDates, summaries} = useRosterWork();
   const phasesById = new Map<string, Phase>(
@@ -164,6 +166,7 @@ function MultiHorseToday({ horses }: { horses: Horse[] }) {
             workedToday={workedTodayIds.has(h.id)}
             lastSession={lastByHorse.get(h.id) ?? null}
             datesReady={sessionDates.data !== undefined && !sessionDates.error}
+            canScoreWithVoice={facility?.voice_enabled === true && h.training_type === "foundation"}
           />
         ))}
       </div>
@@ -179,6 +182,7 @@ function TodayCard({
   workedToday,
   lastSession,
   datesReady,
+  canScoreWithVoice,
 }: {
   horse: Horse;
   summary?: string;
@@ -187,6 +191,7 @@ function TodayCard({
   workedToday: boolean;
   lastSession: string | null;
   datesReady: boolean;
+  canScoreWithVoice: boolean;
 }) {
   const navigate = useNavigate();
   const phase = horse.current_phase_id
@@ -255,14 +260,24 @@ function TodayCard({
             {workedLine.text}
           </span>
         )}
-        <Link
-          to={`/horses/${horse.id}/sessions/new`}
-          className="btn btn-leather btn-sm"
-          style={{ marginTop: 6, justifyContent: "center" }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          Start Ride
-        </Link>
+        <div className="mt-1.5 grid gap-2">
+          <Link
+            to={`/horses/${horse.id}/sessions/new`}
+            className="btn btn-leather btn-sm justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Start Ride
+          </Link>
+          {canScoreWithVoice && (
+            <Link
+              to={`/horses/${horse.id}/sessions/new?mode=voice`}
+              className="btn btn-sm justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Score with voice
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );

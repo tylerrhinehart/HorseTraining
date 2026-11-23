@@ -453,11 +453,14 @@ export default function SessionNew() {
                 <button type="button" className="btn btn-primary"
                   disabled={voiceStartBlocked || !hasVoiceQuestions || !!questions.error}
                   onClick={() => void beginVoice()}>
-                  {draftOperation ? "Opening scorer…" : "Start or resume ride-along"}
+                  {draftOperation ? "Opening scorer…" : "Start or resume voice scoring"}
                 </button>
               ) : (
-                <button type="button" className="btn btn-primary" disabled={voiceStartBlocked}
-                  onClick={() => choosePhase(voicePhase.id)}>Use Phase 1 for this ride</button>
+                <>
+                  <p className="muted">Setting up voice scoring selects Phase 1 for this ride only.</p>
+                  <button type="button" className="btn btn-primary" disabled={voiceStartBlocked}
+                    onClick={() => choosePhase(voicePhase.id)}>Set up Phase 1 voice scoring</button>
+                </>
               )}
               {hasManualEdits && <p className="muted">Start the scorer from a new ride before changing the date or entering scores or notes. Finish this ride manually to keep your edits.</p>}
               {voiceEligible && !hasVoiceQuestions && !questions.error &&

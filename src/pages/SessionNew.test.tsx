@@ -3,6 +3,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import SessionNew from "./SessionNew";
 import HorseDetail from "./HorseDetail";
+import Today from "./Today";
 
 const fixtures = vi.hoisted(() => ({
   enabled: true,
@@ -30,12 +31,14 @@ const foundationHorse = {
   current_phase_id: "ground", training_type: "foundation", program_meta: {},
 };
 const saleHorse = { ...foundationHorse, current_phase_id: "sale", training_type: "sale_horse" };
+const saleHorseWithOwnId = { ...saleHorse, id: "sale-horse", name: "Synthetic sale horse" };
 const rides: unknown[] = [];
 vi.mock("../supabase/useQuery", () => ({
   useQuery: (key: readonly string[] | null) => {
     let data;
     let error: Error | null = null;
     if (key?.[0] === "horse") data = fixtures.program === "foundation" ? foundationHorse : saleHorse;
+    if (key?.[0] === "horses") data = [foundationHorse, saleHorseWithOwnId];
     if (key?.[0] === "phases") data = phases;
     if (key?.[0] === "sessions") data = rides;
     if (key?.[0] === "questions") {
@@ -62,16 +65,35 @@ afterEach(cleanup);
 const root = "/horses/horse";
 function mount(path = root + "/sessions/new") {
   const router = createMemoryRouter([
+    { path: "/", element: <Today /> },
     { path: "/horses/:id", element: <HorseDetail /> },
     { path: "/horses/:id/sessions/new", element: <SessionNew /> },
   ], { initialEntries: [path] });
   return render(<RouterProvider router={router} />);
 }
 
+it("takes a trainer from Today directly to Phase 1 voice scoring for the eligible horse", async () => {
+  mount("/");
+  expect(screen.getAllByRole("link", { name: "Start Ride" })).toHaveLength(2);
+  const voice = await screen.findByRole("link", { name: "Score with voice" });
+  expect(voice).toHaveAttribute("href", root + "/sessions/new?mode=voice");
+  fireEvent.click(voice);
+  expect(await screen.findByRole("button", { name: "Start or resume voice scoring" })).toBeEnabled();
+  expect(screen.getByLabelText("Phase worked on this ride")).toHaveValue("one");
+  expect(fixtures.open).not.toHaveBeenCalled();
+});
+
+it("keeps manual ride shortcuts on Today when the facility disables voice scoring", () => {
+  fixtures.enabled = false;
+  mount("/");
+  expect(screen.getAllByRole("link", { name: "Start Ride" })).toHaveLength(2);
+  expect(screen.queryByRole("link", { name: "Score with voice" })).toBeNull();
+});
+
 it("opens the scorer from the horse page even when the horse is on Groundwork", async () => {
   mount(root);
-  fireEvent.click(await screen.findByRole("link", { name: "Ride-along scorer" }));
-  const start = await screen.findByRole("button", { name: "Start or resume ride-along" });
+  fireEvent.click(await screen.findByRole("link", { name: "Score with voice" }));
+  const start = await screen.findByRole("button", { name: "Start or resume voice scoring" });
   expect(screen.getByLabelText("Phase worked on this ride")).toHaveValue("one");
   expect(fixtures.open).not.toHaveBeenCalled();
   fireEvent.click(start);
@@ -83,15 +105,15 @@ it("opens the scorer from the horse page even when the horse is on Groundwork", 
 it("lets a trainer choose Phase 1 for a normal ride and start scoring without treating the phase as an edit", async () => {
   mount();
   expect(screen.getByLabelText("Phase worked on this ride")).toHaveValue("ground");
-  fireEvent.click(screen.getByRole("button", { name: "Use Phase 1 for this ride" }));
-  fireEvent.click(screen.getByRole("button", { name: "Start or resume ride-along" }));
+  fireEvent.click(screen.getByRole("button", { name: "Set up Phase 1 voice scoring" }));
+  fireEvent.click(screen.getByRole("button", { name: "Start or resume voice scoring" }));
   await waitFor(() => expect(fixtures.open).toHaveBeenCalledWith("facility", "horse", "one", expect.any(String)));
 });
 
 it("keeps unsaved notes intact and explains why a saved voice draft cannot be opened over them", () => {
   mount();
   fireEvent.change(screen.getByLabelText("Ride notes"), { target: { value: "Keep these notes" } });
-  expect(screen.getByRole("button", { name: "Use Phase 1 for this ride" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Set up Phase 1 voice scoring" })).toBeDisabled();
   expect(screen.getByText(/Finish this ride manually to keep your edits/)).toBeInTheDocument();
   expect(screen.getByLabelText("Ride notes")).toHaveValue("Keep these notes");
   expect(fixtures.open).not.toHaveBeenCalled();
@@ -101,19 +123,19 @@ it("explains unavailable voice on an explicit link when the facility has disable
   fixtures.enabled = false;
   mount(root + "/sessions/new?mode=voice");
   expect(screen.getByText(/Ask your platform administrator/)).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Start or resume ride-along" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Start or resume voice scoring" })).toBeNull();
 });
 
 it("explains the supported program and leaves another program on its own sheet", () => {
   fixtures.program = "sale_horse";
   mount(root + "/sessions/new?mode=voice");
   expect(screen.getByText(/Use the manual score sheet for this horse/)).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Start or resume ride-along" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Start or resume voice scoring" })).toBeNull();
 });
 
 it("shows a draft startup error beside the entry point", async () => {
   fixtures.open.mockRejectedValueOnce(new Error("Draft unavailable."));
   mount(root + "/sessions/new?mode=voice");
-  fireEvent.click(await screen.findByRole("button", { name: "Start or resume ride-along" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Start or resume voice scoring" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Draft unavailable.");
 });

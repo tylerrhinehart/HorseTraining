@@ -6,14 +6,15 @@ const id = "00000000-0000-4000-8000-000000000001";
 const origin = "https://sample.test";
 function post({
   bearer = "Bearer sample", format = "audio/webm", bytes = [0x1a, 0x45, 0xdf, 0xa3, ...Array(12).fill(0)],
-  requestOrigin = origin,
-}: { bearer?: string; format?: string; bytes?: number[]; requestOrigin?: string } = {}) {
+  requestOrigin = origin, answer, both = false,
+}: { bearer?: string; format?: string; bytes?: number[]; requestOrigin?: string; answer?: string; both?: boolean } = {}) {
   const form = new FormData();
   form.set("draft_id", id);
   form.set("turn_id", id);
   form.set("question_id", id);
   form.set("version", "1");
-  form.set("audio", new Blob([Uint8Array.from(bytes)], { type: format }), "test");
+  if (answer !== undefined) form.set("answer", answer);
+  if (answer === undefined || both) form.set("audio", new Blob([Uint8Array.from(bytes)], { type: format }), "test");
   return new Request("https://edge.test", { method: "POST", headers: { authorization: bearer, origin: requestOrigin }, body: form });
 }
 function deps(overrides?: Partial<Dependencies>) {
@@ -27,6 +28,26 @@ function deps(overrides?: Partial<Dependencies>) {
   };
 }
 describe("transcribe-ride-turn", () => {
+  it("checks typed answers against the same bound question without audio transcription", async () => {
+    const implementation = deps();
+    const res = await createHandler(implementation)(post({ answer: "  minus two  " }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ question_id: id, transcript: "minus two", choice: "minus_two" });
+    expect(implementation.interpret).toHaveBeenCalledWith("minus two", expect.any(AbortSignal));
+    expect(implementation.authorize).toHaveBeenCalledTimes(2);
+    expect(implementation.transcribe).not.toHaveBeenCalled();
+  });
+
+  it("rejects mixed, empty, and oversized typed answers before authorizing the turn", async () => {
+    const implementation = deps();
+    const handle = createHandler(implementation);
+    for (const request of [post({ answer: "+2", both: true }), post({ answer: "  " }), post({ answer: "x".repeat(201) })]) {
+      expect((await handle(request)).status).toBe(400);
+    }
+    expect(implementation.authorize).not.toHaveBeenCalled();
+    expect(implementation.interpret).not.toHaveBeenCalled();
+  });
+
   it("authenticates, authorizes, and correlates an audio-only provider result", async () => {
     const impl = deps();
     const res = await createHandler(impl)(post());

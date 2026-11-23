@@ -19,7 +19,7 @@ vi.mock("../auth/FacilityProvider", () => ({
 vi.mock("../components/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock("../features/ride-along/draftClient", () => ({
   closeDraft: vi.fn(), confirmGuidedScore: vi.fn(), getDraft: vi.fn(), openDraft: fixtures.open,
-  saveDraft: vi.fn(), bindTurn: vi.fn(), transcribeTurn: vi.fn(),
+  saveDraft: vi.fn(), bindTurn: vi.fn(), interpretTurn: vi.fn(),
 }));
 const phases = [
   { id: "ground", program: "foundation", code: "groundwork", name: "Groundwork", scale: "tqa", position: 0 },
@@ -97,7 +97,7 @@ it("opens the scorer from the horse page even when the horse is on Groundwork", 
   expect(screen.getByLabelText("Phase worked on this ride")).toHaveValue("one");
   expect(fixtures.open).not.toHaveBeenCalled();
   fireEvent.click(start);
-  expect(await screen.findByRole("button", { name: "Record a score" })).toBeEnabled();
+  expect(await screen.findByRole("button", { name: "Speak" })).toBeEnabled();
   expect(fixtures.open).toHaveBeenCalledWith("facility", "horse", "one", expect.any(String));
   expect(screen.getByRole("heading", { name: "Ride-along scorer" })).toHaveFocus();
 });
@@ -138,4 +138,18 @@ it("shows a draft startup error beside the entry point", async () => {
   mount(root + "/sessions/new?mode=voice");
   fireEvent.click(await screen.findByRole("button", { name: "Start or resume voice scoring" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Draft unavailable.");
+});
+
+it("opens scoring in a dialog and lets the trainer return to review and back", async () => {
+  mount(root + "/sessions/new?mode=voice");
+  fireEvent.click(await screen.findByRole("button", { name: "Start or resume voice scoring" }));
+  expect(await screen.findByRole("dialog", { name: "Ride-along scorer" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Foundation question" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Review ride" }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Ride-along scorer" })).toBeNull());
+  expect(screen.getByRole("heading", { name: "Review ride" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "Save ride" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Back to conversation" }));
+  expect(await screen.findByRole("dialog", { name: "Ride-along scorer" })).toBeVisible();
+  expect(fixtures.open).toHaveBeenCalledTimes(1);
 });

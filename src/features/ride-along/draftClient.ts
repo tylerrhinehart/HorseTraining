@@ -74,15 +74,16 @@ export const confirmGuidedScore = (d: RideDraft, proposal: VoiceScore, input: Se
     p_task_completions: input.task_completions ?? [],
   });
 
-export async function transcribeTurn(binding: TurnBinding, clip: Blob, signal: AbortSignal) {
+export async function interpretTurn(binding: TurnBinding, answer: string | Blob, signal: AbortSignal) {
   const body = new FormData();
   for (const [key, value] of Object.entries(binding)) body.set(key, String(value));
-  body.set("audio", clip, "turn");
+  if (typeof answer === "string") body.set("answer", answer);
+  else body.set("audio", answer, "turn");
   const scope = captureFacilityScope();
   const { data, error } = await scope.client().functions.invoke("transcribe-ride-turn", { body, signal: AbortSignal.any([signal, scope.signal]) });
   scope.assertCurrent();
   if (error || !data || Object.entries(binding).some(([k,v]) => data[k] !== v) || typeof data.transcript !== "string" ||
       !(data.choice === "needs_clarification" || Object.hasOwn(choiceScores, data.choice)))
-    throw new Error("Couldn't interpret this clip. Try again or enter the score manually.");
+    throw new Error("I couldn't check that answer. Try again or pick a score.");
   return { transcript: data.transcript as string, score: data.choice === "needs_clarification" ? null : choiceScores[data.choice] };
 }

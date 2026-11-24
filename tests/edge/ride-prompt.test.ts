@@ -140,4 +140,20 @@ describe("ElevenLabs adapter", () => {
       await expect(synthesizePrompt("Question?", "synthetic-key", "testVoice01", signal, request)).rejects.toThrow();
     }
   });
+
+  it.each(["code", "status"])("retains an approved provider error %s and drops the message", async field => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      detail: { [field]: "voice_not_found", message: "provider data that must not be logged" },
+    }, { status: 404 }));
+    await expect(synthesizePrompt("Question?", "synthetic-key", "testVoice01", new AbortController().signal, request))
+      .rejects.toMatchObject({ stage: "provider_http", status: 404, code: "voice_not_found", message: "Readback audio unavailable" });
+  });
+
+  it("omits unknown provider codes and reports the HTTP status", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      detail: { status: "private upstream detail" },
+    }, { status: 401 }));
+    await expect(synthesizePrompt("Question?", "synthetic-key", "testVoice01", new AbortController().signal, request))
+      .rejects.toMatchObject({ stage: "provider_http", status: 401, code: undefined });
+  });
 });

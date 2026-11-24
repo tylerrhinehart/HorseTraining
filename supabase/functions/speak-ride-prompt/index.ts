@@ -1,4 +1,4 @@
-import { synthesizePrompt, validVoiceId } from "./elevenlabs.ts";
+import { ReadbackProviderError, synthesizePrompt, validVoiceId } from "./elevenlabs.ts";
 import { createHandler } from "./handler.ts";
 
 const key = Deno.env.get("ELEVENLABS_API_KEY")?.trim() ?? "";
@@ -37,5 +37,17 @@ Deno.serve(createHandler({
       ? data?.question_text === null ? { questionText: null } : null
       : typeof data?.question_text === "string" ? { questionText: data.question_text } : null;
   },
-  synthesize: (text, signal) => synthesizePrompt(text, key, voiceId, signal),
+  async synthesize(text, signal) {
+    try {
+      return await synthesizePrompt(text, key, voiceId, signal);
+    } catch (error) {
+      if (!signal.aborted) {
+        const detail = error instanceof ReadbackProviderError
+          ? { stage: error.stage, status: error.status, code: error.code }
+          : { stage: "provider_unknown" };
+        console.warn("tqa_readback_failure " + JSON.stringify(detail));
+      }
+      throw error;
+    }
+  },
 }));

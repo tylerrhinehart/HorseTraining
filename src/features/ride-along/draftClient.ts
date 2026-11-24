@@ -74,30 +74,17 @@ export const confirmGuidedScore = (d: RideDraft, proposal: VoiceScore, input: Se
     p_task_completions: input.task_completions ?? [],
   });
 
-async function requestTurn(binding: TurnBinding, answer: string | Blob, signal: AbortSignal, confirmation = false) {
+export async function interpretTurn(binding: TurnBinding, answer: string | Blob, signal: AbortSignal) {
   const body = new FormData();
   for (const [key, value] of Object.entries(binding)) body.set(key, String(value));
   if (typeof answer === "string") body.set("answer", answer);
-  else body.set(confirmation ? "confirmation_audio" : "audio", answer, "turn");
+  else body.set("audio", answer, "turn");
   const scope = captureFacilityScope();
   const { data, error } = await scope.client().functions.invoke("transcribe-ride-turn", { body, signal: AbortSignal.any([signal, scope.signal]) });
   scope.assertCurrent();
   if (error || !data || Object.entries(binding).some(([k,v]) => data[k] !== v) || typeof data.transcript !== "string")
     throw new Error("I couldn't check that answer. Try again or pick a score.");
-  return data;
-}
-
-export async function interpretTurn(binding: TurnBinding, answer: string | Blob, signal: AbortSignal) {
-  const data = await requestTurn(binding, answer, signal);
-  if (!(data.choice === "needs_clarification" || Object.hasOwn(choiceScores, data.choice)))
+  if (typeof data.choice !== "string" || !(data.choice === "needs_clarification" || Object.hasOwn(choiceScores, data.choice)))
     throw new Error("The score was unavailable.");
   return { transcript: data.transcript as string, score: data.choice === "needs_clarification" ? null : choiceScores[data.choice] };
-}
-
-export async function interpretConfirmation(binding: TurnBinding, audio: Blob, signal: AbortSignal) {
-  const data = await requestTurn(binding, audio, signal, true);
-  const command: unknown = data.command;
-  if (command !== "confirm" && command !== "retry" && command !== "needs_clarification")
-    throw new Error("The confirmation was unavailable.");
-  return { transcript: data.transcript as string, command };
 }

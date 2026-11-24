@@ -1,8 +1,10 @@
 import workletUrl from "./voiceCapture.worklet.js?url&no-inline";
+import { playInAudioContext, type RideAudioPlayer } from "./rideReadback";
 import { createVoiceActivity, encodeVoiceWav, VOICE_SAMPLE_RATE } from "./voiceActivity";
 
 export interface VoiceCapture {
   listen(onAnswer: (audio: Blob) => void): void;
+  playReadback: RideAudioPlayer;
   pause(): void;
   close(): void;
 }
@@ -89,6 +91,9 @@ export async function openVoiceCapture(signal: AbortSignal, onInterrupted: () =>
         worklet.port.postMessage({ epoch: ++epoch, active: true });
         track.enabled = true;
       },
+      playReadback: (audio, playbackSignal, onPlaying) => playInAudioContext(
+        context, audio, AbortSignal.any([signal, playbackSignal]), onPlaying,
+      ),
       pause,
       close,
     };

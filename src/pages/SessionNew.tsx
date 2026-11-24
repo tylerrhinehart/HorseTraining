@@ -236,6 +236,9 @@ export default function SessionNew() {
 
   const voiceEnabled = facility?.voice_enabled === true;
   const voiceEligible = voiceEnabled && !isPerformance && phaseId === voicePhase?.id && !confirmPhase;
+  useEffect(() => {
+    if (!voiceEligible) microphone.stop();
+  }, [voiceEligible, microphone.stop]);
   const hasVoiceQuestions = questions.data?.some(question => question.phase_id === phaseId && question.axis === "foundation") === true;
   const voiceStartBlocked = hasManualEdits || saving || draftOperation;
 
@@ -343,7 +346,7 @@ export default function SessionNew() {
     return next;
   }
 
-  async function confirmVoice(proposal: VoiceScore, request: string) {
+  async function recordVoiceScore(proposal: VoiceScore, request: string) {
     const question = questions.data?.find(q => q.id === proposal.questionId && q.phase_id === phaseId && q.axis === "foundation");
     if (!voiceDraft || !voiceEligible || !question || !Number.isInteger(proposal.score) || Math.abs(proposal.score) > 3)
       throw new Error("This score no longer matches the ride sheet.");
@@ -493,7 +496,7 @@ export default function SessionNew() {
           <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draft={voiceDraft} horseName={horse.data.name}
             questions={questions.data ?? []} open={chatOpen && !navigationBlocked} microphone={microphone}
             disabled={draftOperation || saving || !hasVoiceQuestions || !!questions.error}
-            returnFocus={reviewHeading} onReview={() => { microphone.stop(); setChatOpen(false); }} onBusy={setVoiceBusy} onConfirm={confirmVoice} />
+            returnFocus={reviewHeading} onReview={() => setChatOpen(false)} onBusy={setVoiceBusy} onRecord={recordVoiceScore} />
         </>}
         {!voiceEnabled && <p role="status">Voice was disabled for this facility. You can still review and save your draft manually.</p>}
         <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving}

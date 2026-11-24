@@ -16,8 +16,8 @@ it.each(["draft_id","question_id","version","turn_id"])("rejects a mismatched re
  db.functions.invoke.mockResolvedValue({data:{...binding,[key]:"stale",transcript:"plus two",choice:"plus_two"},error:null});
  await expect(interpretTurn(binding,new Blob(["fixture"]),new AbortController().signal)).rejects.toThrow();
 });
-it("rejects unknown choice ids without parsing transcript as fallback",async()=>{
- db.functions.invoke.mockResolvedValue({data:{...binding,transcript:"plus two",choice:"question-two"},error:null});
+it.each([{choice:"question-two"}, {choice:["plus_two"]}, {choice:2}])("rejects invalid choices $choice without parsing the transcript",async({choice})=>{
+ db.functions.invoke.mockResolvedValue({data:{...binding,transcript:"plus two",choice},error:null});
  await expect(interpretTurn(binding,new Blob(["fixture"]),new AbortController().signal)).rejects.toThrow();
 });
 it("keeps clarification distinct from zero and sends every binding field",async()=>{

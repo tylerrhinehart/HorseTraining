@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { captureFacilityScope } from "../../supabase/facilityScope";
+import type { RideSummaryPrompt } from "../../../supabase/functions/_shared/ridePrompts";
 
 export type RideReadbackRequest = {
   draftId: string;
   version: number;
 } & (
   | { kind: "question" | "clarification" | "retry"; questionId: string }
-  | { kind: "complete"; questionId: null }
+  | { kind: RideSummaryPrompt; questionId: null }
 );
 
 export type RideAudioPlayer = (audio: ArrayBuffer, signal: AbortSignal, onPlaying: () => void) => Promise<void>;

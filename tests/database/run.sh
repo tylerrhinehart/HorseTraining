@@ -7,6 +7,7 @@ psql "$DB" -v ON_ERROR_STOP=1 -f supabase/schema.sql
 psql "$DB" -v ON_ERROR_STOP=1 -f supabase/ride_drafts.sql
 psql "$DB" -v ON_ERROR_STOP=1 -f supabase/guided_voice.sql
 psql "$DB" -v ON_ERROR_STOP=1 -f supabase/ride_prompt_readback.sql
+psql "$DB" -v ON_ERROR_STOP=1 -f supabase/guided_temperament.sql
 psql "$DB" -v ON_ERROR_STOP=1 -f supabase/facility_transition.sql
 psql "$DB" -v ON_ERROR_STOP=1 -f supabase/platform_access_status.sql
 psql "$DB" -v ON_ERROR_STOP=1 -f supabase/platform_facility_controls.sql
@@ -16,6 +17,7 @@ psql "$DB" -v ON_ERROR_STOP=1 -f supabase/tests/facilities.sql
 psql "$DB" -v ON_ERROR_STOP=1 -f tests/database/ride-drafts.sql
 psql "$DB" -v ON_ERROR_STOP=1 -f tests/database/guided-voice.sql
 psql "$DB" -v ON_ERROR_STOP=1 -f tests/database/ride-prompt-readback.sql
+psql "$DB" -v ON_ERROR_STOP=1 -f tests/database/guided-temperament.sql
 node tests/database/guided-resume.mjs
 node tests/database/legacy-transition.mjs
 psql "$DB" -v ON_ERROR_STOP=1 -f tests/database/platform-access-status.sql

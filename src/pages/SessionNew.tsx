@@ -28,7 +28,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { useFacility } from "../auth/FacilityProvider";
 import RideAlongPanel from "../features/ride-along/RideAlongPanel";
 import { useVoiceCall } from "../features/ride-along/useVoiceCall";
-import { closeDraft, confirmGuidedScore, getDraft, openDraft, saveDraft, type RideDraft } from "../features/ride-along/draftClient";
+import { beginGuidedTemperament, canOfferTemperament, closeDraft, confirmGuidedScore, getDraft, openDraft, saveDraft, type RideDraft } from "../features/ride-along/draftClient";
 import { isRideAlongPhase, type VoiceScore } from "../features/ride-along/voiceCommand";
 import type { TaskCompletion } from "../supabase/types";
 
@@ -345,7 +345,8 @@ export default function SessionNew() {
   }
 
   async function recordVoiceScore(proposal: VoiceScore, request: string) {
-    const question = questions.data?.find(q => q.id === proposal.questionId && q.phase_id === phaseId && q.axis === "foundation");
+    const question = questions.data?.find(q => q.id === proposal.questionId && q.phase_id === phaseId &&
+      (q.axis === "foundation" || q.axis === "temperament"));
     if (!voiceDraft || !voiceEligible || !question || !Number.isInteger(proposal.score) || Math.abs(proposal.score) > 3)
       throw new Error("This score no longer matches the ride sheet.");
     const next = { ...drafts, [question.id]: { ...drafts[question.id], score: proposal.score } };
@@ -358,6 +359,16 @@ export default function SessionNew() {
     const saved = await draftAction(() => confirmGuidedScore(voiceDraft, proposal, operation.input!));
     pending.current = undefined;
     restore(saved);
+  }
+
+  async function startTemperament(request: string) {
+    if (!voiceDraft || !voiceEligible) throw new Error("Temperament scoring is unavailable.");
+    const key = "temperament:" + request;
+    if (pending.current && pending.current.key !== key) throw new Error("Resolve the pending save first.");
+    pending.current = { key, request };
+    const saved = await draftAction(() => beginGuidedTemperament(voiceDraft, request));
+    setVoiceDraft(saved);
+    pending.current = undefined;
   }
 
   async function reloadVoice() {
@@ -490,11 +501,14 @@ export default function SessionNew() {
       {voiceDraft && <section className="space-y-2">
         {voiceEligible && <>
           <button type="button" className="btn btn-primary" disabled={draftOperation || saving}
-            onClick={() => { microphone.start(); setChatOpen(true); }}>Back to conversation</button>
+            onClick={() => { microphone.start(); setChatOpen(true); }}>
+            {canOfferTemperament(voiceDraft, questions.data ?? []) ? "Return to score Temperament" : "Back to conversation"}
+          </button>
           <RideAlongPanel key={`${voiceDraft.id}:${voicePanelRevision}`} draft={voiceDraft} horseName={horse.data.name}
             questions={questions.data ?? []} open={chatOpen && !navigationBlocked} microphone={microphone}
             disabled={draftOperation || saving || !hasVoiceQuestions || !!questions.error}
-            returnFocus={reviewHeading} onReview={() => setChatOpen(false)} onBusy={setVoiceBusy} onRecord={recordVoiceScore} />
+            returnFocus={reviewHeading} onReview={() => setChatOpen(false)} onBusy={setVoiceBusy} onRecord={recordVoiceScore}
+            onStartTemperament={startTemperament} />
         </>}
         {!voiceEnabled && <p role="status">Voice was disabled for this facility. You can still review and save your draft manually.</p>}
         <button type="button" className="btn btn-ghost" disabled={voiceBusy || draftOperation || saving}

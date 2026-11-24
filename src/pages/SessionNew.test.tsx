@@ -12,6 +12,8 @@ const fixtures = vi.hoisted(() => ({
   open: vi.fn(),
   openMic: vi.fn(),
   bind: vi.fn(),
+  beginTemperament: vi.fn(),
+  withTemperament: false,
   refreshed: vi.fn(),
   queryError: null as Error | null,
   loadingQuery: null as string | null,
@@ -23,7 +25,9 @@ vi.mock("../auth/FacilityProvider", () => ({
 }));
 vi.mock("../components/Toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock("../features/ride-along/voiceCapture", () => ({ openVoiceCapture: fixtures.openMic }));
-vi.mock("../features/ride-along/draftClient", () => ({
+vi.mock("../features/ride-along/draftClient", async importOriginal => ({
+  ...await importOriginal<typeof import("../features/ride-along/draftClient")>(),
+  beginGuidedTemperament: fixtures.beginTemperament,
   closeDraft: vi.fn(), confirmGuidedScore: vi.fn(), getDraft: vi.fn(), openDraft: fixtures.open,
   saveDraft: vi.fn(), bindTurn: fixtures.bind, interpretTurn: vi.fn(),
 }));
@@ -58,8 +62,11 @@ vi.mock("../supabase/useQuery", () => ({
     if (key?.[0] === "sessions") data = rides;
     if (key?.[0] === "questions") {
       error = key[1] === "one" ? fixtures.queryError : null;
-      if (!error) data = [{ id: key[1] + "-q", phase_id: key[1], axis: "foundation",
-        position: 0, text: "Foundation question", low_label: "Low", high_label: "High" }];
+      if (!error) data = [{ id: key[1] + "-q", facility_id: "facility", phase_id: key[1], axis: "foundation",
+        position: 0, text: "Foundation question", low_label: "Low", high_label: "High" }, ...(fixtures.withTemperament ? [{
+        id: key[1] + "-temperament", facility_id: "facility", phase_id: key[1], axis: "temperament",
+        position: 0, text: "Confidence", low_label: "Low", high_label: "High",
+      }] : [])];
     }
     return { data, loading: false, error, refresh: fixtures.refreshed };
   },
@@ -71,9 +78,13 @@ beforeEach(() => {
   fixtures.program = "foundation";
   fixtures.queryError = null;
   fixtures.loadingQuery = null;
+  fixtures.withTemperament = false;
   fixtures.openMic.mockResolvedValue({ close: vi.fn(), pause: vi.fn(), listen: vi.fn(), playReadback: vi.fn() });
   fixtures.bind.mockImplementation(async (draft, questionId, turnId) => ({
     draft_id: draft.id, version: draft.version, question_id: questionId, turn_id: turnId,
+  }));
+  fixtures.beginTemperament.mockImplementation(async draft => ({
+    ...draft, version: draft.version + 1, guided_question_ids: [...draft.guided_question_ids, "one-temperament"],
   }));
   fixtures.open.mockResolvedValue({
     id: "draft", facility_id: "facility", horse_id: "horse", phase_id: "one", status: "draft",
@@ -106,6 +117,25 @@ it.each(["horse", "phases"])("opens the scorer after the %s query finishes on a 
   const start = await screen.findByRole("button", { name: "Start or resume voice scoring" });
   fireEvent.click(start);
   expect(await screen.findByRole("dialog", { name: "Ride-along scorer" })).toBeVisible();
+});
+
+it("returns from Later to the same draft and starts Temperament from review", async () => {
+  fixtures.withTemperament = true;
+  fixtures.open.mockResolvedValueOnce({
+    id: "draft", facility_id: "facility", horse_id: "horse", phase_id: "one", status: "draft",
+    occurred_at: new Date().toISOString(), notes: "Foundation note", rider: "",
+    ratings: [{ question_id: "one-q", score: 2 }], version: 2, guided_cursor: 1, guided_question_ids: ["one-q"],
+  });
+  mount(root + "/sessions/new?mode=voice");
+  fireEvent.click(await screen.findByRole("button", { name: "Start or resume voice scoring" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Later" }));
+  expect(screen.getByRole("heading", { name: "Review ride" })).toBeVisible();
+  expect(screen.getByLabelText("Ride notes")).toHaveValue("Foundation note");
+  fireEvent.click(screen.getByRole("button", { name: "Return to score Temperament" }));
+  fireEvent.click(screen.getByRole("button", { name: "Score Temperament now" }));
+  expect(await screen.findByRole("heading", { name: "How confident was your horse?" })).toBeVisible();
+  expect(fixtures.beginTemperament).toHaveBeenCalledWith(expect.objectContaining({ id: "draft", version: 2 }), expect.any(String));
+  expect(fixtures.open).toHaveBeenCalledOnce();
 });
 
 it("takes a trainer from Today directly to Phase 1 voice scoring for the eligible horse", async () => {

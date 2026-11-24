@@ -4,7 +4,7 @@ The `speak-ride-prompt` Supabase Edge Function provides ElevenLabs text-to-speec
 
 ## Setup
 
-1. Apply [`ride_prompt_readback.sql`](../../ride_prompt_readback.sql) after the facility-aware schema, ride draft and guided voice setup. It adds a dedicated rate-limit table and authorization RPC. On an existing guided-voice installation, apply this additive migration for readback.
+1. Apply [`ride_prompt_readback.sql`](../../ride_prompt_readback.sql) after the facility-aware schema, ride draft and guided voice setup. It adds a dedicated rate-limit table and authorization RPC. Apply [guided_temperament.sql](../../guided_temperament.sql) after it to support the optional Temperament prompts.
 2. Set these secrets in the Supabase project running the Edge Function.
    - `ELEVENLABS_API_KEY` with text-to-speech access.
    - `ELEVENLABS_VOICE_ID` for an ElevenLabs voice available to that key. Choose an existing standard voice for English readback.
@@ -15,8 +15,8 @@ Keep the ElevenLabs credentials server-side. `OPENROUTER_API_KEY` still serves t
 
 ## Data flow
 
-The client sends the draft ID, expected version, question ID and prompt kind to Supabase. The function verifies the trainer-owned draft, active facility access, voice-enabled Phase 1 and current cursor before requesting speech. It verifies the draft again before returning audio. Initial readback can run before the first recording is bound. The final prompt is only available after the guided sequence is complete. No draft fields or scores change when playing a prompt. The TTS limit is 30 requests per trainer per minute, independent of the transcription limit.
+The client sends the draft ID, expected version, question ID and prompt kind to Supabase. The function verifies the trainer-owned draft, active facility access, voice-enabled Phase 1 and current cursor before requesting speech. It verifies the draft again before returning audio. Initial readback can run before the first recording is bound. After Foundation, the optional Temperament prompt is available while the draft has eligible Temperament questions. The final prompt is available after the guided sequence is complete. No draft fields or scores change when playing a prompt. The TTS limit is 30 requests per trainer per minute, independent of the transcription limit.
 
-ElevenLabs receives one approved static rubric question, clarification, retry, or completion prompt per request. It receives no microphone audio, names, transcripts, individual scores, draft or question IDs. Custom and historical rubric text stays in TQA. Supabase returns MP3 bytes and marks the response `no-store`. If cloud readback is unavailable, the app can try a local browser voice and continues to display the conversation. ElevenLabs account usage and retention follow the provider's terms.
+ElevenLabs receives one approved static rubric question, Temperament choice, clarification, retry, or completion prompt per request. It receives no microphone audio, names, transcripts, individual scores, draft or question IDs. Custom and historical rubric text stays in TQA. Supabase returns MP3 bytes and marks the response `no-store`. If cloud readback is unavailable, the app can try a local browser voice and continues to display the conversation. ElevenLabs account usage and retention follow the provider's terms.
 
 The automated tests use mocked provider responses. Verify hosted ElevenLabs access and physical device audio playback in staging with configured credentials.

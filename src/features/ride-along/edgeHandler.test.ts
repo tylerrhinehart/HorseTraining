@@ -7,15 +7,18 @@ const id = "00000000-0000-4000-8000-000000000001";
 const origin = "https://sample.test";
 function post({
   bearer = "Bearer sample", format = "audio/webm", bytes = [0x1a, 0x45, 0xdf, 0xa3, ...Array(12).fill(0)],
-  requestOrigin = origin, answer, both = false, confirmation = false,
-}: { bearer?: string; format?: string; bytes?: number[]; requestOrigin?: string; answer?: string; both?: boolean; confirmation?: boolean } = {}) {
+  requestOrigin = origin, answer, both = false, confirmation = false, temperament = false,
+}: { bearer?: string; format?: string; bytes?: number[]; requestOrigin?: string; answer?: string; both?: boolean; confirmation?: boolean; temperament?: boolean } = {}) {
   const form = new FormData();
   form.set("draft_id", id);
   form.set("turn_id", id);
-  form.set("question_id", id);
+  if (!temperament) form.set("question_id", id);
   form.set("version", "1");
   if (answer !== undefined) form.set("answer", answer);
-  if (answer === undefined || both) form.set(confirmation ? "confirmation_audio" : "audio", new Blob([Uint8Array.from(bytes)], { type: format }), "test");
+  if (answer === undefined || both) {
+    const field = temperament ? "temperament_audio" : confirmation ? "confirmation_audio" : "audio";
+    form.set(field, new Blob([Uint8Array.from(bytes)], { type: format }), "test");
+  }
   return new Request("https://edge.test", { method: "POST", headers: { authorization: bearer, origin: requestOrigin }, body: form });
 }
 function deps(overrides?: Partial<Dependencies>) {
@@ -23,12 +26,32 @@ function deps(overrides?: Partial<Dependencies>) {
     origins: [origin],
     authenticate: vi.fn(async () => true),
     authorize: vi.fn(async () => true),
+    authorizeTemperament: vi.fn(async () => true),
     transcribe: vi.fn(async () => " Doubling minus two. "),
     interpret: vi.fn(async () => "minus_two" as const),
     ...overrides,
   };
 }
 describe("transcribe-ride-turn", () => {
+  it.each([["Now.", "now"], ["No, thanks.", "later"], ["Maybe, yes or no", "needs_clarification"]])(
+    "interprets a spoken Temperament choice %s without Jev or a scoring turn", async (transcript, command) => {
+      const implementation = deps({ transcribe: vi.fn(async () => transcript) });
+      const response = await createHandler(implementation)(post({ temperament: true }));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ draft_id: id, version: 1, turn_id: id, transcript, command });
+      expect(implementation.authorizeTemperament).toHaveBeenNthCalledWith(1, "Bearer sample", id, 1, true, expect.any(AbortSignal));
+      expect(implementation.authorizeTemperament).toHaveBeenNthCalledWith(2, "Bearer sample", id, 1, false, expect.any(AbortSignal));
+      expect(implementation.authorize).not.toHaveBeenCalled();
+      expect(implementation.interpret).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a Temperament reply if the draft changed during transcription", async () => {
+    const implementation = deps({ authorizeTemperament: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false) });
+    const response = await createHandler(implementation)(post({ temperament: true }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).not.toHaveProperty("command");
+  });
   it.each([["Yes.", "confirm"], ["Yes, that’s right.", "confirm"], ["Try again!", "retry"],
     ["No.", "retry"], ["Yes, but wait.", "needs_clarification"], ["Yes?", "needs_clarification"],
     ["She said yes.", "needs_clarification"]])("checks spoken command %s without sending it to Jev", async (transcript, command) => {

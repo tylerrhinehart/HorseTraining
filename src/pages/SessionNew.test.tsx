@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useSyncExternalStore } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import SessionNew from "./SessionNew";
@@ -13,6 +14,8 @@ const fixtures = vi.hoisted(() => ({
   bind: vi.fn(),
   refreshed: vi.fn(),
   queryError: null as Error | null,
+  loadingQuery: null as string | null,
+  queryListeners: new Set<() => void>(),
 }));
 vi.mock("../auth/AuthProvider", () => ({ useAuth: () => ({ user: { id: "trainer" } }) }));
 vi.mock("../auth/FacilityProvider", () => ({
@@ -36,8 +39,17 @@ const foundationHorse = {
 const saleHorse = { ...foundationHorse, current_phase_id: "sale", training_type: "sale_horse" };
 const saleHorseWithOwnId = { ...saleHorse, id: "sale-horse", name: "Synthetic sale horse" };
 const rides: unknown[] = [];
+function subscribeQuery(listener: () => void) {
+  fixtures.queryListeners.add(listener);
+  return () => { fixtures.queryListeners.delete(listener); };
+}
+
 vi.mock("../supabase/useQuery", () => ({
   useQuery: (key: readonly string[] | null) => {
+    const loading = useSyncExternalStore(subscribeQuery, () => fixtures.loadingQuery);
+    if (key?.[0] === loading) {
+      return { data: undefined, loading: true, error: null, refresh: fixtures.refreshed };
+    }
     let data;
     let error: Error | null = null;
     if (key?.[0] === "horse") data = fixtures.program === "foundation" ? foundationHorse : saleHorse;
@@ -58,6 +70,7 @@ beforeEach(() => {
   fixtures.enabled = true;
   fixtures.program = "foundation";
   fixtures.queryError = null;
+  fixtures.loadingQuery = null;
   fixtures.openMic.mockResolvedValue({ close: vi.fn(), pause: vi.fn(), listen: vi.fn(), playReadback: vi.fn() });
   fixtures.bind.mockImplementation(async (draft, questionId, turnId) => ({
     draft_id: draft.id, version: draft.version, question_id: questionId, turn_id: turnId,
@@ -78,6 +91,22 @@ function mount(path = root + "/sessions/new") {
   ], { initialEntries: [path] });
   return render(<RouterProvider router={router} />);
 }
+
+it.each(["horse", "phases"])("opens the scorer after the %s query finishes on a cold load", async query => {
+  fixtures.loadingQuery = query;
+  mount(root + "/sessions/new?mode=voice");
+  expect(screen.getByRole("heading", { name: "Log a ride" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Start or resume voice scoring" })).not.toBeInTheDocument();
+
+  act(() => {
+    fixtures.loadingQuery = null;
+    fixtures.queryListeners.forEach(listener => listener());
+  });
+
+  const start = await screen.findByRole("button", { name: "Start or resume voice scoring" });
+  fireEvent.click(start);
+  expect(await screen.findByRole("dialog", { name: "Ride-along scorer" })).toBeVisible();
+});
 
 it("takes a trainer from Today directly to Phase 1 voice scoring for the eligible horse", async () => {
   mount("/");

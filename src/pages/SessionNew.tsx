@@ -86,9 +86,14 @@ export default function SessionNew() {
   const [chatOpen, setChatOpen] = useState(false);
   const microphone = useVoiceCall();
   useEffect(() => () => microphone.stop(), [id, facility?.id, user?.id, microphone.stop]);
+  const rideDay = occurredAt.slice(0, 10);
+  const confirmPhase = !isPerformance && rideDay !== localDateTimeInput().slice(0, 10) && confirmedDate !== rideDay;
+  const voiceEnabled = facility?.voice_enabled === true;
+  const voiceEligible = voiceEnabled && horse.data?.status === "in_training" && !isPerformance &&
+    phaseId === voicePhase?.id && !confirmPhase;
   useEffect(() => {
-    if (facility?.voice_enabled !== true || (horse.data && horse.data.status !== "in_training")) microphone.stop();
-  }, [facility?.voice_enabled, horse.data?.status, microphone.stop]);
+    if (!voiceEligible) microphone.stop();
+  }, [voiceEligible, microphone.stop]);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voicePanelRevision, setVoicePanelRevision] = useState(0);
@@ -208,8 +213,6 @@ export default function SessionNew() {
 
   const currentPhase = phases.data.find((p) => p.id === phaseId) ?? null;
   const foundationPhase = phases.data.find(p => p.id === horse.data?.current_phase_id) ?? phases.data.find(p => p.program === "foundation");
-  const rideDay = occurredAt.slice(0, 10);
-  const confirmPhase = !isPerformance && rideDay !== localDateTimeInput().slice(0, 10) && confirmedDate !== rideDay;
   function choosePhase(next: string) {
     if (voiceDraft || actionLock.current) return;
     if (next !== phaseId) {
@@ -234,11 +237,6 @@ export default function SessionNew() {
   const setComment = (qid: string, comment: string) =>
     setDrafts((d) => ({ ...d, [qid]: { ...d[qid], comment } }));
 
-  const voiceEnabled = facility?.voice_enabled === true;
-  const voiceEligible = voiceEnabled && !isPerformance && phaseId === voicePhase?.id && !confirmPhase;
-  useEffect(() => {
-    if (!voiceEligible) microphone.stop();
-  }, [voiceEligible, microphone.stop]);
   const hasVoiceQuestions = questions.data?.some(question => question.phase_id === phaseId && question.axis === "foundation") === true;
   const voiceStartBlocked = hasManualEdits || saving || draftOperation;
 

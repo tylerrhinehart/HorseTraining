@@ -103,20 +103,20 @@ function mount(path = root + "/sessions/new") {
   return render(<RouterProvider router={router} />);
 }
 
-it.each(["horse", "phases"])("opens the scorer after the %s query finishes on a cold load", async query => {
+it.each(["horse", "phases", "questions"])("opens the scorer after the %s query finishes on a cold load", async query => {
   fixtures.loadingQuery = query;
   mount(root + "/sessions/new?mode=voice");
   expect(screen.getByRole("heading", { name: "Log a ride" })).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Start or resume voice scoring" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Ride-along scorer" })).not.toBeInTheDocument();
+  expect(fixtures.open).not.toHaveBeenCalled();
 
   act(() => {
     fixtures.loadingQuery = null;
     fixtures.queryListeners.forEach(listener => listener());
   });
 
-  const start = await screen.findByRole("button", { name: "Start or resume voice scoring" });
-  fireEvent.click(start);
   expect(await screen.findByRole("dialog", { name: "Ride-along scorer" })).toBeVisible();
+  expect(fixtures.open).toHaveBeenCalledOnce();
 });
 
 it("returns from Later to the same draft and starts Temperament from review", async () => {
@@ -127,7 +127,6 @@ it("returns from Later to the same draft and starts Temperament from review", as
     ratings: [{ question_id: "one-q", score: 2 }], version: 2, guided_cursor: 1, guided_question_ids: ["one-q"],
   });
   mount(root + "/sessions/new?mode=voice");
-  fireEvent.click(await screen.findByRole("button", { name: "Start or resume voice scoring" }));
   fireEvent.click(await screen.findByRole("button", { name: "Later" }));
   expect(screen.getByRole("heading", { name: "Review ride" })).toBeVisible();
   expect(screen.getByLabelText("Ride notes")).toHaveValue("Foundation note");
@@ -144,9 +143,8 @@ it("takes a trainer from Today directly to Phase 1 voice scoring for the eligibl
   const voice = await screen.findByRole("link", { name: "Score with voice" });
   expect(voice).toHaveAttribute("href", root + "/sessions/new?mode=voice");
   fireEvent.click(voice);
-  expect(await screen.findByRole("button", { name: "Start or resume voice scoring" })).toBeEnabled();
-  expect(screen.getByLabelText("Phase worked on this ride")).toHaveValue("one");
-  expect(fixtures.open).not.toHaveBeenCalled();
+  expect(await screen.findByRole("dialog", { name: "Ride-along scorer" })).toBeVisible();
+  expect(fixtures.open).toHaveBeenCalledWith("facility", "horse", "one", expect.any(String));
 });
 
 it("keeps manual ride shortcuts on Today when the facility disables voice scoring", () => {
@@ -159,10 +157,6 @@ it("keeps manual ride shortcuts on Today when the facility disables voice scorin
 it("opens the scorer from the horse page even when the horse is on Groundwork", async () => {
   mount(root);
   fireEvent.click(await screen.findByRole("link", { name: "Score with voice" }));
-  const start = await screen.findByRole("button", { name: "Start or resume voice scoring" });
-  expect(screen.getByLabelText("Phase worked on this ride")).toHaveValue("one");
-  expect(fixtures.open).not.toHaveBeenCalled();
-  fireEvent.click(start);
   expect(await screen.findByRole("button", { name: "Microphone and readback", pressed: true })).toBeEnabled();
   expect(fixtures.openMic).toHaveBeenCalledTimes(1);
   expect(fixtures.openMic.mock.invocationCallOrder[0]).toBeLessThan(fixtures.open.mock.invocationCallOrder[0]);
@@ -170,10 +164,22 @@ it("opens the scorer from the horse page even when the horse is on Groundwork", 
   expect(screen.getByRole("heading", { name: "Ride-along scorer" })).toHaveFocus();
 });
 
+it("opens the conversation even when the browser denies the microphone", async () => {
+  fixtures.openMic.mockRejectedValueOnce(new Error("Permission denied"));
+  mount(root);
+  fireEvent.click(await screen.findByRole("link", { name: "Score with voice" }));
+  expect(await screen.findByRole("dialog", { name: "Ride-along scorer" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Microphone and readback", pressed: false })).toBeEnabled();
+});
+
 it("lets a trainer choose Phase 1 for a normal ride and start scoring without treating the phase as an edit", async () => {
   mount();
   expect(screen.getByLabelText("Phase worked on this ride")).toHaveValue("ground");
+  const voiceEntry = screen.getByRole("region", { name: "Ride-along scoring" });
+  expect(voiceEntry).toHaveTextContent(/^Set up Phase 1 voice scoring$/);
   fireEvent.click(screen.getByRole("button", { name: "Set up Phase 1 voice scoring" }));
+  expect(voiceEntry).toHaveTextContent(/^Start or resume voice scoring$/);
+  expect(fixtures.open).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Start or resume voice scoring" }));
   await waitFor(() => expect(fixtures.open).toHaveBeenCalledWith("facility", "horse", "one", expect.any(String)));
 });
@@ -201,16 +207,19 @@ it("explains the supported program and leaves another program on its own sheet",
   expect(screen.queryByRole("button", { name: "Start or resume voice scoring" })).toBeNull();
 });
 
-it("shows a draft startup error beside the entry point", async () => {
+it("shows a draft startup error and retries only after the trainer clicks", async () => {
   fixtures.open.mockRejectedValueOnce(new Error("Draft unavailable."));
   mount(root + "/sessions/new?mode=voice");
-  fireEvent.click(await screen.findByRole("button", { name: "Start or resume voice scoring" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Draft unavailable.");
+  expect(fixtures.open).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "Start or resume voice scoring" }));
+  expect(await screen.findByRole("dialog", { name: "Ride-along scorer" })).toBeVisible();
+  expect(fixtures.open).toHaveBeenCalledTimes(2);
+  expect(fixtures.open.mock.calls[1]).toEqual(fixtures.open.mock.calls[0]);
 });
 
 it("opens scoring in a dialog and lets the trainer return to review and back", async () => {
   mount(root + "/sessions/new?mode=voice");
-  fireEvent.click(await screen.findByRole("button", { name: "Start or resume voice scoring" }));
   expect(await screen.findByRole("dialog", { name: "Ride-along scorer" })).toBeVisible();
   expect(screen.getByRole("heading", { name: "Foundation question" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Review ride" }));

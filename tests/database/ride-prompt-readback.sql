@@ -59,7 +59,7 @@ begin
      (d->'ratings')||jsonb_build_array(jsonb_build_object('question_id',q,'score',2)),null,null,null,'[]');
  end loop;
  ver:=(d->>'version')::bigint;
- if public.authorize_ride_prompt(did,ver,null,false) is distinct from '{"question_text":null}'::jsonb then
+ if public.authorize_ride_prompt(did,ver,null,false) is distinct from '{"question_text":null,"offer_temperament":true}'::jsonb then
    raise exception 'Readback could not resolve the completed guided sequence';
  end if;
  begin perform public.authorize_ride_prompt(did,ver,q,false); raise exception 'Expected post-cursor question denial';

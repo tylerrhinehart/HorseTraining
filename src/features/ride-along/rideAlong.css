@@ -393,6 +393,29 @@ body:has(.ride-chat[open]) { overflow: hidden; }
   font-weight: 650;
 }
 
+.ride-chat-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.ride-chat-choice-primary {
+  background: var(--chat-accent);
+  border-color: var(--chat-accent);
+  color: var(--chat-on-accent);
+}
+
+.ride-chat-choice-primary:enabled:hover { background: var(--chat-accent-hover); }
+
+.ride-chat-score-anchors {
+  display: flex;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-top: .5rem;
+  font-size: .8125rem;
+  color: var(--chat-muted);
+}
+
 .ride-chat-score-options {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));

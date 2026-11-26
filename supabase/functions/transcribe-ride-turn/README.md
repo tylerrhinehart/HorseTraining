@@ -19,6 +19,8 @@ Jev interprets a single `choice` question over exactly `minus_three`, `minus_two
 
 The Edge Function rechecks the binding after interpretation to reject stale results. The app records a clear Jev score into the draft immediately. Uncertainty keeps the same question open and asks for clarification. The Edge Function retains the earlier typed and spoken-confirmation request formats for clients built before the redesign. The trainer's authenticated client saves through `confirm_guided_score`.
 
+After Foundation, a bounded choice recording uses `temperament_audio` and the draft ID, version, and turn ID. Supabase checks the offer before and after speech-to-text. An exact spoken choice like “now” or “later” is parsed directly. Starting Temperament appends the unanswered Temperament questions to the same saved draft. Later returns to review and leaves the offer available on resume.
+
 Recording a score validates the still-active turn and version, persists all current draft fields and the signed rating, advances the cursor, increments version and records the idempotency receipt in one database transaction. Failed writes roll back both score and cursor. An exact retry cannot advance twice and returns the current authorized draft rather than replaying an obsolete cursor; altered payload reuse is rejected. Reload/resume restores the server cursor. Manual draft saves change the version and invalidate in-flight turns. Recorded draft ratings stay out of ride history until the separate explicit **Save ride** finalization. Facility removal/suspension and trainer isolation reuse the existing locked authorization checks; helpers and turn tables are private.
 
 ## Verified and not yet verified

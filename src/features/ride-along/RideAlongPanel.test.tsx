@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import type { Question } from "../../supabase/types";
 import RideAlongPanel from "./RideAlongPanel";
 import { useVoiceCall } from "./useVoiceCall";
-import { bindTurn, interpretTurn, type RideDraft } from "./draftClient";
+import { bindTurn, interpretTemperamentReply, interpretTurn, type RideDraft } from "./draftClient";
 import { openVoiceCapture } from "./voiceCapture";
 import type { TurnBinding } from "./voiceCommand";
 
@@ -12,7 +12,10 @@ const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("../../supabase/facilityScope", () => ({
   captureFacilityScope: () => ({ signal: new AbortController().signal, client: () => ({ functions: { invoke } }) }),
 }));
-vi.mock("./draftClient", () => ({ bindTurn: vi.fn(), interpretTurn: vi.fn() }));
+vi.mock("./draftClient", async importOriginal => ({
+  ...await importOriginal<typeof import("./draftClient")>(),
+  bindTurn: vi.fn(), interpretTurn: vi.fn(), interpretTemperamentReply: vi.fn(),
+}));
 vi.mock("./voiceCapture", () => ({ openVoiceCapture: vi.fn() }));
 
 const first: Question = {
@@ -20,6 +23,7 @@ const first: Question = {
   axis: "foundation", text: "Good to Catch (Review Groundwork)", low_label: "", high_label: "", created_at: "",
 };
 const second = { ...first, id: "q2", position: 2, text: "Stand to Saddle and Accept Bridle" };
+const temperament: Question = { ...first, id: "q3", axis: "temperament", text: "Confidence", low_label: "Low", high_label: "High" };
 const draft: RideDraft = {
   id: "d", version: 1, guided_cursor: 0, guided_question_ids: [first.id, second.id], ratings: [],
   facility_id: "facility", horse_id: "horse", phase_id: "phase", status: "draft", session_id: null,
@@ -35,6 +39,7 @@ const playReadback = vi.fn(async (_audio: ArrayBuffer, _signal: AbortSignal, onP
 beforeEach(() => {
   invoke.mockReset().mockResolvedValue({ error: new Error("No readback in fixture") });
   vi.mocked(interpretTurn).mockReset();
+  vi.mocked(interpretTemperamentReply).mockReset();
   vi.mocked(bindTurn).mockReset().mockImplementation(async (d, q, t) => ({
     draft_id: d.id, question_id: q, version: d.version, turn_id: t,
   }));
@@ -65,9 +70,10 @@ type PanelProps = ComponentProps<typeof CallPanel>;
 
 function mount(overrides: Partial<PanelProps> = {}) {
   const onRecord = vi.fn<PanelProps["onRecord"]>().mockResolvedValue(undefined);
+  const onStartTemperament = vi.fn<PanelProps["onStartTemperament"]>().mockResolvedValue(undefined);
   const props: PanelProps = {
     draft, questions: [first, second], horseName: "Synthetic horse", open: true, disabled: false,
-    returnFocus: { current: null }, onReview: vi.fn(), onBusy: vi.fn(), onRecord, ...overrides,
+    returnFocus: { current: null }, onReview: vi.fn(), onBusy: vi.fn(), onRecord, onStartTemperament, ...overrides,
   };
   const view = render(<CallPanel {...props} />);
   return { ...view, onRecord, props };
@@ -94,6 +100,85 @@ function nextDraft(score: number): RideDraft {
     question_id: first.id, score, axis: first.axis, question_text_snapshot: first.text,
   }] };
 }
+
+const foundationDone = { ...nextDraft(2), version: 3, guided_cursor: 2 };
+
+it("offers Temperament only after Foundation and opens it on a durable cursor update", async () => {
+  const questions = [first, second, temperament];
+  const { props, rerender, onRecord } = mount({ draft: nextDraft(2), questions });
+  expect(screen.queryByRole("button", { name: "Score Temperament now" })).not.toBeInTheDocument();
+  rerender(<CallPanel {...props} draft={foundationDone} />);
+  fireEvent.click(screen.getByRole("button", { name: "Score Temperament now" }));
+  expect(props.onStartTemperament).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("button", { name: "Record plus one" })).not.toBeInTheDocument();
+
+  const started = { ...foundationDone, version: 4, guided_question_ids: [first.id, second.id, temperament.id] };
+  rerender(<CallPanel {...props} draft={started} />);
+  expect(log().getByRole("heading", { name: "How confident was your horse?" })).toBeVisible();
+  expect(log().getByText("−3 Low")).toBeVisible();
+  expect(log().getByText("+3 High")).toBeVisible();
+  enter("positive one");
+  await waitFor(() => expect(onRecord).toHaveBeenCalledWith(expect.objectContaining({ questionId: temperament.id, score: 1 }), "utterance-2"));
+  rerender(<CallPanel {...props} draft={{ ...started, version: 5, guided_cursor: 3 }} />);
+  expect(log().getByText("All scores are recorded. Your ride is ready to review.")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Score Temperament now" })).not.toBeInTheDocument();
+});
+
+it("lets a trainer defer with the button or a typed reply and shows the offer when they return", () => {
+  const { props, rerender, onRecord } = mount({ draft: foundationDone, questions: [first, second, temperament] });
+  fireEvent.click(screen.getByRole("button", { name: "Later" }));
+  expect(props.onReview).toHaveBeenCalledTimes(1);
+  rerender(<CallPanel {...props} open={false} />);
+  rerender(<CallPanel {...props} open={true} />);
+  expect(screen.getByRole("button", { name: "Score Temperament now" })).toBeVisible();
+  enter("later");
+  expect(props.onReview).toHaveBeenCalledTimes(2);
+  expect(props.onStartTemperament).not.toHaveBeenCalled();
+  expect(onRecord).not.toHaveBeenCalled();
+});
+
+it("reads the offer and accepts a spoken yes after clarifying an uncertain reply", async () => {
+  vi.mocked(interpretTemperamentReply)
+    .mockResolvedValueOnce({ transcript: "maybe", command: null })
+    .mockResolvedValueOnce({ transcript: "yes", command: "now" });
+  const { props, onRecord } = mount({ draft: foundationDone, questions: [first, second, temperament] });
+  fireEvent.click(mic());
+  await screen.findByText("Listening for your choice");
+  expect(invoke).toHaveBeenCalledWith("speak-ride-prompt", expect.objectContaining({
+    body: { draftId: draft.id, questionId: null, version: 3, kind: "temperament_offer" },
+  }));
+  await act(async () => deliver?.(new Blob(["synthetic ambiguous reply"])));
+  expect(await log().findByText(/Say ‘now’/)).toBeVisible();
+  expect(props.onStartTemperament).not.toHaveBeenCalled();
+  await screen.findByText("Listening for your choice");
+  await act(async () => deliver?.(new Blob(["synthetic yes"])));
+  expect(props.onStartTemperament).toHaveBeenCalledTimes(1);
+  expect(onRecord).not.toHaveBeenCalled();
+  expect(bindTurn).not.toHaveBeenCalled();
+});
+
+it("retries the same Temperament transition after an unacknowledged save", async () => {
+  const onStartTemperament = vi.fn<PanelProps["onStartTemperament"]>()
+    .mockRejectedValueOnce(new Error("lost acknowledgment")).mockResolvedValue(undefined);
+  mount({ draft: foundationDone, questions: [first, second, temperament], onStartTemperament });
+  enter("now");
+  fireEvent.click(await screen.findByRole("button", { name: "Retry starting Temperament" }));
+  expect(onStartTemperament.mock.calls).toEqual([["utterance-1"], ["utterance-1"]]);
+});
+
+it("does not start Temperament from a late spoken yes after the trainer chose Later", async () => {
+  let finish!: (reply: { transcript: string; command: "now" }) => void;
+  vi.mocked(interpretTemperamentReply).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const { props } = mount({ draft: foundationDone, questions: [first, second, temperament] });
+  fireEvent.click(mic());
+  await screen.findByText("Listening for your choice");
+  await act(async () => deliver?.(new Blob(["synthetic reply"])));
+  fireEvent.click(screen.getByRole("button", { name: "Later" }));
+  expect(vi.mocked(interpretTemperamentReply).mock.calls[0][3].aborted).toBe(true);
+  await act(async () => finish({ transcript: "yes", command: "now" }));
+  expect(props.onReview).toHaveBeenCalledOnce();
+  expect(props.onStartTemperament).not.toHaveBeenCalled();
+});
 
 it.each([["3", 3], ["positive three", 3], ["negative TWO", -2], ["－１", -1], ["-0", 0], ["zero", 0]])(
   "records typed %s without a provider or confirmation",

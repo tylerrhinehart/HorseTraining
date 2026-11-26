@@ -1,6 +1,8 @@
 import { choiceScores, type TurnBinding, type VoiceScore } from "./voiceCommand";
 import { captureFacilityScope } from "../../supabase/facilityScope";
 import type { SessionInput } from "../../supabase/queries";
+import type { Question } from "../../supabase/types";
+import type { TemperamentChoice } from "../../../supabase/functions/_shared/temperamentChoice";
 
 export interface RideDraft {
   id: string;
@@ -20,6 +22,14 @@ export interface RideDraft {
   guided_question_ids: string[] | null;
   guided_cursor: number;
   active_voice_turn: string | null;
+}
+
+export function canOfferTemperament(draft: RideDraft, questions: Question[]) {
+  const sequence = draft.guided_question_ids;
+  if (!sequence?.length || draft.guided_cursor !== sequence.length) return false;
+  const temperament = questions.filter(q => q.axis === "temperament" && q.phase_id === draft.phase_id && q.facility_id === draft.facility_id);
+  return !temperament.some(q => sequence.includes(q.id)) &&
+    temperament.some(q => !draft.ratings.some(rating => rating.question_id === q.id));
 }
 
 async function rpc(name: string, args: Record<string, unknown>): Promise<RideDraft> {
@@ -54,6 +64,9 @@ export const saveDraft = (d: RideDraft, request: string, input: SessionInput) =>
 export const closeDraft = (d: RideDraft, request: string, action: "finalize" | "discard") =>
   rpc(`${action}_ride_draft`, versioned(d, request));
 
+export const beginGuidedTemperament = (d: RideDraft, request: string) =>
+  rpc("begin_guided_temperament", versioned(d, request));
+
 export async function bindTurn(d: RideDraft, question: string, turn: string): Promise<TurnBinding> {
   const scope = captureFacilityScope();
   const { data, error } = await scope.client().rpc("bind_guided_turn", {
@@ -74,17 +87,35 @@ export const confirmGuidedScore = (d: RideDraft, proposal: VoiceScore, input: Se
     p_task_completions: input.task_completions ?? [],
   });
 
-export async function interpretTurn(binding: TurnBinding, answer: string | Blob, signal: AbortSignal) {
-  const body = new FormData();
+async function requestTurn(binding: Omit<TurnBinding, "question_id"> | TurnBinding, body: FormData, signal: AbortSignal) {
   for (const [key, value] of Object.entries(binding)) body.set(key, String(value));
-  if (typeof answer === "string") body.set("answer", answer);
-  else body.set("audio", answer, "turn");
   const scope = captureFacilityScope();
   const { data, error } = await scope.client().functions.invoke("transcribe-ride-turn", { body, signal: AbortSignal.any([signal, scope.signal]) });
   scope.assertCurrent();
   if (error || !data || Object.entries(binding).some(([k,v]) => data[k] !== v) || typeof data.transcript !== "string")
     throw new Error("I couldn't check that answer. Try again or pick a score.");
+  return data;
+}
+
+export async function interpretTurn(binding: TurnBinding, answer: string | Blob, signal: AbortSignal) {
+  const body = new FormData();
+  if (typeof answer === "string") body.set("answer", answer);
+  else body.set("audio", answer, "turn");
+  const data = await requestTurn(binding, body, signal);
   if (typeof data.choice !== "string" || !(data.choice === "needs_clarification" || Object.hasOwn(choiceScores, data.choice)))
     throw new Error("The score was unavailable.");
   return { transcript: data.transcript as string, score: data.choice === "needs_clarification" ? null : choiceScores[data.choice] };
+}
+
+export async function interpretTemperamentReply(
+  d: RideDraft, turnId: string, audio: Blob, signal: AbortSignal,
+): Promise<{ transcript: string; command: TemperamentChoice | null }> {
+  const body = new FormData();
+  body.set("temperament_audio", audio, "choice");
+  const data = await requestTurn({ draft_id: d.id, version: d.version, turn_id: turnId }, body, signal);
+  const command: unknown = data.command;
+  if (command !== "now" && command !== "later" && command !== "needs_clarification") {
+    throw new Error("The Temperament choice was unavailable.");
+  }
+  return { transcript: data.transcript as string, command: command === "needs_clarification" ? null : command };
 }

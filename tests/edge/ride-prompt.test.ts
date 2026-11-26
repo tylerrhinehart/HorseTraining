@@ -31,9 +31,9 @@ function dependencies(overrides?: Partial<Dependencies>) {
 }
 
 describe("speak-ride-prompt", () => {
-  it("maps all canonical Phase 1 Foundation labels to speech, without repeating the score range", () => {
-    const labels = QUESTIONS.filter(question => question.phase_code === "phase_1" && question.axis === "foundation");
-    expect(labels).toHaveLength(8);
+  it("maps all canonical Phase 1 questions to speech, without repeating the score range", () => {
+    const labels = QUESTIONS.filter(question => question.phase_code === "phase_1");
+    expect(labels).toHaveLength(14);
     for (const label of labels) {
       const prompt = rideQuestionPrompt(label.text);
       expect(prompt).toMatch(/\?$/);
@@ -62,6 +62,21 @@ describe("speak-ride-prompt", () => {
     const response = await createHandler(deps)(request({ ...binding, kind, questionId: kind === "complete" ? null : binding.questionId }));
     expect(response.status).toBe(200);
     expect(deps.synthesize).toHaveBeenCalledWith(RIDE_READBACK_TEXT[kind], expect.any(AbortSignal));
+  });
+
+  it.each(["temperament_offer", "temperament_clarification"] as const)("guards the %s readback before and after speech generation", async kind => {
+    const authorize = vi.fn<Dependencies["authorize"]>();
+    const deps = dependencies({ authorize });
+    const handle = createHandler(deps);
+    const prompt = { ...binding, kind, questionId: null };
+    authorize.mockResolvedValueOnce({ questionText: null });
+    expect((await handle(request(prompt))).status).toBe(403);
+    expect(deps.synthesize).not.toHaveBeenCalled();
+    authorize.mockResolvedValueOnce({ questionText: null, offerTemperament: true }).mockResolvedValueOnce({ questionText: null });
+    expect((await handle(request(prompt))).status).toBe(409);
+    authorize.mockResolvedValue({ questionText: null, offerTemperament: true });
+    expect((await handle(request(prompt))).status).toBe(200);
+    expect(deps.synthesize).toHaveBeenLastCalledWith(RIDE_READBACK_TEXT[kind], expect.any(AbortSignal));
   });
 
   it("keeps custom rubric, spoofed and oversized input away from ElevenLabs", async () => {

@@ -30,6 +30,15 @@ Deno.serve(createHandler({
     if (response.status >= 500) throw new Error("authorization unavailable");
     return response.ok && await response.json() === true;
   },
+  async authorizeTemperament(authorization, draftId, version, consume, signal) {
+    const response = await fetch(`${supabaseURL}/rest/v1/rpc/authorize_temperament_reply`, {
+      method: "POST", signal,
+      headers: { authorization, apikey: anon!, "content-type": "application/json" },
+      body: JSON.stringify({ p_draft_id: draftId, p_expected_version: version, p_consume: consume }),
+    });
+    if (response.status >= 500) throw new Error("authorization unavailable");
+    return response.ok && await response.json() === true;
+  },
   interpret: (transcript, signal) => interpretScore(transcript, providerKey!, signal),
   transcribe: (audio, extension, signal) => transcribeClip(audio, extension, providerKey!, signal),
 }));

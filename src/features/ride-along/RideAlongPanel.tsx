@@ -1,7 +1,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from "react";
-import { RIDE_READBACK_TEXT, rideQuestionPrompt } from "../../../supabase/functions/_shared/ridePrompts";
+import { isRideSummaryPrompt, RIDE_READBACK_TEXT, rideQuestionPrompt } from "../../../supabase/functions/_shared/ridePrompts";
+import { parseTemperamentChoice, type TemperamentChoice } from "../../../supabase/functions/_shared/temperamentChoice";
 import type { Question } from "../../supabase/types";
-import { bindTurn, interpretTurn, type RideDraft } from "./draftClient";
+import { bindTurn, canOfferTemperament, interpretTemperamentReply, interpretTurn, type RideDraft } from "./draftClient";
 import { useRideReadback, type RideReadbackRequest } from "./rideReadback";
 import type { TurnBinding, VoiceScore } from "./voiceCommand";
 import type { VoiceCapture } from "./voiceCapture";
@@ -28,6 +29,7 @@ interface Props {
   microphone: VoiceCall;
   onBusy: (busy: boolean) => void;
   onRecord: (score: VoiceScore, requestId: string) => Promise<void>;
+  onStartTemperament: (requestId: string) => Promise<void>;
 }
 
 type Stage = "idle" | "thinking" | "saving" | "retry";
@@ -42,7 +44,7 @@ interface TurnResources {
   binding?: { context: string; result: Promise<TurnBinding> };
 }
 
-export default function RideAlongPanel({ draft, horseName, questions, open, disabled, returnFocus, onReview, onBusy, onRecord, microphone }: Props) {
+export default function RideAlongPanel({ draft, horseName, questions, open, disabled, returnFocus, onReview, onBusy, onRecord, onStartTemperament, microphone }: Props) {
   const [stage, setStage] = useState<Stage>("idle");
   const [listening, setListening] = useState(false);
   const [pendingScore, setPendingScore] = useState<VoiceScore>();
@@ -54,6 +56,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   const logRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const answerId = useId();
+  const temperamentRequest = useRef<string>();
   const resources = useRef<TurnResources>({ generation: 0, stage: "idle", arming: false, armed: false });
   const busyCallback = useRef(onBusy);
   busyCallback.current = onBusy;
@@ -61,10 +64,12 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   const sequence = draft.guided_question_ids ?? questions.filter(q => q.axis === "foundation")
     .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)).map(q => q.id);
   const question = questions.find(q => q.id === sequence[draft.guided_cursor]);
-  const complete = draft.guided_cursor >= sequence.length;
+  const offerTemperament = canOfferTemperament(draft, questions);
+  const complete = !offerTemperament && draft.guided_cursor >= sequence.length;
+  const progressLabel = questions.some(q => q.axis === "temperament" && sequence.includes(q.id)) ? "Ride questions" : "Foundation questions";
   const authoredPrompt = question && rideQuestionPrompt(question.text);
   const prompt = authoredPrompt ?? question?.text;
-  const context = `${draft.id}:${draft.version}:${question?.id ?? "done"}`;
+  const context = `${draft.id}:${draft.version}:${question?.id ?? (offerTemperament ? "offer" : "done")}`;
   const contextRef = useRef(context);
   contextRef.current = context;
   const mounted = useRef(false);
@@ -117,7 +122,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     if (microphone.state !== "on" || !open || document.hidden) return Promise.resolve();
     pauseCapture();
     const reference = { draftId: draft.id, version: draft.version };
-    const request: RideReadbackRequest | null = !useProvider ? null : kind === "complete" ?
+    const request: RideReadbackRequest | null = !useProvider ? null : isRideSummaryPrompt(kind) ?
       { ...reference, kind, questionId: null } : question ? { ...reference, kind, questionId: question.id } : null;
     return speak(request, text).finally(() => {
       // An immediate failure may batch the requesting and idle states into one render.
@@ -188,6 +193,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   useLayoutEffect(() => {
     stopVoice();
     resources.current.binding = undefined;
+    temperamentRequest.current = undefined;
     changeStage("idle");
     setPendingScore(undefined);
     setFeedback(undefined);
@@ -204,13 +210,14 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     if (!open || microphone.state !== "on") return;
     if (resources.current.stage === "saving" || resources.current.stage === "retry") return;
     if (prompt) void read("question", prompt, Boolean(authoredPrompt));
+    else if (offerTemperament) void read("temperament_offer", RIDE_READBACK_TEXT.temperament_offer);
     else if (complete) {
       const generation = resources.current.generation;
       void read("complete", RIDE_READBACK_TEXT.complete).finally(() => {
         if (isCurrent(generation)) mute();
       });
     }
-  }, [open, context, prompt, authoredPrompt, complete, microphone.state, speak]);
+  }, [open, context, prompt, authoredPrompt, offerTemperament, complete, microphone.state, speak]);
 
   useEffect(() => {
     const log = logRef.current;
@@ -231,7 +238,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     }
   }
 
-  async function checkRecording(binding: TurnBinding, recording: Blob, generation: number) {
+  async function checkRecording(binding: TurnBinding | string, recording: Blob, generation: number) {
     const turn = resources.current;
     const abort = new AbortController();
     turn.abort = abort;
@@ -239,6 +246,16 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     setFeedback(undefined);
     const timeout = window.setTimeout(() => abort.abort(), 20_000);
     try {
+      if (typeof binding === "string") {
+        const { command, transcript } = await interpretTemperamentReply(draft, binding, recording, abort.signal);
+        if (!isCurrent(generation) || abort.signal.aborted) return;
+        if (command) void chooseTemperament(command);
+        else {
+          setFeedback({ answer: transcript.trim(), text: RIDE_READBACK_TEXT.temperament_clarification });
+          void read("temperament_clarification", RIDE_READBACK_TEXT.temperament_clarification);
+        }
+        return;
+      }
       const result = await interpretTurn(binding, recording, abort.signal);
       if (!isCurrent(generation) || abort.signal.aborted) return;
       if (result.score === null) {
@@ -250,8 +267,9 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
       }
     } catch {
       if (!isCurrent(generation)) return;
-      setFeedback({ text: RIDE_READBACK_TEXT.retry });
-      void read("retry", RIDE_READBACK_TEXT.retry);
+      const kind = typeof binding === "string" ? "temperament_clarification" : "retry";
+      setFeedback({ text: RIDE_READBACK_TEXT[kind] });
+      void read(kind, RIDE_READBACK_TEXT[kind]);
     } finally {
       window.clearTimeout(timeout);
       if (isCurrent(generation)) {
@@ -264,7 +282,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   async function armMic() {
     const turn = resources.current;
     const capture = microphone.capture;
-    if (!question || !capture || turn.armed || turn.arming || isReadbackActive() ||
+    if ((!question && !offerTemperament) || !capture || turn.armed || turn.arming || isReadbackActive() ||
         turn.stage !== "idle" || document.hidden) return;
     if (navigator.onLine === false) {
       mute();
@@ -275,7 +293,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     turn.arming = true;
     turn.capture = capture;
     try {
-      const binding = await getBinding(question.id);
+      const binding = question ? await getBinding(question.id) : crypto.randomUUID();
       if (!isCurrent(generation)) return;
       turn.arming = false;
       if (!dialogRef.current?.open || isReadbackActive() || turn.stage !== "idle") return;
@@ -317,17 +335,49 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     await writeScore({ questionId: question.id, score, binding });
   }
 
-  function retrySave() {
-    if (disabled || !pendingScore || resources.current.stage !== "retry") return;
+  async function chooseTemperament(choice: TemperamentChoice) {
+    const currentStage = resources.current.stage;
+    if (!offerTemperament || !open || disabled || document.hidden || currentStage === "saving") return;
+    if (choice === "later") {
+      if (currentStage !== "retry") reviewRide();
+      return;
+    }
+    stopVoice();
+    changeStage("saving");
+    setAnswer("");
     setFeedback(undefined);
-    void writeScore(pendingScore);
+    const request = temperamentRequest.current ??= crypto.randomUUID();
+    try {
+      await onStartTemperament(request);
+    } catch {
+      if (!mounted.current || contextRef.current !== context) return;
+      changeStage("retry");
+      setFeedback({ text: "I couldn’t start Temperament. Retry or review and reload the draft." });
+    }
+  }
+
+  function retrySave() {
+    if (disabled || resources.current.stage !== "retry") return;
+    setFeedback(undefined);
+    if (pendingScore) void writeScore(pendingScore);
+    else void chooseTemperament("now");
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = answer.trim();
-    if (!text || !open || disabled || !question || document.hidden ||
+    if (!text || !open || disabled || (!question && !offerTemperament) || document.hidden ||
         resources.current.stage === "saving" || resources.current.stage === "retry") return;
+    if (offerTemperament) {
+      const choice = answer.length <= MAX_ANSWER ? parseTemperamentChoice(text) : null;
+      if (choice) void chooseTemperament(choice);
+      else {
+        stopVoice();
+        setAnswer("");
+        setFeedback({ answer: text.slice(0, MAX_ANSWER), text: "Type ‘now’ to score Temperament or ‘later’ to review the ride." });
+      }
+      return;
+    }
     const score = answer.length <= MAX_ANSWER ? parseWrittenRideScore(text) : null;
     if (score !== null) void enterScore(score);
     else {
@@ -338,8 +388,8 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
   }
 
   const saving = stage === "saving";
-  const canScore = open && !disabled && Boolean(question) && !saving && stage !== "retry";
-  const readyToListen = canScore && !answer.trim() && stage === "idle" &&
+  const canReply = open && !disabled && (Boolean(question) || offerTemperament) && !saving && stage !== "retry";
+  const readyToListen = canReply && !answer.trim() && stage === "idle" &&
     microphone.state === "on" && readbackState === "idle";
   useEffect(() => {
     if (readyToListen) void armMic();
@@ -351,7 +401,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
     !voiceOn ? "Voice off" :
     readbackState === "playing" ? "Scorer speaking…" :
     readbackState === "requesting" ? "Loading readback…" :
-    listening ? "Listening for a score" :
+    listening ? (offerTemperament ? "Listening for your choice" : "Listening for a score") :
     stage === "thinking" ? "Checking your reply…" : "Voice on";
   const reviewRide = () => {
     mute();
@@ -369,8 +419,8 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
           <h2>{horseName}</h2>
           <p>Foundation · Phase 1</p>
           <div className="ride-chat-progress">
-            <div><span>Foundation questions</span><b>{draft.guided_cursor} of {sequence.length} scored</b></div>
-            <div className="ride-chat-progress-track" role="progressbar" aria-label="Foundation questions scored"
+            <div><span>{progressLabel}</span><b>{draft.guided_cursor} of {sequence.length} scored</b></div>
+            <div className="ride-chat-progress-track" role="progressbar" aria-label={`${progressLabel} scored`}
               aria-valuemin={0} aria-valuemax={Math.max(1, sequence.length)} aria-valuenow={draft.guided_cursor}>
               <span style={{ width: `${sequence.length ? draft.guided_cursor * 100 / sequence.length : 0}%` }} />
             </div>
@@ -383,7 +433,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
               const recorded = index < draft.guided_cursor && rating;
               return <li key={id} data-state={current ? "current" : recorded ? "done" : "upcoming"} aria-current={current ? "step" : undefined}>
                 <span className="ride-chat-item-mark" aria-hidden="true">{recorded ? "✓" : current ? "•" : "·"}</span>
-                <span className="ride-chat-item-label">{item?.text ?? "Foundation question"}</span>
+                <span className="ride-chat-item-label">{item?.text ?? "Ride question"}</span>
                 {recorded && <span className="ride-chat-item-score">{formatScore(rating.score)}</span>}
               </li>;
             })}
@@ -400,7 +450,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
               </div>
             </div>
             <div className="ride-chat-header-actions">
-              <span className="ride-chat-counter">{complete ? `${sequence.length} of ${sequence.length} complete` :
+              <span className="ride-chat-counter">{offerTemperament ? "Foundation complete" : complete ? `${sequence.length} of ${sequence.length} complete` :
                 `Question ${draft.guided_cursor + 1} of ${sequence.length}`}</span>
               {question && <button type="button" className="ride-chat-review" disabled={saving} onClick={reviewRide}>Review ride</button>}
             </div>
@@ -422,7 +472,7 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
                 <ChatAvatar />
                 <article className="ride-chat-question">
                   <div className="ride-chat-question-body">
-                    <p className="ride-chat-eyebrow">Foundation</p>
+                    <p className="ride-chat-eyebrow">{question.axis === "temperament" ? "Temperament" : "Foundation"}</p>
                     <h3>{prompt}</h3>
                   </div>
                   <div className="ride-chat-score-area">
@@ -430,29 +480,52 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
                     <div className="ride-chat-score-options" role="group" aria-label="Choose a score">
                       {SCORE_OPTIONS.map((score, index) => <button key={score} type="button" className="ride-chat-score"
                         data-tone={score < 0 ? "negative" : score > 0 ? "positive" : "neutral"} aria-label={`Record ${SCORE_NAMES[index]}`}
-                        disabled={!canScore} onClick={() => {
+                        disabled={!canReply} onClick={() => {
                           logRef.current?.focus({ preventScroll: true });
                           void enterScore(score);
                         }}>{formatScore(score)}</button>)}
                     </div>
+                    {question.axis === "temperament" && <div className="ride-chat-score-anchors">
+                      <span>−3 {question.low_label}</span><span>+3 {question.high_label}</span>
+                    </div>}
+                  </div>
+                </article>
+              </div>}
+              {offerTemperament && <div className="ride-chat-turn">
+                <ChatAvatar />
+                <article className="ride-chat-question">
+                  <div className="ride-chat-question-body">
+                    <p className="ride-chat-eyebrow">Temperament</p>
+                    <h3>{RIDE_READBACK_TEXT.temperament_offer}</h3>
+                  </div>
+                  <div className="ride-chat-score-area ride-chat-choice-actions" role="group" aria-label="When to score Temperament">
+                    <button type="button" className="ride-chat-review ride-chat-choice-primary" disabled={!canReply}
+                      onClick={() => {
+                        logRef.current?.focus({ preventScroll: true });
+                        void chooseTemperament("now");
+                      }}>Score Temperament now</button>
+                    <button type="button" className="ride-chat-review" disabled={!canReply}
+                      onClick={() => void chooseTemperament("later")}>Later</button>
                   </div>
                 </article>
               </div>}
               {pendingScore && <UserBubble text={formatScore(pendingScore.score)} score receipt={saving ? "Saving…" : "Save pending"} />}
-              {saving && !pendingScore && <ScorerBubble>Saving score…</ScorerBubble>}
+              {saving && !pendingScore && <ScorerBubble>{offerTemperament ? "Starting Temperament…" : "Saving score…"}</ScorerBubble>}
               {feedback?.answer && <UserBubble text={feedback.answer} />}
               {feedback && <ScorerBubble>{feedback.text}</ScorerBubble>}
               {stage === "retry" && <div className="ride-chat-retry">
-                <button type="button" className="ride-chat-review" disabled={disabled} onClick={retrySave}>Retry save</button>
+                <button type="button" className="ride-chat-review" disabled={disabled} onClick={retrySave}>
+                  {pendingScore ? "Retry save" : "Retry starting Temperament"}
+                </button>
               </div>}
               {stage === "thinking" && <ScorerBubble>Checking your reply…</ScorerBubble>}
               {complete && <ScorerBubble>{RIDE_READBACK_TEXT.complete}</ScorerBubble>}
-              {!complete && !question && <ScorerBubble>This question is unavailable. You can still review the ride.</ScorerBubble>}
+              {!complete && !question && !offerTemperament && <ScorerBubble>This question is unavailable. You can still review the ride.</ScorerBubble>}
             </div>
           </div>
 
           <footer className="ride-chat-footer">
-            {complete || !question ? <button type="button" className="ride-chat-review" onClick={reviewRide}>Review scores and save</button> :
+            {!question && !offerTemperament ? <button type="button" className="ride-chat-review" onClick={reviewRide}>Review scores and save</button> :
               <form onSubmit={submit} className="ride-chat-composer">
                 <button type="button" className="ride-chat-mic" aria-label="Microphone and readback" aria-pressed={voiceOn}
                   title={voiceOn ? "Turn microphone and readback off" : "Turn microphone and readback on"}
@@ -461,12 +534,12 @@ export default function RideAlongPanel({ draft, horseName, questions, open, disa
                 </button>
                 <div className="ride-chat-input-row">
                   <label className="sr-only" htmlFor={answerId}>Type a message</label>
-                  <input id={answerId} className="ride-chat-input" placeholder="Type a score or reply…" value={answer}
+                  <input id={answerId} className="ride-chat-input" placeholder={offerTemperament ? "Type now or later…" : "Type a score or reply…"} value={answer}
                     maxLength={MAX_ANSWER + 1} autoComplete="off" onChange={event => {
                       if (event.target.value.trim()) cancelVoiceTurn();
                       setAnswer(event.target.value);
                     }} />
-                  <button type="submit" className="ride-chat-send" aria-label="Send message" disabled={!canScore || !answer.trim()}>
+                  <button type="submit" className="ride-chat-send" aria-label="Send message" disabled={!canReply || !answer.trim()}>
                     <ChatIcon name="send" />
                   </button>
                 </div>

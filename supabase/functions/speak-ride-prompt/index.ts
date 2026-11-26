@@ -34,7 +34,7 @@ Deno.serve(createHandler({
     if (!response.ok) return null;
     const data = await response.json();
     return binding.questionId === null
-      ? data?.question_text === null ? { questionText: null } : null
+      ? data?.question_text === null ? { questionText: null, offerTemperament: data.offer_temperament === true } : null
       : typeof data?.question_text === "string" ? { questionText: data.question_text } : null;
   },
   async synthesize(text, signal) {

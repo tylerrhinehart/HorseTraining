@@ -1,4 +1,5 @@
 import type { ScoreChoice } from "./jev.ts";
+import { parseTemperamentChoice } from "../_shared/temperamentChoice.ts";
 const MAX_AUDIO = 512 * 1024;
 const MAX_BODY = MAX_AUDIO + 4096;
 const MAX_ANSWER = 200;
@@ -20,6 +21,7 @@ export interface Dependencies {
   origins: readonly string[];
   authenticate: (authorization: string, signal: AbortSignal) => Promise<boolean>;
   authorize: (authorization: string, binding: TurnBinding, consume: boolean, signal: AbortSignal) => Promise<boolean>;
+  authorizeTemperament: (authorization: string, draftId: string, version: number, consume: boolean, signal: AbortSignal) => Promise<boolean>;
   interpret: (transcript: string, signal: AbortSignal) => Promise<ScoreChoice>;
   transcribe: (clip: Blob, extension: string, signal: AbortSignal) => Promise<string>;
 }
@@ -104,10 +106,13 @@ export function createHandler(deps: Dependencies) {
       const question = form.get("question_id");
       const version = Number(form.get("version"));
       const confirmation = form.get("confirmation_audio");
-      const audio = form.get("audio") ?? confirmation;
+      const temperament = form.get("temperament_audio");
+      const choosingTemperament = temperament !== null;
+      const audio = choosingTemperament ? temperament : form.get("audio") ?? confirmation;
       const answer = form.get("answer");
-      if ([...form.keys()].length !== 5 || typeof draft !== "string" || !UUID.test(draft) ||
-          typeof turn !== "string" || !UUID.test(turn) || typeof question !== "string" || !UUID.test(question) || !Number.isSafeInteger(version) || version < 1)
+      if ([...form.keys()].length !== (choosingTemperament ? 4 : 5) || typeof draft !== "string" || !UUID.test(draft) ||
+          typeof turn !== "string" || !UUID.test(turn) || !Number.isSafeInteger(version) || version < 1 ||
+          (choosingTemperament ? question !== null : typeof question !== "string" || !UUID.test(question)))
         return respond(400, { error: "Invalid scoring turn." });
       let text = "";
       let recording: { audio: Blob; extension: string } | undefined;
@@ -125,16 +130,19 @@ export function createHandler(deps: Dependencies) {
       } else {
         return respond(400, { error: "Send one scoring answer." });
       }
-      const binding = { draft_id: draft, question_id: question, version, turn_id: turn };
-      if (!await deps.authorize(auth, binding, true, signal))
+      const binding = { draft_id: draft, version, turn_id: turn };
+      const scoreBinding = typeof question === "string" ? { ...binding, question_id: question } : null;
+      const authorize = (consume: boolean) => scoreBinding ? deps.authorize(auth, scoreBinding, consume, signal) :
+        deps.authorizeTemperament(auth, draft, version, consume, signal);
+      if (!await authorize(true))
         return respond(403, { error: "Voice is unavailable for this draft or its current limits." });
       const transcript = recording ? (await deps.transcribe(recording.audio, recording.extension, signal)).trim() : text;
       if (transcript.length > MAX_ANSWER) return respond(422, { error: "Use a single short scoring answer." });
-      const decision = confirmation !== null
+      const decision = choosingTemperament ? { command: parseTemperamentChoice(transcript) ?? "needs_clarification" } : confirmation !== null
         ? { command: confirmationCommand(transcript) }
         : { choice: await deps.interpret(transcript, signal) };
-      if (!await deps.authorize(auth, binding, false, signal)) return respond(409, { error: "The active question changed. Reload the saved draft." });
-      return respond(200, { ...binding, transcript, ...decision });
+      if (!await authorize(false)) return respond(409, { error: "The active question changed. Reload the saved draft." });
+      return respond(200, { ...(scoreBinding ?? binding), transcript, ...decision });
     } catch {
       // No audio, transcript, credentials, or upstream response in logs or errors.
       return respond(503, { error: "Voice interpretation is unavailable. Try again or enter the score manually." });

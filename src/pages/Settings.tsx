@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useFacility } from "../auth/FacilityProvider";
 import { captureFacilityScope } from "../supabase/facilityScope";
@@ -12,6 +12,7 @@ import {
   listPhases,
 } from "../supabase/queries";
 import ConfirmDialog from "../components/ConfirmDialog";
+import InstallAppCard from "../components/InstallAppCard";
 import {
   DENSITIES,
   THEMES,
@@ -20,29 +21,12 @@ import {
   useAppearance,
 } from "../state/appearance";
 
-type InstallEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
-
 export default function Settings() {
   const { user, signOut } = useAuth();
   const { facility } = useFacility();
-  const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
-  const [installed, setInstalled] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [exportFailed, setExportFailed] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setInstallEvent(e as InstallEvent);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", () => setInstalled(true));
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
 
   const exportData = async () => {
     setExportStatus(null);
@@ -120,6 +104,8 @@ export default function Settings() {
         </div>
       </div>
 
+      <InstallAppCard />
+
       <AppearanceCard />
 
       <div className="card">
@@ -161,37 +147,6 @@ export default function Settings() {
             </span>
           )}
         </div>
-      </div>
-
-      <div className="card">
-        <div className="card-head">
-          <h2 className="card-title">Install as app</h2>
-          <span className="card-meta">PWA</span>
-        </div>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Install for a dedicated icon and faster launch. Works offline for
-          the app shell; data still requires a connection.
-        </p>
-        {installed ? (
-          <p style={{ color: "var(--ok)", margin: 0 }}>App installed.</p>
-        ) : installEvent ? (
-          <button
-            className="btn btn-leather"
-            onClick={async () => {
-              await installEvent.prompt();
-              const choice = await installEvent.userChoice;
-              if (choice.outcome === "accepted") setInstalled(true);
-              setInstallEvent(null);
-            }}
-          >
-            Install app
-          </button>
-        ) : (
-          <p className="muted" style={{ margin: 0 }}>
-            Install option will appear when supported by your browser. On iOS,
-            use Share → Add to Home Screen.
-          </p>
-        )}
       </div>
 
       <ConfirmDialog

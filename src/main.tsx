@@ -6,9 +6,11 @@ import "./index.css";
 import { AuthProvider } from "./auth/AuthProvider";
 import { captureInviteFragment } from "./facilities/pendingInvite";
 import { initAppearance } from "./state/appearance";
+import { initPwaInstall } from "./state/pwaInstall";
 
 captureInviteFragment();
 initAppearance();
+initPwaInstall();
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "");
 

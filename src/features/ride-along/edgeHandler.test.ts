@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { createHandler, type Dependencies } from "../../../supabase/functions/transcribe-ride-turn/handler";
+import { CHOICES, interpretScore, JEV_MODEL } from "../../../supabase/functions/transcribe-ride-turn/jev";
 import { encodeVoiceWav } from "./voiceActivity";
 
 const id = "00000000-0000-4000-8000-000000000001";
@@ -113,6 +114,28 @@ describe("transcribe-ride-turn", () => {
     expect(impl.authorize).toHaveBeenCalledWith("Bearer sample", {draft_id:id,question_id:id,version:1,turn_id:id}, true, expect.any(AbortSignal));
     expect(impl.transcribe).toHaveBeenCalledWith(expect.any(Blob), "webm", expect.any(AbortSignal));
   });
+
+  it.each([
+    ["2", "+2", "plus_two"], ["Three.", "plus three", "plus_three"],
+  ])("returns a positive choice for the unsigned audio transcript %j", async (transcript, normalized, choice) => {
+    const request = vi.fn<typeof fetch>(async () => Response.json({
+      model: JEV_MODEL,
+      answers: { rating: {
+        type: "choice", choice, confidence: 0.99,
+        probabilities: Object.fromEntries(CHOICES.map(candidate => [candidate, candidate === choice ? 1 : 0])),
+      } },
+    }));
+    const implementation = deps({
+      transcribe: async () => transcript,
+      interpret: (answer, signal) => interpretScore(answer, "synthetic-key", signal, request),
+    });
+    const response = await createHandler(implementation)(post());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ question_id: id, turn_id: id, version: 1, transcript, choice });
+    expect(JSON.parse(String(request.mock.calls[0][1]?.body)).state).toEqual({ transcript: normalized });
+    expect(implementation.authorize).toHaveBeenCalledTimes(2);
+  });
+
   it("never sends a denied, malformed, or oversize upload to the provider", async () => {
     const implementation = deps({ authorize: async () => false });
     const handle = createHandler(implementation);

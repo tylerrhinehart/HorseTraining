@@ -21,7 +21,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
-      includeAssets: ["favicon.svg", "icons/icon.svg"],
+      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "TQA Horse Training Tracker",
         short_name: "TQA Tracker",
@@ -30,14 +30,26 @@ export default defineConfig({
         theme_color: "#f3ece0",
         background_color: "#f3ece0",
         display: "standalone",
+        // Match the existing start URL identity at both the root and GitHub Pages base.
+        id: basePath,
         start_url: ".",
         scope: ".",
         icons: [
           {
+            src: "icons/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
+          {
+            src: "icons/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+          },
+          {
             src: "icons/icon.svg",
-            sizes: "192x192 512x512 any",
+            sizes: "any",
             type: "image/svg+xml",
-            purpose: "any maskable",
+            purpose: "maskable",
           },
         ],
       },

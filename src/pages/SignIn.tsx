@@ -2,6 +2,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
+import InstallAppCard from "../components/InstallAppCard";
 
 interface FormValues {
   email: string;
@@ -151,6 +152,7 @@ export default function SignIn() {
           Sign up
         </Link>
       </p>
+      <InstallAppCard hideWhenInstalled />
     </div>
   );
 }

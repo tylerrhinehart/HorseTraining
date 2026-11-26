@@ -1,6 +1,6 @@
 import useUnsavedChanges from "../hooks/useUnsavedChanges";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import {
   createSession,
   getHorse,
@@ -56,8 +56,8 @@ function ScoreSheetSkeleton() {
 export default function SessionNew() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const wantsVoice = searchParams.get("mode") === "voice";
+  const { key: entryKey, search } = useLocation();
+  const wantsVoice = new URLSearchParams(search).get("mode") === "voice";
   const toast = useToast();
   const { facility } = useFacility();
   const { user } = useAuth();
@@ -99,6 +99,7 @@ export default function SessionNew() {
   const [voicePanelRevision, setVoicePanelRevision] = useState(0);
   const [draftOperation, setDraftOperation] = useState(false);
   const actionLock = useRef(false);
+  const autoOpenedEntry = useRef<string>();
   const pending = useRef<{ key: string; request: string; input?: SessionInput }>();
   const scope = JSON.stringify([user?.id, facility?.id, id, phaseId]);
   const recoveryKey = `tqa:voice-terminal:${scope}`;
@@ -168,51 +169,7 @@ export default function SessionNew() {
   );
   const { dialog: unsavedDialog, allowLeave, navigationBlocked } = useUnsavedChanges((voiceDraft ? !!voiceChanged : dirty) && !saving);
 
-  if (!id) return null;
-
-  if (horse.error && horse.data === undefined) {
-    return (
-      <div className="view">
-        <ErrorState error={horse.error} onRetry={horse.refresh} />
-      </div>
-    );
-  }
-  if (phases.error && phases.data === undefined) {
-    return (
-      <div className="view">
-        <ErrorState error={phases.error} onRetry={phases.refresh} />
-      </div>
-    );
-  }
-
-  if (horse.data === undefined || phases.data === undefined) {
-    return (
-      <div className="view">
-        {unsavedDialog}
-      <div className="eyebrow">New ride</div>
-        <h1 className="h-display">Log a ride</h1>
-        <SkeletonCard lines={2} />
-        <div style={{ height: 12 }} />
-        <ScoreSheetSkeleton />
-      </div>
-    );
-  }
-
-  if (!horse.data) {
-    return (
-      <div className="view">
-        <div className="card">Horse not found.</div>
-      </div>
-    );
-  }
-
-  if (horse.data.status !== "in_training") {
-    return <div className="view">{unsavedDialog}<h1 className="h-display">{horse.data.name}</h1>
-      <p>Resume training on the horse’s workspace to start a ride.</p><Link className="btn btn-ghost" to={`/horses/${id}`}>Back to horse</Link></div>;
-  }
-
-  const currentPhase = phases.data.find((p) => p.id === phaseId) ?? null;
-  const foundationPhase = phases.data.find(p => p.id === horse.data?.current_phase_id) ?? phases.data.find(p => p.program === "foundation");
+  const currentPhase = phases.data?.find((p) => p.id === phaseId) ?? null;
   function choosePhase(next: string) {
     if (voiceDraft || actionLock.current) return;
     if (next !== phaseId) {
@@ -239,6 +196,7 @@ export default function SessionNew() {
 
   const hasVoiceQuestions = questions.data?.some(question => question.phase_id === phaseId && question.axis === "foundation") === true;
   const voiceStartBlocked = hasManualEdits || saving || draftOperation;
+  const canStartVoice = voiceEligible && hasVoiceQuestions && !questions.error && !voiceStartBlocked;
 
   function payload(nextDrafts = drafts): SessionInput {
     if (!occurredAt || Number.isNaN(new Date(occurredAt).getTime())) throw new Error("Enter a valid ride date and time.");
@@ -290,7 +248,7 @@ export default function SessionNew() {
   }
 
   async function beginVoice() {
-    if (actionLock.current || !voiceEligible || !facility || voiceStartBlocked || !hasVoiceQuestions || questions.error) return;
+    if (actionLock.current || !canStartVoice || !facility || !id) return;
     setVoiceStartError(null);
     const connection = microphone.start();
     let opened = false;
@@ -319,7 +277,7 @@ export default function SessionNew() {
       const key = "open:" + scope;
       const request = pending.current?.key === key ? pending.current.request : crypto.randomUUID();
       pending.current = { key, request };
-      const d = await draftAction(() => openDraft(facility.id, id!, phaseId, request));
+      const d = await draftAction(() => openDraft(facility.id, id, phaseId, request));
       restore(d);
       setChatOpen(true);
       opened = true;
@@ -330,6 +288,13 @@ export default function SessionNew() {
       if (!opened && connection) microphone.stop(connection);
     }
   }
+
+  useEffect(() => {
+    if (!wantsVoice || !canStartVoice || navigationBlocked || voiceDraft || actionLock.current || autoOpenedEntry.current === entryKey) return;
+    // A failed open or a return to review should stay put until the trainer acts.
+    autoOpenedEntry.current = entryKey;
+    void beginVoice();
+  }, [beginVoice, canStartVoice, entryKey, navigationBlocked, voiceDraft, wantsVoice]);
 
   async function persist(d: RideDraft, key: string, input: SessionInput, request: string = crypto.randomUUID()) {
     const operation = pending.current?.key === key ? pending.current : { key, request, input };
@@ -463,6 +428,51 @@ export default function SessionNew() {
     }
   };
 
+  if (!id) return null;
+
+  if (horse.error && horse.data === undefined) {
+    return (
+      <div className="view">
+        <ErrorState error={horse.error} onRetry={horse.refresh} />
+      </div>
+    );
+  }
+  if (phases.error && phases.data === undefined) {
+    return (
+      <div className="view">
+        <ErrorState error={phases.error} onRetry={phases.refresh} />
+      </div>
+    );
+  }
+
+  if (horse.data === undefined || phases.data === undefined) {
+    return (
+      <div className="view">
+        {unsavedDialog}
+        <div className="eyebrow">New ride</div>
+        <h1 className="h-display">Log a ride</h1>
+        <SkeletonCard lines={2} />
+        <div style={{ height: 12 }} />
+        <ScoreSheetSkeleton />
+      </div>
+    );
+  }
+
+  if (!horse.data) {
+    return (
+      <div className="view">
+        <div className="card">Horse not found.</div>
+      </div>
+    );
+  }
+
+  if (horse.data.status !== "in_training") {
+    return <div className="view">{unsavedDialog}<h1 className="h-display">{horse.data.name}</h1>
+      <p>Resume training on the horse’s workspace to start a ride.</p><Link className="btn btn-ghost" to={`/horses/${id}`}>Back to horse</Link></div>;
+  }
+
+  const foundationPhase = phases.data.find(p => p.id === horse.data?.current_phase_id) ?? phases.data.find(p => p.program === "foundation");
+
   return (
     <div className="view">
       {unsavedDialog}
@@ -470,25 +480,20 @@ export default function SessionNew() {
       <div className="eyebrow">{programLabel(horse.data.training_type)}</div>
       <h1 className="h-display" ref={reviewHeading} tabIndex={-1}>{voiceDraft ? "Review ride" : "Log a ride"}</h1>
       {(voiceEnabled || wantsVoice) && !voiceDraft && (
-        <section className="card space-y-2" aria-labelledby="ride-along-title">
-          <h2 id="ride-along-title" className="card-title">Ride-along scorer</h2>
+        <section className="space-y-2" aria-label="Ride-along scoring">
           {!voiceEnabled ? <p>Ask your platform administrator to enable voice for this facility.</p>
             : isPerformance ? <p>Voice scoring is available for Foundation Phase 1 rides. Use the manual score sheet for this horse’s program.</p>
             : !voicePhase ? <p>The Foundation Phase 1 score sheet is missing from this facility.</p>
             : <>
-              <p>Work through the Foundation Phase 1 questions one at a time. The mic opens with the conversation. You can also type a score.</p>
               {voiceEligible ? (
                 <button type="button" className="btn btn-primary"
-                  disabled={voiceStartBlocked || !hasVoiceQuestions || !!questions.error}
+                  disabled={!canStartVoice}
                   onClick={() => void beginVoice()}>
                   {draftOperation ? "Opening scorer…" : "Start or resume voice scoring"}
                 </button>
               ) : (
-                <>
-                  <p className="muted">Setting up voice scoring selects Phase 1 for this ride only.</p>
-                  <button type="button" className="btn btn-primary" disabled={voiceStartBlocked}
-                    onClick={() => choosePhase(voicePhase.id)}>Set up Phase 1 voice scoring</button>
-                </>
+                <button type="button" className="btn btn-primary" disabled={voiceStartBlocked}
+                  onClick={() => choosePhase(voicePhase.id)}>Set up Phase 1 voice scoring</button>
               )}
               {hasManualEdits && <p className="muted">Start the scorer from a new ride before changing the date or entering scores or notes. Finish this ride manually to keep your edits.</p>}
               {voiceEligible && !hasVoiceQuestions && !questions.error &&
